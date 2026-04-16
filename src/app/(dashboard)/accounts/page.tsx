@@ -1,6 +1,6 @@
 import { auth } from "@clerk/nextjs/server";
 import { redirect } from "next/navigation";
-import { Plus } from "lucide-react";
+import { Link2, PenLine } from "lucide-react";
 import { getAccounts } from "@/lib/queries/accounts";
 import { getHoldingsByClerkId } from "@/lib/queries/holdings";
 import { AccountCard } from "@/components/dashboard/account-card";
@@ -27,20 +27,25 @@ export default async function AccountsPage() {
         <div>
           <h1 className="text-2xl font-bold tracking-tight">Accounts</h1>
           <p className="text-muted-foreground">
-            Manage your investment accounts
+            Your household investment accounts
           </p>
         </div>
         <AddAccountButton />
       </div>
 
       {accountsList.length === 0 ? (
-        <div className="flex h-[400px] flex-col items-center justify-center rounded-lg border border-dashed text-center">
-          <Plus className="mb-4 h-12 w-12 text-muted-foreground" />
-          <h3 className="text-lg font-semibold">No accounts yet</h3>
-          <p className="mt-1 text-sm text-muted-foreground">
-            Add your first investment account to get started.
+        <div className="flex flex-col items-center justify-center rounded-lg border border-dashed p-12 text-center">
+          <div className="mb-6 flex h-16 w-16 items-center justify-center rounded-full bg-primary/10">
+            <Link2 className="h-8 w-8 text-primary" />
+          </div>
+          <h3 className="text-lg font-semibold">
+            Connect your investment accounts
+          </h3>
+          <p className="mt-2 max-w-md text-sm text-muted-foreground">
+            Link your brokerage accounts to automatically import holdings and
+            track performance, or add them manually.
           </p>
-          <div className="mt-4">
+          <div className="mt-6">
             <AddAccountButton />
           </div>
         </div>

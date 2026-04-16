@@ -4,13 +4,11 @@ import { eq, and } from "drizzle-orm";
 import { getDb } from "@/lib/db";
 import {
   userPreferences,
-  plaidItems,
   socialSecurityBenefits,
   contributions,
 } from "@/lib/db/schema";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
-import { PlaidLinkButton } from "@/components/plaid/plaid-link-button";
 import { PreferencesForm } from "./preferences-form";
 import { SocialSecurityForm } from "./social-security-form";
 import { ContributionsSection } from "./contributions-section";
@@ -20,13 +18,12 @@ export default async function SettingsPage() {
   if (!userId) redirect("/sign-in");
 
   const db = getDb();
-  const [prefs, connections, selfSS, spouseSS, contributionsList] = await Promise.all([
+  const [prefs, selfSS, spouseSS, contributionsList] = await Promise.all([
     db
       .select()
       .from(userPreferences)
       .where(eq(userPreferences.clerkId, userId))
       .limit(1),
-    db.select().from(plaidItems).where(eq(plaidItems.clerkId, userId)),
     db
       .select()
       .from(socialSecurityBenefits)
@@ -61,8 +58,7 @@ export default async function SettingsPage() {
       <div>
         <h1 className="text-2xl font-bold tracking-tight">Settings</h1>
         <p className="text-muted-foreground">
-          Configure your household preferences, Social Security, and account
-          connections
+          Household preferences, retirement contributions, and Social Security
         </p>
       </div>
 
@@ -133,49 +129,6 @@ export default async function SettingsPage() {
           </CardContent>
         </Card>
       </div>
-
-      <Card>
-        <CardHeader>
-          <CardTitle>Account Connections</CardTitle>
-        </CardHeader>
-        <CardContent className="space-y-4">
-          <p className="text-sm text-muted-foreground">
-            Connect your brokerage accounts via Plaid for automatic data
-            synchronization. Works for both your accounts and your
-            spouse&apos;s.
-          </p>
-
-          {connections.length > 0 && (
-            <div className="space-y-2">
-              {connections.map((conn) => (
-                <div
-                  key={conn.id}
-                  className="flex items-center justify-between rounded-lg border p-3"
-                >
-                  <div>
-                    <p className="font-medium">{conn.institutionName}</p>
-                    <p className="text-xs text-muted-foreground">
-                      Last synced:{" "}
-                      {conn.lastSync
-                        ? new Date(conn.lastSync).toLocaleString()
-                        : "Never"}
-                    </p>
-                  </div>
-                  <Badge
-                    variant={
-                      conn.status === "active" ? "default" : "destructive"
-                    }
-                  >
-                    {conn.status}
-                  </Badge>
-                </div>
-              ))}
-            </div>
-          )}
-
-          <PlaidLinkButton />
-        </CardContent>
-      </Card>
     </div>
   );
 }
