@@ -1,9 +1,10 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useChat } from "@ai-sdk/react";
 import { DefaultChatTransport, isToolUIPart } from "ai";
 import { MessageSquare, Send, Loader2, Bot, User } from "lucide-react";
+import { onChatRequest } from "@/lib/utils/chat-events";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
 import { ScrollArea } from "@/components/ui/scroll-area";
@@ -22,6 +23,18 @@ export function ChatPanel() {
     useChat<PortfolioAnalystUIMessage>({ transport });
 
   const isActive = status === "streaming" || status === "submitted";
+
+  // Listen for chat requests from other components (e.g., analysis cards)
+  useEffect(() => {
+    return onChatRequest((prompt) => {
+      setOpen(true);
+      if (prompt) {
+        setTimeout(() => {
+          sendMessage({ text: prompt });
+        }, 100);
+      }
+    });
+  }, [sendMessage]);
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
