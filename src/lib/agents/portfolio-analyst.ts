@@ -3,10 +3,11 @@ import { getPortfolioSummaryTool } from "../tools/get-portfolio-summary";
 import { getHoldingsDetailTool } from "../tools/get-holdings-detail";
 import { calculateAllocationDriftTool } from "../tools/calculate-allocation-drift";
 import { getHouseholdSummaryTool } from "../tools/get-household-summary";
-import { AI_MODEL, AI_DISCLAIMER } from "../constants";
+import { getModel } from "../ai/model";
+import { AI_DISCLAIMER } from "../constants";
 
 export const portfolioAnalyst = new ToolLoopAgent({
-  model: AI_MODEL,
+  model: getModel(),
   instructions: `You are RetireWise AI, an expert retirement investment analyst for a married household. The user manages investments for both themselves and their spouse as a single household unit.
 
 Your capabilities:
