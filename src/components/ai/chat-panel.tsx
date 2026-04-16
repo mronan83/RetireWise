@@ -7,7 +7,7 @@ import { MessageSquare, Send, Loader2, Bot, User } from "lucide-react";
 import { onChatRequest } from "@/lib/utils/chat-events";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
-import { ScrollArea } from "@/components/ui/scroll-area";
+import { useRef } from "react";
 import { Sheet, SheetContent, SheetHeader, SheetTitle } from "@/components/ui/sheet";
 import { Badge } from "@/components/ui/badge";
 import { AI_DISCLAIMER } from "@/lib/constants";
@@ -18,11 +18,19 @@ const transport = new DefaultChatTransport({ api: "/api/chat" });
 export function ChatPanel() {
   const [open, setOpen] = useState(false);
   const [input, setInput] = useState("");
+  const scrollRef = useRef<HTMLDivElement>(null);
 
   const { messages, sendMessage, status, error } =
     useChat<PortfolioAnalystUIMessage>({ transport });
 
   const isActive = status === "streaming" || status === "submitted";
+
+  // Auto-scroll to bottom when messages change
+  useEffect(() => {
+    if (scrollRef.current) {
+      scrollRef.current.scrollTop = scrollRef.current.scrollHeight;
+    }
+  }, [messages, status]);
 
   // Listen for chat requests from other components (e.g., analysis cards)
   useEffect(() => {
@@ -73,7 +81,11 @@ export function ChatPanel() {
             </SheetTitle>
           </SheetHeader>
 
-          <ScrollArea className="flex-1 px-4">
+          <div
+            ref={scrollRef}
+            className="flex-1 overflow-y-auto overscroll-contain px-4 -webkit-overflow-scrolling-touch"
+            style={{ WebkitOverflowScrolling: "touch" }}
+          >
             <div className="space-y-4 py-4">
               {messages.length === 0 && (
                 <div className="flex flex-col items-center justify-center py-12 text-center">
@@ -186,7 +198,7 @@ export function ChatPanel() {
                 </div>
               )}
             </div>
-          </ScrollArea>
+          </div>
 
           <div className="border-t p-4">
             <p className="mb-2 text-[10px] text-muted-foreground">
