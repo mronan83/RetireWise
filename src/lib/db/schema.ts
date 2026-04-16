@@ -232,6 +232,9 @@ export const userPreferences = pgTable("user_preferences", {
   spouseRetirementAge: integer("spouse_retirement_age"),
   spouseIsRetired: boolean("spouse_is_retired").default(false),
 
+  // AI provider preference
+  aiProvider: text("ai_provider").default("anthropic"),
+
   // Income
   annualSalary: decimal("annual_salary", { precision: 20, scale: 2 }),
   spouseAnnualSalary: decimal("spouse_annual_salary", {

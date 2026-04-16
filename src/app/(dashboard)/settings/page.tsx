@@ -12,6 +12,7 @@ import { Badge } from "@/components/ui/badge";
 import { PreferencesForm } from "./preferences-form";
 import { SocialSecurityForm } from "./social-security-form";
 import { ContributionsSection } from "./contributions-section";
+import { AiProviderSection } from "./ai-provider-section";
 
 export default async function SettingsPage() {
   const { userId } = await auth();
@@ -92,6 +93,17 @@ export default async function SettingsPage() {
                 ? Number(currentPrefs.spouseAnnualSalary)
                 : null
             }
+          />
+        </CardContent>
+      </Card>
+
+      <Card>
+        <CardHeader>
+          <CardTitle>AI Model</CardTitle>
+        </CardHeader>
+        <CardContent>
+          <AiProviderSection
+            currentProvider={currentPrefs?.aiProvider || "anthropic"}
           />
         </CardContent>
       </Card>
