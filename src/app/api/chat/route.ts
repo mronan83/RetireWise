@@ -1,4 +1,4 @@
-import { streamText, stepCountIs } from "ai";
+import { streamText, stepCountIs, convertToModelMessages } from "ai";
 import { auth } from "@clerk/nextjs/server";
 import { eq } from "drizzle-orm";
 import { getDb } from "@/lib/db";
@@ -50,7 +50,7 @@ export async function POST(request: Request) {
   const result = streamText({
     model: getModel(provider || undefined),
     system: SYSTEM_PROMPT,
-    messages,
+    messages: await convertToModelMessages(messages),
     tools: {
       getPortfolioSummary: getPortfolioSummaryTool,
       getHoldingsDetail: getHoldingsDetailTool,
