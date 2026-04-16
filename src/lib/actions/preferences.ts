@@ -15,6 +15,7 @@ const preferencesSchema = z.object({
   filingStatus: z
     .enum(["married_filing_jointly", "married_filing_separately", "single"])
     .optional(),
+  annualSalary: z.coerce.number().min(0).optional(),
   annualContribution: z.coerce.number().min(0).optional(),
   monthlyExpensesRetirement: z.coerce.number().min(0).optional(),
 
@@ -23,6 +24,7 @@ const preferencesSchema = z.object({
   spouseCurrentAge: z.coerce.number().int().min(18).max(100).optional(),
   spouseRetirementAge: z.coerce.number().int().min(30).max(100).optional(),
   spouseIsRetired: z.coerce.boolean().optional(),
+  spouseAnnualSalary: z.coerce.number().min(0).optional(),
   spouseAnnualContribution: z.coerce.number().min(0).optional(),
 });
 
@@ -36,6 +38,7 @@ export async function updatePreferences(formData: FormData) {
     retirementAge: formData.get("retirementAge") || undefined,
     riskTolerance: formData.get("riskTolerance") || undefined,
     filingStatus: formData.get("filingStatus") || undefined,
+    annualSalary: formData.get("annualSalary") || undefined,
     annualContribution: formData.get("annualContribution") || undefined,
     monthlyExpensesRetirement:
       formData.get("monthlyExpensesRetirement") || undefined,
@@ -43,6 +46,7 @@ export async function updatePreferences(formData: FormData) {
     spouseCurrentAge: formData.get("spouseCurrentAge") || undefined,
     spouseRetirementAge: formData.get("spouseRetirementAge") || undefined,
     spouseIsRetired: formData.get("spouseIsRetired") === "on" || false,
+    spouseAnnualSalary: formData.get("spouseAnnualSalary") || undefined,
     spouseAnnualContribution:
       formData.get("spouseAnnualContribution") || undefined,
   });
@@ -66,6 +70,7 @@ export async function updatePreferences(formData: FormData) {
     firstName: parsed.firstName || null,
     currentAge: parsed.currentAge || null,
     retirementAge: parsed.retirementAge || null,
+    annualSalary: parsed.annualSalary ? String(parsed.annualSalary) : null,
     riskTolerance: parsed.riskTolerance || ("moderate" as const),
     filingStatus:
       parsed.filingStatus || ("married_filing_jointly" as const),
@@ -79,6 +84,9 @@ export async function updatePreferences(formData: FormData) {
     spouseCurrentAge: parsed.spouseCurrentAge || null,
     spouseRetirementAge: parsed.spouseRetirementAge || null,
     spouseIsRetired: parsed.spouseIsRetired || false,
+    spouseAnnualSalary: parsed.spouseAnnualSalary
+      ? String(parsed.spouseAnnualSalary)
+      : null,
     spouseAnnualContribution: parsed.spouseAnnualContribution
       ? String(parsed.spouseAnnualContribution)
       : null,

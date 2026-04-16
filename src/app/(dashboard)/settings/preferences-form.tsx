@@ -20,6 +20,10 @@ import {
 import { updatePreferences } from "@/lib/actions/preferences";
 import type { UserPreference } from "@/lib/types";
 
+function HelpText({ children }: { children: React.ReactNode }) {
+  return <p className="text-xs text-muted-foreground mt-1">{children}</p>;
+}
+
 type Props = {
   preferences: UserPreference | null;
 };
@@ -42,7 +46,7 @@ export function PreferencesForm({ preferences }: Props) {
   );
 
   return (
-    <form action={formAction} className="space-y-6">
+    <form action={formAction} className="space-y-8">
       {message && (
         <div
           className={`rounded-md p-3 text-sm ${
@@ -55,12 +59,13 @@ export function PreferencesForm({ preferences }: Props) {
         </div>
       )}
 
+      {/* Your Details */}
       <div className="space-y-4">
         <h3 className="text-sm font-semibold text-muted-foreground uppercase tracking-wider">
           Your Details
         </h3>
         <div className="grid gap-4 sm:grid-cols-3">
-          <div className="space-y-2">
+          <div className="space-y-1">
             <Label htmlFor="firstName">First Name</Label>
             <Input
               id="firstName"
@@ -69,17 +74,17 @@ export function PreferencesForm({ preferences }: Props) {
               placeholder="Matt"
             />
           </div>
-          <div className="space-y-2">
+          <div className="space-y-1">
             <Label htmlFor="currentAge">Current Age</Label>
             <Input
               id="currentAge"
               name="currentAge"
               type="number"
               defaultValue={preferences?.currentAge || ""}
-              placeholder="35"
+              placeholder="42"
             />
           </div>
-          <div className="space-y-2">
+          <div className="space-y-1">
             <Label htmlFor="retirementAge">Target Retirement Age</Label>
             <Input
               id="retirementAge"
@@ -88,16 +93,18 @@ export function PreferencesForm({ preferences }: Props) {
               defaultValue={preferences?.retirementAge || ""}
               placeholder="65"
             />
+            <HelpText>The age you plan to stop working</HelpText>
           </div>
         </div>
       </div>
 
+      {/* Spouse Details */}
       <div className="space-y-4">
         <h3 className="text-sm font-semibold text-muted-foreground uppercase tracking-wider">
           Spouse Details
         </h3>
         <div className="grid gap-4 sm:grid-cols-3">
-          <div className="space-y-2">
+          <div className="space-y-1">
             <Label htmlFor="spouseName">Spouse Name</Label>
             <Input
               id="spouseName"
@@ -106,17 +113,17 @@ export function PreferencesForm({ preferences }: Props) {
               placeholder="Name"
             />
           </div>
-          <div className="space-y-2">
+          <div className="space-y-1">
             <Label htmlFor="spouseCurrentAge">Spouse Current Age</Label>
             <Input
               id="spouseCurrentAge"
               name="spouseCurrentAge"
               type="number"
               defaultValue={preferences?.spouseCurrentAge || ""}
-              placeholder="33"
+              placeholder="40"
             />
           </div>
-          <div className="space-y-2">
+          <div className="space-y-1">
             <Label htmlFor="spouseRetirementAge">Spouse Retirement Age</Label>
             <Input
               id="spouseRetirementAge"
@@ -133,18 +140,108 @@ export function PreferencesForm({ preferences }: Props) {
             name="spouseIsRetired"
             defaultChecked={preferences?.spouseIsRetired || false}
           />
-          <Label htmlFor="spouseIsRetired">
-            Spouse is already retired
-          </Label>
+          <Label htmlFor="spouseIsRetired">Spouse is already retired</Label>
         </div>
       </div>
 
+      {/* Income & Savings */}
       <div className="space-y-4">
         <h3 className="text-sm font-semibold text-muted-foreground uppercase tracking-wider">
-          Household Finances
+          Income & Savings
+        </h3>
+
+        <div className="grid gap-4 sm:grid-cols-2">
+          <div className="space-y-1">
+            <Label htmlFor="annualSalary">Your Annual Salary ($)</Label>
+            <Input
+              id="annualSalary"
+              name="annualSalary"
+              type="number"
+              step="1000"
+              defaultValue={preferences?.annualSalary || ""}
+              placeholder="150000"
+            />
+            <HelpText>Your gross annual income before taxes</HelpText>
+          </div>
+          <div className="space-y-1">
+            <Label htmlFor="spouseAnnualSalary">
+              Spouse Annual Salary ($)
+            </Label>
+            <Input
+              id="spouseAnnualSalary"
+              name="spouseAnnualSalary"
+              type="number"
+              step="1000"
+              defaultValue={preferences?.spouseAnnualSalary || ""}
+              placeholder="80000"
+            />
+            <HelpText>
+              Spouse&apos;s gross annual income (0 if retired)
+            </HelpText>
+          </div>
+        </div>
+
+        <div className="grid gap-4 sm:grid-cols-3">
+          <div className="space-y-1">
+            <Label htmlFor="annualContribution">
+              Your Annual Retirement Savings ($)
+            </Label>
+            <Input
+              id="annualContribution"
+              name="annualContribution"
+              type="number"
+              step="500"
+              defaultValue={preferences?.annualContribution || ""}
+              placeholder="30000"
+            />
+            <HelpText>
+              Total you put into retirement accounts per year (401k + IRA +
+              brokerage deposits, including employer match)
+            </HelpText>
+          </div>
+          <div className="space-y-1">
+            <Label htmlFor="spouseAnnualContribution">
+              Spouse Annual Retirement Savings ($)
+            </Label>
+            <Input
+              id="spouseAnnualContribution"
+              name="spouseAnnualContribution"
+              type="number"
+              step="500"
+              defaultValue={preferences?.spouseAnnualContribution || ""}
+              placeholder="20000"
+            />
+            <HelpText>
+              Total spouse puts into retirement accounts per year
+            </HelpText>
+          </div>
+          <div className="space-y-1">
+            <Label htmlFor="monthlyExpensesRetirement">
+              Monthly Spending in Retirement ($)
+            </Label>
+            <Input
+              id="monthlyExpensesRetirement"
+              name="monthlyExpensesRetirement"
+              type="number"
+              step="500"
+              defaultValue={preferences?.monthlyExpensesRetirement || ""}
+              placeholder="7000"
+            />
+            <HelpText>
+              Estimated monthly household expenses once both of you are retired
+              (housing, food, healthcare, travel, etc.)
+            </HelpText>
+          </div>
+        </div>
+      </div>
+
+      {/* Household Settings */}
+      <div className="space-y-4">
+        <h3 className="text-sm font-semibold text-muted-foreground uppercase tracking-wider">
+          Household Settings
         </h3>
         <div className="grid gap-4 sm:grid-cols-2">
-          <div className="space-y-2">
+          <div className="space-y-1">
             <Label htmlFor="filingStatus">Tax Filing Status</Label>
             <Select
               name="filingStatus"
@@ -163,8 +260,11 @@ export function PreferencesForm({ preferences }: Props) {
                 ))}
               </SelectContent>
             </Select>
+            <HelpText>
+              How you file your federal taxes. Affects tax bracket calculations.
+            </HelpText>
           </div>
-          <div className="space-y-2">
+          <div className="space-y-1">
             <Label htmlFor="riskTolerance">Risk Tolerance</Label>
             <Select
               name="riskTolerance"
@@ -174,61 +274,35 @@ export function PreferencesForm({ preferences }: Props) {
                 <SelectValue />
               </SelectTrigger>
               <SelectContent>
-                <SelectItem value="conservative">Conservative</SelectItem>
-                <SelectItem value="moderate">Moderate</SelectItem>
-                <SelectItem value="aggressive">Aggressive</SelectItem>
+                <SelectItem value="conservative">
+                  Conservative (preserve capital)
+                </SelectItem>
+                <SelectItem value="moderate">
+                  Moderate (balanced growth)
+                </SelectItem>
+                <SelectItem value="aggressive">
+                  Aggressive (maximize growth)
+                </SelectItem>
               </SelectContent>
             </Select>
-          </div>
-        </div>
-
-        <div className="grid gap-4 sm:grid-cols-3">
-          <div className="space-y-2">
-            <Label htmlFor="annualContribution">
-              Your Annual Contribution ($)
-            </Label>
-            <Input
-              id="annualContribution"
-              name="annualContribution"
-              type="number"
-              step="100"
-              defaultValue={preferences?.annualContribution || ""}
-              placeholder="24000"
-            />
-          </div>
-          <div className="space-y-2">
-            <Label htmlFor="spouseAnnualContribution">
-              Spouse Annual Contribution ($)
-            </Label>
-            <Input
-              id="spouseAnnualContribution"
-              name="spouseAnnualContribution"
-              type="number"
-              step="100"
-              defaultValue={preferences?.spouseAnnualContribution || ""}
-              placeholder="20000"
-            />
-          </div>
-          <div className="space-y-2">
-            <Label htmlFor="monthlyExpensesRetirement">
-              Monthly Expenses in Retirement ($)
-            </Label>
-            <Input
-              id="monthlyExpensesRetirement"
-              name="monthlyExpensesRetirement"
-              type="number"
-              step="100"
-              defaultValue={preferences?.monthlyExpensesRetirement || ""}
-              placeholder="7000"
-            />
+            <HelpText>
+              Guides allocation recommendations. Aggressive = more stocks, less
+              bonds.
+            </HelpText>
           </div>
         </div>
       </div>
 
+      {/* Target Allocation */}
       <div className="space-y-3">
         <h3 className="text-sm font-semibold text-muted-foreground uppercase tracking-wider">
           Target Allocation (%)
         </h3>
+        <p className="text-xs text-muted-foreground">
+          Your ideal portfolio mix across the household. The AI will compare your
+          actual allocation against these targets and suggest rebalancing when
+          drift is significant.
+        </p>
         <div className="grid gap-3 sm:grid-cols-3">
           {Object.entries(ASSET_CLASS_LABELS)
             .filter(([key]) => key in DEFAULT_TARGET_ALLOCATION)
@@ -248,9 +322,7 @@ export function PreferencesForm({ preferences }: Props) {
               </div>
             ))}
         </div>
-        <p className="text-xs text-muted-foreground">
-          Household-level target. Percentages should sum to 100%.
-        </p>
+        <HelpText>Should sum to 100%.</HelpText>
       </div>
 
       <Button type="submit" disabled={isPending}>
