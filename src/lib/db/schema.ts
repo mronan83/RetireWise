@@ -84,6 +84,19 @@ export const plaidItemStatusEnum = pgEnum("plaid_item_status", [
   "requires_reauth",
 ]);
 
+export const contributionMethodEnum = pgEnum("contribution_method", [
+  "percent_of_salary",
+  "fixed_amount",
+]);
+
+export const contributionFrequencyEnum = pgEnum("contribution_frequency", [
+  "per_paycheck_biweekly",
+  "per_paycheck_semimonthly",
+  "monthly",
+  "quarterly",
+  "annually",
+]);
+
 export const filingStatusEnum = pgEnum("filing_status", [
   "married_filing_jointly",
   "married_filing_separately",
@@ -297,6 +310,49 @@ export const socialSecurityBenefits = pgTable("social_security_benefits", {
     scale: 2,
   }).default("2.5"),
 
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+  updatedAt: timestamp("updated_at").defaultNow().notNull(),
+});
+
+export const contributions = pgTable("contributions", {
+  id: uuid("id").defaultRandom().primaryKey(),
+  clerkId: text("clerk_id").notNull(),
+  owner: accountOwnerEnum("owner").notNull(),
+
+  // What this contribution is for
+  label: text("label").notNull(),
+  accountType: accountTypeEnum("account_type").notNull(),
+
+  // Your contribution
+  contributionMethod: contributionMethodEnum("contribution_method").notNull(),
+  // If percent_of_salary: the percentage (e.g., 6 for 6%)
+  contributionPercent: decimal("contribution_percent", {
+    precision: 5,
+    scale: 2,
+  }),
+  // If fixed_amount: the dollar amount per frequency period
+  contributionAmount: decimal("contribution_amount", {
+    precision: 20,
+    scale: 2,
+  }),
+  frequency: contributionFrequencyEnum("frequency")
+    .notNull()
+    .default("per_paycheck_biweekly"),
+
+  // Employer match (optional — only applies to employer-sponsored plans)
+  hasEmployerMatch: boolean("has_employer_match").default(false),
+  // Match formula: employer matches at this rate (e.g., 1.0 = dollar for dollar, 0.5 = 50 cents per dollar)
+  employerMatchRate: decimal("employer_match_rate", {
+    precision: 5,
+    scale: 2,
+  }),
+  // Max % of salary the employer will match (e.g., 5 means they match up to 5% of salary)
+  employerMatchMaxPercent: decimal("employer_match_max_percent", {
+    precision: 5,
+    scale: 2,
+  }),
+
+  isActive: boolean("is_active").notNull().default(true),
   createdAt: timestamp("created_at").defaultNow().notNull(),
   updatedAt: timestamp("updated_at").defaultNow().notNull(),
 });

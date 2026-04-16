@@ -2,19 +2,25 @@ import { auth } from "@clerk/nextjs/server";
 import { redirect } from "next/navigation";
 import { eq, and } from "drizzle-orm";
 import { getDb } from "@/lib/db";
-import { userPreferences, plaidItems, socialSecurityBenefits } from "@/lib/db/schema";
+import {
+  userPreferences,
+  plaidItems,
+  socialSecurityBenefits,
+  contributions,
+} from "@/lib/db/schema";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { PlaidLinkButton } from "@/components/plaid/plaid-link-button";
 import { PreferencesForm } from "./preferences-form";
 import { SocialSecurityForm } from "./social-security-form";
+import { ContributionsSection } from "./contributions-section";
 
 export default async function SettingsPage() {
   const { userId } = await auth();
   if (!userId) redirect("/sign-in");
 
   const db = getDb();
-  const [prefs, connections, selfSS, spouseSS] = await Promise.all([
+  const [prefs, connections, selfSS, spouseSS, contributionsList] = await Promise.all([
     db
       .select()
       .from(userPreferences)
@@ -41,6 +47,11 @@ export default async function SettingsPage() {
         )
       )
       .limit(1),
+    db
+      .select()
+      .from(contributions)
+      .where(eq(contributions.clerkId, userId))
+      .orderBy(contributions.createdAt),
   ]);
 
   const currentPrefs = prefs[0] || null;
@@ -61,6 +72,31 @@ export default async function SettingsPage() {
         </CardHeader>
         <CardContent>
           <PreferencesForm preferences={currentPrefs} />
+        </CardContent>
+      </Card>
+
+      <Card>
+        <CardHeader>
+          <CardTitle>Retirement Contributions</CardTitle>
+        </CardHeader>
+        <CardContent>
+          <p className="text-sm text-muted-foreground mb-4">
+            Track what you and your spouse contribute to retirement accounts.
+            Include employer matches to see the full picture.
+          </p>
+          <ContributionsSection
+            contributions={contributionsList}
+            selfSalary={
+              currentPrefs?.annualSalary
+                ? Number(currentPrefs.annualSalary)
+                : null
+            }
+            spouseSalary={
+              currentPrefs?.spouseAnnualSalary
+                ? Number(currentPrefs.spouseAnnualSalary)
+                : null
+            }
+          />
         </CardContent>
       </Card>
 

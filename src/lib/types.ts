@@ -8,6 +8,7 @@ import type {
   plaidItems,
   userPreferences,
   socialSecurityBenefits,
+  contributions,
 } from "./db/schema";
 
 export type Account = InferSelectModel<typeof accounts>;
@@ -20,6 +21,7 @@ export type UserPreference = InferSelectModel<typeof userPreferences>;
 export type SocialSecurityBenefit = InferSelectModel<
   typeof socialSecurityBenefits
 >;
+export type Contribution = InferSelectModel<typeof contributions>;
 
 export type AccountOwner = "self" | "spouse";
 

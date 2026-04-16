@@ -181,58 +181,27 @@ export function PreferencesForm({ preferences }: Props) {
           </div>
         </div>
 
-        <div className="grid gap-4 sm:grid-cols-3">
-          <div className="space-y-1">
-            <Label htmlFor="annualContribution">
-              Your Annual Retirement Savings ($)
-            </Label>
-            <Input
-              id="annualContribution"
-              name="annualContribution"
-              type="number"
-              step="500"
-              defaultValue={preferences?.annualContribution || ""}
-              placeholder="30000"
-            />
-            <HelpText>
-              Total you put into retirement accounts per year (401k + IRA +
-              brokerage deposits, including employer match)
-            </HelpText>
-          </div>
-          <div className="space-y-1">
-            <Label htmlFor="spouseAnnualContribution">
-              Spouse Annual Retirement Savings ($)
-            </Label>
-            <Input
-              id="spouseAnnualContribution"
-              name="spouseAnnualContribution"
-              type="number"
-              step="500"
-              defaultValue={preferences?.spouseAnnualContribution || ""}
-              placeholder="20000"
-            />
-            <HelpText>
-              Total spouse puts into retirement accounts per year
-            </HelpText>
-          </div>
-          <div className="space-y-1">
-            <Label htmlFor="monthlyExpensesRetirement">
-              Monthly Spending in Retirement ($)
-            </Label>
-            <Input
-              id="monthlyExpensesRetirement"
-              name="monthlyExpensesRetirement"
-              type="number"
-              step="500"
-              defaultValue={preferences?.monthlyExpensesRetirement || ""}
-              placeholder="7000"
-            />
-            <HelpText>
-              Estimated monthly household expenses once both of you are retired
-              (housing, food, healthcare, travel, etc.)
-            </HelpText>
-          </div>
+        <div className="space-y-1">
+          <Label htmlFor="monthlyExpensesRetirement">
+            Monthly Spending in Retirement ($)
+          </Label>
+          <Input
+            id="monthlyExpensesRetirement"
+            name="monthlyExpensesRetirement"
+            type="number"
+            step="500"
+            defaultValue={preferences?.monthlyExpensesRetirement || ""}
+            placeholder="7000"
+          />
+          <HelpText>
+            Estimated monthly household expenses once both of you are retired
+            (housing, food, healthcare, travel, etc.)
+          </HelpText>
         </div>
+        <p className="text-xs text-muted-foreground italic">
+          Individual retirement contributions (401k, IRA, etc.) are managed in
+          the Retirement Contributions section below.
+        </p>
       </div>
 
       {/* Household Settings */}
