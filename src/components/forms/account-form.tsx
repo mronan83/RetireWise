@@ -1,6 +1,6 @@
 "use client";
 
-import { useActionState } from "react";
+import { useState, useActionState } from "react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -15,6 +15,7 @@ import {
   ACCOUNT_TYPE_LABELS,
   TAX_TREATMENT_LABELS,
   ACCOUNT_OWNER_LABELS,
+  ACCOUNT_TYPE_DEFAULT_TAX,
 } from "@/lib/constants";
 import type { Account } from "@/lib/types";
 
@@ -25,6 +26,10 @@ type Props = {
 };
 
 export function AccountForm({ account, action, onSuccess }: Props) {
+  const [taxTreatment, setTaxTreatment] = useState<string>(
+    account?.taxTreatment || "taxable"
+  );
+
   const [error, formAction, isPending] = useActionState(
     async (_prev: string | null, formData: FormData) => {
       try {
@@ -38,6 +43,14 @@ export function AccountForm({ account, action, onSuccess }: Props) {
     null
   );
 
+  const handleAccountTypeChange = (type: string | null) => {
+    if (!type) return;
+    const defaultTax = ACCOUNT_TYPE_DEFAULT_TAX[type];
+    if (defaultTax) {
+      setTaxTreatment(defaultTax);
+    }
+  };
+
   return (
     <form action={formAction} className="space-y-4">
       {error && (
@@ -47,7 +60,7 @@ export function AccountForm({ account, action, onSuccess }: Props) {
       )}
 
       <div className="space-y-2">
-        <Label htmlFor="owner">Account Owner</Label>
+        <Label htmlFor="owner">Whose account is this?</Label>
         <Select name="owner" defaultValue={account?.owner || "self"}>
           <SelectTrigger>
             <SelectValue />
@@ -68,9 +81,12 @@ export function AccountForm({ account, action, onSuccess }: Props) {
           id="name"
           name="name"
           defaultValue={account?.name}
-          placeholder="e.g. Fidelity 401k"
+          placeholder="e.g. Fidelity 401(k)"
           required
         />
+        <p className="text-xs text-muted-foreground">
+          A friendly name to identify this account
+        </p>
       </div>
 
       <div className="space-y-2">
@@ -89,6 +105,7 @@ export function AccountForm({ account, action, onSuccess }: Props) {
         <Select
           name="accountType"
           defaultValue={account?.accountType || "brokerage"}
+          onValueChange={handleAccountTypeChange}
         >
           <SelectTrigger>
             <SelectValue />
@@ -107,7 +124,8 @@ export function AccountForm({ account, action, onSuccess }: Props) {
         <Label htmlFor="taxTreatment">Tax Treatment</Label>
         <Select
           name="taxTreatment"
-          defaultValue={account?.taxTreatment || "taxable"}
+          value={taxTreatment}
+          onValueChange={(v) => v && setTaxTreatment(v)}
         >
           <SelectTrigger>
             <SelectValue />
@@ -120,6 +138,10 @@ export function AccountForm({ account, action, onSuccess }: Props) {
             ))}
           </SelectContent>
         </Select>
+        <p className="text-xs text-muted-foreground">
+          Auto-set based on account type. Override if needed (e.g. Roth
+          401k should be Tax-Free).
+        </p>
       </div>
 
       <Button type="submit" disabled={isPending} className="w-full">

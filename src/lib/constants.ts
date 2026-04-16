@@ -24,9 +24,24 @@ export const FILING_STATUS_LABELS: Record<string, string> = {
 };
 
 export const TAX_TREATMENT_LABELS: Record<string, string> = {
-  tax_deferred: "Tax-Deferred",
-  tax_free: "Tax-Free",
-  taxable: "Taxable",
+  tax_deferred: "Tax-Deferred (pay taxes on withdrawal)",
+  tax_free: "Tax-Free (already taxed or exempt)",
+  taxable: "Taxable (pay taxes yearly on gains)",
+};
+
+// Auto-suggest tax treatment based on account type
+export const ACCOUNT_TYPE_DEFAULT_TAX: Record<string, string> = {
+  "401k": "tax_deferred",
+  "403b": "tax_deferred",
+  ira_traditional: "tax_deferred",
+  ira_roth: "tax_free",
+  brokerage: "taxable",
+  hsa: "tax_free",
+  "529": "tax_free",
+  pension: "tax_deferred",
+  annuity: "tax_deferred",
+  social_security: "taxable",
+  other: "taxable",
 };
 
 export const ASSET_CLASS_LABELS: Record<string, string> = {
