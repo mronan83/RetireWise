@@ -56,14 +56,14 @@ export const ASSET_CLASS_LABELS: Record<string, string> = {
 };
 
 export const ASSET_CLASS_COLORS: Record<string, string> = {
-  us_stock: "hsl(221, 83%, 53%)",
-  intl_stock: "hsl(142, 71%, 45%)",
-  bond: "hsl(47, 96%, 53%)",
-  reit: "hsl(262, 83%, 58%)",
-  commodity: "hsl(24, 95%, 53%)",
-  crypto: "hsl(330, 81%, 60%)",
-  cash: "hsl(210, 40%, 70%)",
-  other: "hsl(0, 0%, 55%)",
+  us_stock: "#6366f1",
+  intl_stock: "#22c55e",
+  bond: "#f59e0b",
+  reit: "#a855f7",
+  commodity: "#f97316",
+  crypto: "#ec4899",
+  cash: "#64748b",
+  other: "#94a3b8",
 };
 
 export const TRANSACTION_TYPE_LABELS: Record<string, string> = {

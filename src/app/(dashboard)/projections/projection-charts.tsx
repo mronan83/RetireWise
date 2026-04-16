@@ -128,25 +128,29 @@ export function ProjectionCharts({
           </p>
         </CardHeader>
         <CardContent>
-          <div className="h-[350px]">
+          <div className="h-[280px] sm:h-[320px] -ml-2">
             <ResponsiveContainer width="100%" height="100%">
-              <AreaChart data={projectionData}>
+              <AreaChart data={projectionData} margin={{ top: 5, right: 5, left: 0, bottom: 0 }}>
                 <defs>
                   <linearGradient id="projGrad" x1="0" y1="0" x2="0" y2="1">
-                    <stop offset="5%" stopColor="hsl(142, 71%, 45%)" stopOpacity={0.3} />
-                    <stop offset="95%" stopColor="hsl(142, 71%, 45%)" stopOpacity={0} />
+                    <stop offset="0%" stopColor="#22c55e" stopOpacity={0.35} />
+                    <stop offset="100%" stopColor="#22c55e" stopOpacity={0} />
                   </linearGradient>
                 </defs>
-                <CartesianGrid strokeDasharray="3 3" className="stroke-border" />
+                <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" strokeOpacity={0.5} vertical={false} />
                 <XAxis
                   dataKey="age"
-                  tick={{ fill: "hsl(var(--muted-foreground))", fontSize: 12 }}
-                  label={{ value: "Age", position: "bottom", fill: "hsl(var(--muted-foreground))" }}
+                  tick={{ fill: "hsl(var(--muted-foreground))", fontSize: 11 }}
+                  axisLine={false}
+                  tickLine={false}
+                  tickMargin={8}
                 />
                 <YAxis
                   tickFormatter={(v) => formatCompactCurrency(v)}
-                  tick={{ fill: "hsl(var(--muted-foreground))", fontSize: 12 }}
-                  width={70}
+                  tick={{ fill: "hsl(var(--muted-foreground))", fontSize: 11 }}
+                  axisLine={false}
+                  tickLine={false}
+                  width={60}
                 />
                 <Tooltip
                   formatter={(value) => [formatCurrency(Number(value)), "Portfolio"]}
@@ -154,21 +158,26 @@ export function ProjectionCharts({
                   contentStyle={{
                     backgroundColor: "hsl(var(--card))",
                     border: "1px solid hsl(var(--border))",
-                    borderRadius: "var(--radius)",
+                    borderRadius: "8px",
+                    boxShadow: "0 4px 12px rgba(0,0,0,0.15)",
+                    fontSize: "13px",
+                    padding: "8px 12px",
                   }}
+                  itemStyle={{ color: "hsl(var(--foreground))" }}
                 />
                 <ReferenceLine
                   x={retirementAge}
                   stroke="hsl(var(--muted-foreground))"
                   strokeDasharray="5 5"
-                  label={{ value: "Retirement", fill: "hsl(var(--muted-foreground))", fontSize: 11 }}
+                  label={{ value: "Retire", fill: "hsl(var(--muted-foreground))", fontSize: 10 }}
                 />
                 <Area
                   type="monotone"
                   dataKey="value"
-                  stroke="hsl(142, 71%, 45%)"
+                  stroke="#22c55e"
                   fill="url(#projGrad)"
-                  strokeWidth={2}
+                  strokeWidth={2.5}
+                  dot={false}
                 />
               </AreaChart>
             </ResponsiveContainer>
@@ -185,19 +194,23 @@ export function ProjectionCharts({
           </p>
         </CardHeader>
         <CardContent>
-          <div className="h-[350px]">
+          <div className="h-[280px] sm:h-[320px] -ml-2">
             <ResponsiveContainer width="100%" height="100%">
-              <AreaChart data={monteCarloData}>
-                <CartesianGrid strokeDasharray="3 3" className="stroke-border" />
+              <AreaChart data={monteCarloData} margin={{ top: 5, right: 5, left: 0, bottom: 0 }}>
+                <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" strokeOpacity={0.5} vertical={false} />
                 <XAxis
                   dataKey="age"
-                  tick={{ fill: "hsl(var(--muted-foreground))", fontSize: 12 }}
-                  label={{ value: "Age", position: "bottom", fill: "hsl(var(--muted-foreground))" }}
+                  tick={{ fill: "hsl(var(--muted-foreground))", fontSize: 11 }}
+                  axisLine={false}
+                  tickLine={false}
+                  tickMargin={8}
                 />
                 <YAxis
                   tickFormatter={(v) => formatCompactCurrency(v)}
-                  tick={{ fill: "hsl(var(--muted-foreground))", fontSize: 12 }}
-                  width={70}
+                  tick={{ fill: "hsl(var(--muted-foreground))", fontSize: 11 }}
+                  axisLine={false}
+                  tickLine={false}
+                  width={60}
                 />
                 <Tooltip
                   formatter={(value) => formatCurrency(Number(value))}
@@ -205,25 +218,29 @@ export function ProjectionCharts({
                   contentStyle={{
                     backgroundColor: "hsl(var(--card))",
                     border: "1px solid hsl(var(--border))",
-                    borderRadius: "var(--radius)",
+                    borderRadius: "8px",
+                    boxShadow: "0 4px 12px rgba(0,0,0,0.15)",
+                    fontSize: "13px",
+                    padding: "8px 12px",
                   }}
+                  itemStyle={{ color: "hsl(var(--foreground))" }}
                 />
                 <ReferenceLine
                   x={retirementAge}
                   stroke="hsl(var(--muted-foreground))"
                   strokeDasharray="5 5"
                 />
-                <Area type="monotone" dataKey="p90" stackId="1" stroke="none" fill="hsl(221, 83%, 53%)" fillOpacity={0.1} name="90th percentile" />
-                <Area type="monotone" dataKey="p75" stackId="2" stroke="none" fill="hsl(221, 83%, 53%)" fillOpacity={0.15} name="75th percentile" />
-                <Area type="monotone" dataKey="p50" stackId="3" stroke="hsl(221, 83%, 53%)" fill="hsl(221, 83%, 53%)" fillOpacity={0.25} strokeWidth={2} name="Median" />
-                <Area type="monotone" dataKey="p25" stackId="4" stroke="none" fill="hsl(221, 83%, 53%)" fillOpacity={0.15} name="25th percentile" />
-                <Area type="monotone" dataKey="p10" stackId="5" stroke="none" fill="hsl(221, 83%, 53%)" fillOpacity={0.1} name="10th percentile" />
+                <Area type="monotone" dataKey="p90" stackId="1" stroke="none" fill="#6366f1" fillOpacity={0.08} name="90th %" />
+                <Area type="monotone" dataKey="p75" stackId="2" stroke="none" fill="#6366f1" fillOpacity={0.12} name="75th %" />
+                <Area type="monotone" dataKey="p50" stackId="3" stroke="#6366f1" fill="#6366f1" fillOpacity={0.2} strokeWidth={2.5} name="Median" dot={false} />
+                <Area type="monotone" dataKey="p25" stackId="4" stroke="none" fill="#6366f1" fillOpacity={0.12} name="25th %" />
+                <Area type="monotone" dataKey="p10" stackId="5" stroke="none" fill="#6366f1" fillOpacity={0.08} name="10th %" />
               </AreaChart>
             </ResponsiveContainer>
           </div>
-          <div className="flex gap-4 mt-3 text-xs text-muted-foreground justify-center">
+          <div className="flex flex-wrap gap-x-4 gap-y-1 mt-3 text-xs text-muted-foreground justify-center">
             <span>Darker = more likely</span>
-            <span>Median: {formatCurrency(monteCarlo.medianAtRetirement)} at retirement</span>
+            <span>Median: {formatCurrency(monteCarlo.medianAtRetirement)}</span>
             <span>Range: {formatCurrency(monteCarlo.worstCase)} – {formatCurrency(monteCarlo.bestCase)}</span>
           </div>
         </CardContent>

@@ -10,7 +10,7 @@ import {
   ResponsiveContainer,
 } from "recharts";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { formatCurrency, formatShortDate } from "@/lib/utils/format";
+import { formatCurrency, formatCompactCurrency, formatShortDate } from "@/lib/utils/format";
 
 type SnapshotPoint = {
   date: string;
@@ -24,8 +24,8 @@ export function PerformanceChart({ data }: { data: SnapshotPoint[] }) {
         <CardHeader>
           <CardTitle>Portfolio Performance</CardTitle>
         </CardHeader>
-        <CardContent className="flex h-[300px] items-center justify-center text-muted-foreground">
-          No performance data yet. Data will appear after the first snapshot.
+        <CardContent className="flex h-[280px] items-center justify-center text-muted-foreground text-sm">
+          Performance data will appear after daily price updates begin.
         </CardContent>
       </Card>
     );
@@ -37,64 +37,68 @@ export function PerformanceChart({ data }: { data: SnapshotPoint[] }) {
 
   return (
     <Card>
-      <CardHeader>
+      <CardHeader className="pb-2">
         <CardTitle>Portfolio Performance</CardTitle>
       </CardHeader>
       <CardContent>
-        <div className="h-[300px]">
+        <div className="h-[260px] sm:h-[280px] -ml-2">
           <ResponsiveContainer width="100%" height="100%">
-            <AreaChart data={sorted}>
+            <AreaChart data={sorted} margin={{ top: 5, right: 5, left: 0, bottom: 0 }}>
               <defs>
-                <linearGradient
-                  id="portfolioGradient"
-                  x1="0"
-                  y1="0"
-                  x2="0"
-                  y2="1"
-                >
-                  <stop
-                    offset="5%"
-                    stopColor="hsl(221, 83%, 53%)"
-                    stopOpacity={0.3}
-                  />
-                  <stop
-                    offset="95%"
-                    stopColor="hsl(221, 83%, 53%)"
-                    stopOpacity={0}
-                  />
+                <linearGradient id="perfGradient" x1="0" y1="0" x2="0" y2="1">
+                  <stop offset="0%" stopColor="#6366f1" stopOpacity={0.35} />
+                  <stop offset="100%" stopColor="#6366f1" stopOpacity={0} />
                 </linearGradient>
               </defs>
               <CartesianGrid
                 strokeDasharray="3 3"
-                className="stroke-border"
+                stroke="hsl(var(--border))"
+                strokeOpacity={0.5}
+                vertical={false}
               />
               <XAxis
                 dataKey="date"
                 tickFormatter={formatShortDate}
-                className="text-xs"
-                tick={{ fill: "hsl(var(--muted-foreground))" }}
+                tick={{ fill: "hsl(var(--muted-foreground))", fontSize: 11 }}
+                axisLine={false}
+                tickLine={false}
+                tickMargin={8}
+                minTickGap={40}
               />
               <YAxis
-                tickFormatter={(v) => formatCurrency(v)}
-                className="text-xs"
-                tick={{ fill: "hsl(var(--muted-foreground))" }}
-                width={90}
+                tickFormatter={(v) => formatCompactCurrency(v)}
+                tick={{ fill: "hsl(var(--muted-foreground))", fontSize: 11 }}
+                axisLine={false}
+                tickLine={false}
+                width={60}
+                tickMargin={4}
               />
               <Tooltip
-                formatter={(value) => [formatCurrency(Number(value)), "Value"]}
+                formatter={(value) => [formatCurrency(Number(value)), "Portfolio"]}
                 labelFormatter={(label) => formatShortDate(String(label))}
                 contentStyle={{
                   backgroundColor: "hsl(var(--card))",
                   border: "1px solid hsl(var(--border))",
-                  borderRadius: "var(--radius)",
+                  borderRadius: "8px",
+                  boxShadow: "0 4px 12px rgba(0,0,0,0.15)",
+                  fontSize: "13px",
+                  padding: "8px 12px",
                 }}
+                itemStyle={{ color: "hsl(var(--foreground))" }}
               />
               <Area
                 type="monotone"
                 dataKey="value"
-                stroke="hsl(221, 83%, 53%)"
-                fill="url(#portfolioGradient)"
-                strokeWidth={2}
+                stroke="#6366f1"
+                fill="url(#perfGradient)"
+                strokeWidth={2.5}
+                dot={false}
+                activeDot={{
+                  r: 5,
+                  fill: "#6366f1",
+                  stroke: "hsl(var(--card))",
+                  strokeWidth: 2,
+                }}
               />
             </AreaChart>
           </ResponsiveContainer>

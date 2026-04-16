@@ -124,6 +124,25 @@ export const filingStatusEnum = pgEnum("filing_status", [
   "single",
 ]);
 
+// Households — links multiple Clerk users to shared data
+export const households = pgTable("households", {
+  id: uuid("id").defaultRandom().primaryKey(),
+  name: text("name").notNull().default("My Household"),
+  primaryClerkId: text("primary_clerk_id").notNull(),
+  inviteCode: text("invite_code").unique(),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+});
+
+export const householdMembers = pgTable("household_members", {
+  id: uuid("id").defaultRandom().primaryKey(),
+  householdId: uuid("household_id")
+    .references(() => households.id, { onDelete: "cascade" })
+    .notNull(),
+  clerkId: text("clerk_id").notNull(),
+  role: text("role").notNull().default("member"),
+  joinedAt: timestamp("joined_at").defaultNow().notNull(),
+});
+
 // Tables
 export const accounts = pgTable("accounts", {
   id: uuid("id").defaultRandom().primaryKey(),

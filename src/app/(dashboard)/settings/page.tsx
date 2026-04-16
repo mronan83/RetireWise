@@ -6,6 +6,8 @@ import {
   userPreferences,
   socialSecurityBenefits,
   contributions,
+  households,
+  householdMembers,
 } from "@/lib/db/schema";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
@@ -13,13 +15,14 @@ import { PreferencesForm } from "./preferences-form";
 import { SocialSecurityForm } from "./social-security-form";
 import { ContributionsSection } from "./contributions-section";
 import { AiProviderSection } from "./ai-provider-section";
+import { HouseholdSharing } from "./household-sharing";
 
 export default async function SettingsPage() {
   const { userId } = await auth();
   if (!userId) redirect("/sign-in");
 
   const db = getDb();
-  const [prefs, selfSS, spouseSS, contributionsList] = await Promise.all([
+  const [prefs, selfSS, spouseSS, contributionsList, householdData] = await Promise.all([
     db
       .select()
       .from(userPreferences)
@@ -50,6 +53,36 @@ export default async function SettingsPage() {
       .from(contributions)
       .where(eq(contributions.clerkId, userId))
       .orderBy(contributions.createdAt),
+    // Get household info
+    (async () => {
+      const membership = await db
+        .select({
+          householdId: householdMembers.householdId,
+          inviteCode: households.inviteCode,
+          primaryClerkId: households.primaryClerkId,
+        })
+        .from(householdMembers)
+        .innerJoin(households, eq(householdMembers.householdId, households.id))
+        .where(eq(householdMembers.clerkId, userId))
+        .limit(1);
+
+      if (membership.length === 0) return null;
+
+      const members = await db
+        .select({
+          clerkId: householdMembers.clerkId,
+          role: householdMembers.role,
+          joinedAt: householdMembers.joinedAt,
+        })
+        .from(householdMembers)
+        .where(eq(householdMembers.householdId, membership[0].householdId));
+
+      return {
+        id: membership[0].householdId,
+        inviteCode: membership[0].inviteCode,
+        members,
+      };
+    })(),
   ]);
 
   const currentPrefs = prefs[0] || null;
@@ -62,6 +95,15 @@ export default async function SettingsPage() {
           Household preferences, retirement contributions, and Social Security
         </p>
       </div>
+
+      <Card>
+        <CardHeader>
+          <CardTitle>Household Sharing</CardTitle>
+        </CardHeader>
+        <CardContent>
+          <HouseholdSharing household={householdData} />
+        </CardContent>
+      </Card>
 
       <Card>
         <CardHeader>
