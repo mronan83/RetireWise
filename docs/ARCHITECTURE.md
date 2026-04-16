@@ -8,7 +8,7 @@ RetireWise is a **household** retirement planning tool for Matt (42) and Tricia 
 - **Social Security** tracked per-spouse (claiming age, FRA, spousal benefits, COLA)
 - **Contributions** are granular line items per account with employer match modeling
 - **Dashboard** shows combined household totals with per-person breakdowns
-- **AI Agent** understands the household model with 9 specialized tools
+- **AI Agent** understands the household model with 10 specialized tools
 - **Projections** model both retirement timelines, coordinated SS claiming, withdrawal strategies
 - **Tax filing** defaults to Married Filing Jointly for bracket calculations
 
@@ -21,12 +21,12 @@ RetireWise is a **household** retirement planning tool for Matt (42) and Tricia 
 │  ┌────────────────────────────────────────────────────────────────┐  │
 │  │                      Next.js 16 App                            │  │
 │  │                                                                │  │
-│  │  Pages (10 routes):                                            │  │
+│  │  Pages (11 routes):                                            │  │
 │  │  / (landing) • /dashboard • /accounts • /holdings              │  │
-│  │  /transactions • /analysis • /projections                      │  │
+│  │  /transactions • /analysis • /projections • /net-worth         │  │
 │  │  /import • /settings • /sign-in • /sign-up                     │  │
 │  │                                                                │  │
-│  │  API Routes (13):                                              │  │
+│  │  API Routes (14):                                              │  │
 │  │  /api/chat • /api/prices/refresh • /api/settings/ai-provider   │  │
 │  │  /api/plaid/{create-link-token,exchange-token,webhook}         │  │
 │  │  /api/cron/{snapshot,refresh} • /api/alerts/dismiss            │  │
@@ -37,10 +37,10 @@ RetireWise is a **household** retirement planning tool for Matt (42) and Tricia 
 │    │   Neon Postgres     │  │  AI Providers (choosable) │            │
 │    │   (Marketplace)     │  │                           │            │
 │    │                     │  │  • Anthropic (Claude 4.5)  │            │
-│    │   11 tables:        │  │  • Google (Gemini 2.0)    │            │
+│    │   14 tables:        │  │  • Google (Gemini 2.0)    │            │
 │    │   accounts          │  │  • OpenAI (GPT-4.1)      │            │
 │    │   holdings          │  │                           │            │
-│    │   transactions      │  │  9 AI Tools:              │            │
+│    │   transactions      │  │  10 AI Tools:             │            │
 │    │   portfolio_snaps   │  │  • portfolioSummary       │            │
 │    │   social_security   │  │  • holdingsDetail         │            │
 │    │   contributions     │  │  • allocationDrift        │            │
@@ -49,8 +49,10 @@ RetireWise is a **household** retirement planning tool for Matt (42) and Tricia 
 │    │   ai_analyses       │  │  • taxLossHarvesting      │            │
 │    │   alerts            │  │  • dividendIncome         │            │
 │    │   goals             │  │  • benchmarkComparison    │            │
-│    └────────────────────┘  │  • retirementProjection   │            │
-│                             └───────────────────────────┘            │
+│    │   real_estate       │  │  • retirementProjection   │            │
+│    │   cash_reserves     │  │  • getNetWorth            │            │
+│    │   debts             │  │                           │            │
+│    └────────────────────┘  └───────────────────────────┘            │
 │    ┌──────────────────┐  ┌──────────────────┐                       │
 │    │  Clerk Auth      │  │  Upstash Redis   │                       │
 │    │  (Marketplace)   │  │  (Marketplace)   │                       │
@@ -79,10 +81,10 @@ RetireWise is a **household** retirement planning tool for Matt (42) and Tricia 
 | Language        | TypeScript (strict)                 | Type safety throughout               |
 | UI              | shadcn/ui (Base UI) + Tailwind v4   | Component library + styling          |
 | Charts          | Recharts                            | Financial visualizations + fan charts|
-| Database        | Neon Postgres (Vercel Marketplace)   | Serverless PostgreSQL (11 tables)    |
+| Database        | Neon Postgres (Vercel Marketplace)   | Serverless PostgreSQL (14 tables)    |
 | ORM             | Drizzle ORM (neon-http driver)      | Type-safe database access            |
 | Auth            | Clerk (Vercel Marketplace)          | Authentication + user management     |
-| AI              | Vercel AI SDK v6 + direct providers | Streaming chat + 9 typed tools       |
+| AI              | Vercel AI SDK v6 + direct providers | Streaming chat + 10 typed tools      |
 | AI Models       | Claude 4.5 / Gemini 2.0 / GPT-4.1  | User-choosable AI provider           |
 | Account Sync    | Plaid API (production)              | Brokerage account connections        |
 | Price Data      | Yahoo Finance (yahoo-finance2)      | Daily stock/ETF/fund prices          |
@@ -111,6 +113,7 @@ src/
 │   │   ├── transactions/             # History with summary cards
 │   │   ├── analysis/                 # 11 AI analysis cards
 │   │   ├── projections/              # Monte Carlo, scenarios, withdrawal
+│   │   ├── net-worth/                # Real estate, cash reserves, debts
 │   │   ├── import/                   # CSV import (standalone page)
 │   │   └── settings/                 # Preferences, contributions, SS, AI model
 │   └── api/
@@ -129,10 +132,10 @@ src/
 │   └── plaid/                        # Plaid Link (react-plaid-link)
 └── lib/
     ├── ai/model.ts                   # Multi-provider model selector
-    ├── db/{index,schema}.ts          # Drizzle schema (11 tables) + lazy client
+    ├── db/{index,schema}.ts          # Drizzle schema (14 tables) + lazy client
     ├── redis.ts                      # Upstash Redis + rate limiter
     ├── agents/                       # Agent type exports
-    ├── tools/                        # 9 AI tools
+    ├── tools/                        # 10 AI tools
     │   ├── get-portfolio-summary.ts
     │   ├── get-holdings-detail.ts
     │   ├── calculate-allocation-drift.ts
@@ -141,8 +144,11 @@ src/
     │   ├── scan-tax-loss-harvesting.ts
     │   ├── get-dividend-income.ts
     │   ├── compare-benchmarks.ts
-    │   └── run-retirement-projection.ts
-    ├── actions/                      # Server Actions (6 modules)
+    │   ├── run-retirement-projection.ts
+    │   └── get-net-worth.ts
+    ├── constants-net-worth.ts        # Net worth category options + defaults
+    ├── actions/                      # Server Actions (7 modules)
+    │   ├── net-worth.ts              # CRUD for real estate, cash, debts
     ├── queries/                      # Read-only data fetching
     ├── plaid/                        # Client + AES-256-GCM encryption
     └── utils/

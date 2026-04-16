@@ -11,7 +11,17 @@
 [SS Form] ──→ updateSocialSecurity() ──→ social_security_benefits table
 ```
 
-## 2. CSV Import (Fidelity + Generic)
+## 2. Net Worth Data Entry
+
+```
+[Property Form] ──→ createProperty() ──→ real_estate table
+[Cash Form] ──→ createCashReserve() ──→ cash_reserves table
+[Debt Form] ──→ createDebt() ──→ debts table
+
+Net Worth = real estate values + cash reserves + portfolio value − debts
+```
+
+## 3. CSV Import (Fidelity + Generic)
 
 ```
 Upload CSV → FileReader → parseFidelityCSV() or parseGenericCSV()
@@ -24,7 +34,7 @@ refreshHoldings(accountId, parsed)
   └── Missing tickers → DELETE (sold positions)
 ```
 
-## 3. Plaid Account Connection
+## 4. Plaid Account Connection
 
 ```
 [Add Account] → "Connect via Plaid"
@@ -40,7 +50,7 @@ POST /api/plaid/exchange-token → Plaid API → access_token
   └── Insert holdings per account
 ```
 
-## 4. Daily Price Update + Snapshot (Cron — weekdays 6 PM ET)
+## 5. Daily Price Update + Snapshot (Cron — weekdays 6 PM ET)
 
 ```
 GET /api/cron/snapshot (CRON_SECRET auth)
@@ -69,7 +79,7 @@ GET /api/cron/snapshot (CRON_SECRET auth)
       └── UPDATE goals.currentAmount + isCompleted
 ```
 
-## 5. Plaid Data Refresh (Cron — daily 10 AM UTC)
+## 6. Plaid Data Refresh (Cron — daily 10 AM UTC)
 
 ```
 GET /api/cron/refresh (CRON_SECRET auth)
@@ -81,7 +91,7 @@ GET /api/cron/refresh (CRON_SECRET auth)
   └── Update lastSync timestamp
 ```
 
-## 6. AI Chat
+## 7. AI Chat
 
 ```
 User clicks Analysis card or types in chat
@@ -92,7 +102,7 @@ POST /api/chat
   ├── Rate limit check (Upstash Redis, 30 req/min)
   ├── Read user's AI provider preference from DB
   ├── convertToModelMessages(UIMessages)
-  ├── streamText({model, messages, tools: 9 tools})
+  ├── streamText({model, messages, tools: 10 tools})
   │   └── AI calls tools as needed:
   │       • getPortfolioSummary → DB queries
   │       • getHoldingsDetail → DB queries
@@ -103,10 +113,11 @@ POST /api/chat
   │       • getDividendIncome → DB + yield estimates
   │       • compareBenchmarks → Yahoo Finance historical
   │       • runRetirementProjection → DB + Monte Carlo engine
+  │       • getNetWorth → DB (real estate, cash, debts + portfolio)
   └── toUIMessageStreamResponse() → SSE stream → chat panel
 ```
 
-## 7. Retirement Projections
+## 8. Retirement Projections
 
 ```
 /projections page (Server Component)
@@ -126,7 +137,7 @@ ScenarioRunner (Client Component)
       lower returns, high inflation, no Social Security
 ```
 
-## 8. Data Export
+## 9. Data Export
 
 ```
 Dashboard → Export dropdown
@@ -138,7 +149,7 @@ Dashboard → Export dropdown
       └── Full history with account, owner, type
 ```
 
-## 9. Authentication
+## 10. Authentication
 
 ```
 Request → middleware.ts (clerkMiddleware)
@@ -148,7 +159,7 @@ Request → middleware.ts (clerkMiddleware)
       └── No session → redirect to /sign-in
 ```
 
-## Database Entity Relationship (11 tables)
+## Database Entity Relationship (14 tables)
 
 ```
 user_preferences
@@ -200,4 +211,16 @@ plaid_items
 
 ai_analyses
   └── clerkId, type, result (JSONB)
+
+real_estate
+  ├── clerkId
+  └── name, estimatedValue, owner, propertyType, notes
+
+cash_reserves
+  ├── clerkId
+  └── name, balance, owner, accountType, institution, notes
+
+debts
+  ├── clerkId
+  └── name, balance, owner, interestRate, minimumPayment, debtType, notes
 ```

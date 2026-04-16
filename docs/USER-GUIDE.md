@@ -71,6 +71,19 @@ Interactive retirement modeling:
 - **Withdrawal Strategy Comparison** — 4 strategies showing lifetime taxes and remaining portfolio
 - **Scenario Analysis** — click "Run All Scenarios" to compare 6 what-ifs (market crash, early retirement, boost savings, lower returns, high inflation, no SS)
 
+### Net Worth
+Track the full picture beyond just your investment portfolio:
+
+- **Real Estate** — add properties with estimated market values (primary home, rental properties, land). Use your Zillow Zestimate or recent appraisal.
+- **Cash Reserves** — savings accounts, checking accounts, CDs, money market funds, emergency funds. Anything liquid that isn't invested.
+- **Debts** — mortgages, car loans, student loans, credit cards. Includes interest rate and minimum payment tracking.
+
+The page shows a net worth summary: total assets (real estate + cash + portfolio) minus total debts. Each category has its own section where you can add, edit, and delete entries.
+
+**How often to update:** quarterly is a good cadence, or whenever you check Zillow, get bank statements, or pay down a loan balance. Unlike portfolio holdings (which update daily via price feeds), these values are manually maintained.
+
+The AI can see your full net worth picture when you ask about it -- it combines real estate, cash, investments, and debts into one view.
+
 ### Settings
 Four sections:
 
@@ -118,13 +131,14 @@ The summary shows annualized totals per person with employer match broken out, p
 
 ## AI Analysis
 
-The AI has access to your real portfolio data through 9 specialized tools. It can:
+The AI has access to your real portfolio data through 10 specialized tools. It can:
 - Pull your actual holdings, allocation, and household details
 - Generate specific trade recommendations
 - Scan for tax-loss harvesting opportunities
 - Compare you against benchmarks
 - Estimate dividend income
 - Run retirement projections with Monte Carlo simulations
+- Show your full net worth (real estate + cash + investments - debts)
 
 **Choosing a model:** Go to Settings → AI Model. Claude Sonnet 4.5 is recommended for financial analysis. Gemini 2.0 Flash is faster and has a free tier.
 
