@@ -11,6 +11,7 @@ import { getAccounts } from "@/lib/queries/accounts";
 import { getHoldingsByClerkId } from "@/lib/queries/holdings";
 import { getSnapshots } from "@/lib/queries/snapshots";
 import { calculatePortfolioSummary, calculateGainLoss } from "@/lib/utils/calculations";
+import { RefreshPricesButton } from "@/components/dashboard/refresh-prices-button";
 
 async function DashboardContent() {
   const { userId } = await auth();
@@ -77,11 +78,14 @@ async function DashboardContent() {
 
   return (
     <div className="space-y-6">
-      <div>
-        <h1 className="text-2xl font-bold tracking-tight">Dashboard</h1>
-        <p className="text-muted-foreground">
-          Your household retirement portfolio
-        </p>
+      <div className="flex items-start justify-between">
+        <div>
+          <h1 className="text-2xl font-bold tracking-tight">Dashboard</h1>
+          <p className="text-muted-foreground">
+            Your household retirement portfolio
+          </p>
+        </div>
+        <RefreshPricesButton />
       </div>
 
       <PortfolioSummaryCards
