@@ -1,122 +1,163 @@
 import { auth } from "@clerk/nextjs/server";
 import { redirect } from "next/navigation";
-import { LineChart, Calculator, TrendingUp, Clock } from "lucide-react";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { eq, and } from "drizzle-orm";
+import { getDb } from "@/lib/db";
+import { userPreferences, socialSecurityBenefits, contributions } from "@/lib/db/schema";
+import { getHoldingsByClerkId } from "@/lib/queries/holdings";
+import {
+  calculateProjection,
+  runMonteCarlo,
+  calculateWithdrawalStrategies,
+  type ProjectionInput,
+} from "@/lib/utils/projections";
+import { ProjectionCharts } from "./projection-charts";
+import { ScenarioRunner } from "./scenario-runner";
 
 export default async function ProjectionsPage() {
   const { userId } = await auth();
   if (!userId) redirect("/sign-in");
 
+  const db = getDb();
+  const [holdings, prefs, selfSS, spouseSS, contribs] = await Promise.all([
+    getHoldingsByClerkId(userId),
+    db.select().from(userPreferences).where(eq(userPreferences.clerkId, userId)).limit(1),
+    db.select().from(socialSecurityBenefits).where(
+      and(eq(socialSecurityBenefits.clerkId, userId), eq(socialSecurityBenefits.owner, "self"))
+    ).limit(1),
+    db.select().from(socialSecurityBenefits).where(
+      and(eq(socialSecurityBenefits.clerkId, userId), eq(socialSecurityBenefits.owner, "spouse"))
+    ).limit(1),
+    db.select().from(contributions).where(eq(contributions.clerkId, userId)),
+  ]);
+
+  const pref = prefs[0];
+
+  if (!pref?.currentAge || !pref?.retirementAge) {
+    return (
+      <div className="space-y-6">
+        <div>
+          <h1 className="text-2xl font-bold tracking-tight">Retirement Projections</h1>
+          <p className="text-muted-foreground">Model your retirement timeline</p>
+        </div>
+        <div className="rounded-lg border border-dashed p-12 text-center">
+          <h3 className="text-lg font-semibold">Set up your preferences first</h3>
+          <p className="mt-2 text-sm text-muted-foreground max-w-md mx-auto">
+            Go to Settings and fill in your age, retirement age, and monthly expenses
+            to run retirement projections.
+          </p>
+          <a href="/settings" className="mt-4 inline-block text-primary underline text-sm">
+            Go to Settings
+          </a>
+        </div>
+      </div>
+    );
+  }
+
+  const totalValue = holdings.reduce((s, h) => s + Number(h.currentValue), 0);
+  const yearsToRetirement = Math.max(0, pref.retirementAge - pref.currentAge);
+
+  // Calculate contributions
+  const selfSalary = pref.annualSalary ? Number(pref.annualSalary) : 0;
+  const spouseSalary = pref.spouseAnnualSalary ? Number(pref.spouseAnnualSalary) : 0;
+  let totalAnnualContributions = 0;
+  for (const c of contribs) {
+    const salary = c.owner === "self" ? selfSalary : spouseSalary;
+    let annual = 0;
+    if (c.contributionMethod === "percent_of_salary" && salary > 0) {
+      annual = (Number(c.contributionPercent || 0) / 100) * salary;
+    } else if (c.contributionMethod === "fixed_amount") {
+      const freq: Record<string, number> = {
+        per_paycheck_biweekly: 26, per_paycheck_semimonthly: 24,
+        monthly: 12, quarterly: 4, annually: 1,
+      };
+      annual = Number(c.contributionAmount || 0) * (freq[c.frequency] || 1);
+    }
+    if (c.hasEmployerMatch && salary > 0) {
+      const yourPct = c.contributionMethod === "percent_of_salary"
+        ? Number(c.contributionPercent || 0)
+        : salary > 0 ? (annual / salary) * 100 : 0;
+      const matchablePct = Math.min(yourPct, Number(c.employerMatchMaxPercent || 0));
+      annual += (matchablePct / 100) * salary * Number(c.employerMatchRate || 0);
+    }
+    totalAnnualContributions += annual;
+  }
+
+  const selfSSMonthly = selfSS[0]?.benefitAtFRA ? Number(selfSS[0].benefitAtFRA) : 0;
+  const spouseSSMonthly = spouseSS[0]?.benefitAtFRA ? Number(spouseSS[0].benefitAtFRA) : 0;
+  const combinedSSMonthly = selfSSMonthly + spouseSSMonthly;
+
+  const returnByRisk: Record<string, number> = {
+    conservative: 5, moderate: 7, aggressive: 9,
+  };
+  const expectedReturn = returnByRisk[pref.riskTolerance || "moderate"] ?? 7;
+  const monthlyExpenses = pref.monthlyExpensesRetirement
+    ? Number(pref.monthlyExpensesRetirement) : 7000;
+
+  const input: ProjectionInput = {
+    currentPortfolioValue: totalValue,
+    annualContributions: totalAnnualContributions,
+    yearsToRetirement,
+    expectedReturnPct: expectedReturn,
+    inflationPct: 3,
+    monthlyExpensesRetirement: monthlyExpenses,
+    socialSecurityMonthlyIncome: combinedSSMonthly,
+    yearsInRetirement: 30,
+  };
+
+  const projection = calculateProjection(input, pref.currentAge);
+  const monteCarlo = runMonteCarlo(input, pref.currentAge, 1000);
+
+  // Withdrawal strategies
+  let taxDeferredBalance = 0;
+  let taxFreeBalance = 0;
+  let taxableBalance = 0;
+  for (const h of holdings) {
+    const val = Number(h.currentValue);
+    const t = h.accountType;
+    if (t === "401k" || t === "403b" || t === "ira_traditional" || t === "pension") {
+      taxDeferredBalance += val;
+    } else if (t === "ira_roth" || t === "hsa") {
+      taxFreeBalance += val;
+    } else {
+      taxableBalance += val;
+    }
+  }
+
+  const growthFactor = Math.pow(1 + expectedReturn / 100, yearsToRetirement);
+  const strategies = calculateWithdrawalStrategies({
+    taxDeferredBalance: taxDeferredBalance * growthFactor,
+    taxFreeBalance: taxFreeBalance * growthFactor,
+    taxableBalance: taxableBalance * growthFactor,
+    annualExpenses: monthlyExpenses * 12,
+    annualSSIncome: combinedSSMonthly * 12,
+    yearsInRetirement: 30,
+    returnRate: expectedReturn / 100,
+    startAge: pref.retirementAge,
+  });
+
   return (
     <div className="space-y-6">
       <div>
-        <h1 className="text-2xl font-bold tracking-tight">
-          Retirement Projections
-        </h1>
+        <h1 className="text-2xl font-bold tracking-tight">Retirement Projections</h1>
         <p className="text-muted-foreground">
-          Model your retirement timeline with Monte Carlo simulations and
-          scenario analysis
+          Based on your current portfolio, contributions, and goals
         </p>
       </div>
 
-      <div className="grid gap-4 sm:grid-cols-2">
-        <Card>
-          <CardHeader className="flex flex-row items-center gap-3">
-            <Calculator className="h-8 w-8 text-primary" />
-            <div>
-              <CardTitle className="text-base">
-                Retirement Calculator
-              </CardTitle>
-              <p className="text-sm text-muted-foreground">
-                Project your portfolio growth to retirement
-              </p>
-            </div>
-          </CardHeader>
-          <CardContent>
-            <p className="text-sm text-muted-foreground">
-              Based on your current portfolio, contribution rate, and expected
-              returns, see when you can retire comfortably.
-            </p>
-            <p className="mt-3 text-xs text-muted-foreground italic">
-              Coming in Phase 3
-            </p>
-          </CardContent>
-        </Card>
+      <ProjectionCharts
+        projection={projection}
+        monteCarlo={monteCarlo}
+        strategies={strategies}
+        input={input}
+        currentAge={pref.currentAge}
+        retirementAge={pref.retirementAge}
+      />
 
-        <Card>
-          <CardHeader className="flex flex-row items-center gap-3">
-            <LineChart className="h-8 w-8 text-primary" />
-            <div>
-              <CardTitle className="text-base">
-                Monte Carlo Simulation
-              </CardTitle>
-              <p className="text-sm text-muted-foreground">
-                Probability-based outcome analysis
-              </p>
-            </div>
-          </CardHeader>
-          <CardContent>
-            <p className="text-sm text-muted-foreground">
-              Run thousands of simulations to see the range of possible outcomes
-              and your probability of meeting retirement goals.
-            </p>
-            <p className="mt-3 text-xs text-muted-foreground italic">
-              Coming in Phase 3
-            </p>
-          </CardContent>
-        </Card>
-
-        <Card>
-          <CardHeader className="flex flex-row items-center gap-3">
-            <TrendingUp className="h-8 w-8 text-primary" />
-            <div>
-              <CardTitle className="text-base">Scenario Analysis</CardTitle>
-              <p className="text-sm text-muted-foreground">
-                &quot;What if&quot; modeling
-              </p>
-            </div>
-          </CardHeader>
-          <CardContent>
-            <p className="text-sm text-muted-foreground">
-              Test different scenarios: market crash, early retirement, increased
-              savings rate, Social Security timing, and more.
-            </p>
-            <p className="mt-3 text-xs text-muted-foreground italic">
-              Coming in Phase 3
-            </p>
-          </CardContent>
-        </Card>
-
-        <Card>
-          <CardHeader className="flex flex-row items-center gap-3">
-            <Clock className="h-8 w-8 text-primary" />
-            <div>
-              <CardTitle className="text-base">
-                Withdrawal Strategy
-              </CardTitle>
-              <p className="text-sm text-muted-foreground">
-                Optimize your drawdown plan
-              </p>
-            </div>
-          </CardHeader>
-          <CardContent>
-            <p className="text-sm text-muted-foreground">
-              Plan optimal withdrawal sequencing across traditional, Roth, and
-              taxable accounts to minimize taxes in retirement.
-            </p>
-            <p className="mt-3 text-xs text-muted-foreground italic">
-              Coming in Phase 3
-            </p>
-          </CardContent>
-        </Card>
-      </div>
-
-      <div className="rounded-lg border bg-muted/50 p-4 text-sm text-muted-foreground">
-        <strong>Tip:</strong> While advanced projections are coming soon, you can
-        ask the AI assistant questions like &quot;Will I have enough to
-        retire?&quot; or &quot;What if I increase my contributions?&quot; for
-        preliminary analysis.
-      </div>
+      <ScenarioRunner
+        baseInput={input}
+        currentAge={pref.currentAge}
+        retirementAge={pref.retirementAge}
+      />
     </div>
   );
 }
