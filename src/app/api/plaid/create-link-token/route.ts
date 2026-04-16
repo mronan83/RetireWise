@@ -8,15 +8,28 @@ export async function POST() {
     return Response.json({ error: "Unauthorized" }, { status: 401 });
   }
 
-  const client = getPlaidClient();
+  if (!process.env.PLAID_CLIENT_ID || !process.env.PLAID_SECRET) {
+    return Response.json(
+      { error: "Plaid is not configured. Add PLAID_CLIENT_ID and PLAID_SECRET to environment variables." },
+      { status: 500 }
+    );
+  }
 
-  const response = await client.linkTokenCreate({
-    user: { client_user_id: userId },
-    client_name: "RetireWise",
-    products: [Products.Investments],
-    country_codes: [CountryCode.Us],
-    language: "en",
-  });
+  try {
+    const client = getPlaidClient();
 
-  return Response.json({ link_token: response.data.link_token });
+    const response = await client.linkTokenCreate({
+      user: { client_user_id: userId },
+      client_name: "RetireWise",
+      products: [Products.Investments],
+      country_codes: [CountryCode.Us],
+      language: "en",
+    });
+
+    return Response.json({ link_token: response.data.link_token });
+  } catch (e: unknown) {
+    const message = e instanceof Error ? e.message : "Unknown error";
+    console.error("Plaid linkTokenCreate error:", e);
+    return Response.json({ error: message }, { status: 500 });
+  }
 }
