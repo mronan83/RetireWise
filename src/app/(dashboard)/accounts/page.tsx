@@ -4,6 +4,7 @@ import { Link2, PenLine } from "lucide-react";
 import { getAccounts } from "@/lib/queries/accounts";
 import { getHoldingsByClerkId } from "@/lib/queries/holdings";
 import { AccountCard } from "@/components/dashboard/account-card";
+import { FidelityImport } from "@/components/forms/fidelity-import";
 import { AddAccountButton } from "./add-account-button";
 
 export default async function AccountsPage() {
@@ -32,6 +33,10 @@ export default async function AccountsPage() {
         </div>
         <AddAccountButton />
       </div>
+
+      {accountsList.length > 0 && (
+        <FidelityImport accounts={accountsList} />
+      )}
 
       {accountsList.length === 0 ? (
         <div className="flex flex-col items-center justify-center rounded-lg border border-dashed p-12 text-center">
