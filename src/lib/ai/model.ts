@@ -14,7 +14,7 @@ export function getModel(provider?: string): LanguageModel {
       }
       // eslint-disable-next-line @typescript-eslint/no-require-imports
       const { anthropic } = require("@ai-sdk/anthropic");
-      return anthropic("claude-sonnet-4.5");
+      return anthropic("claude-sonnet-4-5-20250929");
     }
 
     case "google": {
