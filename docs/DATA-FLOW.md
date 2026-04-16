@@ -1,230 +1,203 @@
 # RetireWise — Data Flow Diagrams
 
-## 1. Manual Data Entry Flow
+## 1. Manual Data Entry
 
 ```
-User fills form            Server Action           Database
-─────────────────          ──────────────          ────────────
-                           
-[Account Form] ──POST──→  createAccount()  ──INSERT──→  accounts
-                           │
-                           └──→ revalidatePath("/dashboard")
-
-[Holding Form] ──POST──→  createHolding()  ──INSERT──→  holdings
-                           │
-                           ├──→ Verify account ownership
-                           ├──→ Calculate currentValue
-                           └──→ revalidatePath("/dashboard", "/holdings")
+[Account Form] ──→ createAccount() ──→ accounts table
+[Holding Form] ──→ createHolding() ──→ holdings table (verify account ownership)
+[Contribution Form] ──→ createContribution() ──→ contributions table
+[Goal Form] ──→ createGoal() ──→ goals table
+[Preferences Form] ──→ updatePreferences() ──→ user_preferences table
+[SS Form] ──→ updateSocialSecurity() ──→ social_security_benefits table
 ```
 
-## 2. CSV Import Flow
+## 2. CSV Import (Fidelity + Generic)
 
 ```
-User uploads CSV           Client-side parsing      Server Action        Database
-────────────────           ───────────────────      ──────────────       ────────────
-
-[File Input]
-      │
-      ▼
-  FileReader.readAsText()
-      │
-      ▼
-  parseFidelityCSV()  ←─── Detects format (Fidelity or generic)
-  or parseGenericCSV()     Guesses asset class from ticker/name
-      │
-      ▼
-  Preview Table  ──confirm──→  importHoldings()  ──batch INSERT──→  holdings
-                                │
-                                ├──→ Verify account ownership
-                                └──→ revalidatePath("/dashboard", "/holdings")
+Upload CSV → FileReader → parseFidelityCSV() or parseGenericCSV()
+  ↓                       (auto-detects format, guesses asset class)
+Preview Table
+  ↓ confirm
+refreshHoldings(accountId, parsed)
+  ├── Existing tickers → UPDATE (price, shares, cost basis)
+  ├── New tickers → INSERT
+  └── Missing tickers → DELETE (sold positions)
 ```
 
-## 3. Plaid Account Connection Flow
+## 3. Plaid Account Connection
 
 ```
-User clicks Connect        Client                    API Routes              External
-───────────────────         ──────                    ──────────              ────────
-
-[Plaid Link Button]
-      │
-      ▼
-  POST /api/plaid/
-  create-link-token  ──────────────────→  Plaid API: linkTokenCreate()
-      │                                         │
-      ▼                                         ▼
-  Load Plaid Link JS  ←──────────────────  link_token
-      │
-      ▼
-  Plaid Link Modal (user authenticates with brokerage)
-      │
-      ▼ (on success)
-  POST /api/plaid/
-  exchange-token  ─────────────────────→  Plaid API: itemPublicTokenExchange()
-      │                                         │
-      ▼                                         ▼
-  Store encrypted      ←──────────────────  access_token
-  access token
-      │
-      ▼
-  Plaid API: investmentsHoldingsGet()
-      │
-      ▼
-  Create accounts + holdings in DB
-      │
-      ▼
-  revalidatePath → Reload page
+[Add Account] → "Connect via Plaid"
+  ↓
+POST /api/plaid/create-link-token → Plaid API → link_token
+  ↓
+react-plaid-link opens Plaid modal → user authenticates
+  ↓ onSuccess(public_token)
+POST /api/plaid/exchange-token → Plaid API → access_token
+  ├── Encrypt token (AES-256-GCM) → plaid_items table
+  ├── Fetch investmentsHoldingsGet()
+  ├── Create accounts (mapped type + tax treatment)
+  └── Insert holdings per account
 ```
 
-## 4. Plaid Data Refresh Flow (Cron)
+## 4. Daily Price Update + Snapshot (Cron — weekdays 6 PM ET)
 
 ```
-Vercel Cron (6 AM daily)
-      │
-      ▼
-  GET /api/cron/refresh
-      │
-      ▼
-  For each active plaid_item:
-      │
-      ├──→ Decrypt access_token
-      ├──→ Plaid API: investmentsHoldingsGet()
-      ├──→ Update holdings prices + shares
-      └──→ Update lastSync timestamp
-```
-
-## 5. Portfolio Snapshot Flow (Cron)
-
-```
-Vercel Cron (2 AM daily)
-      │
-      ▼
-  GET /api/cron/snapshot
-      │
-      ▼
+GET /api/cron/snapshot (CRON_SECRET auth)
+  │
   For each user with accounts:
-      │
-      ├──→ Sum all holding values → totalValue
-      ├──→ Calculate allocation breakdown
-      ├──→ Compare to previous snapshot → dailyChange
-      ├──→ Rank top 10 holdings
-      └──→ INSERT portfolio_snapshots
+  │
+  ├── Step 1: Update prices
+  │   ├── Check Redis cache (15 min TTL)
+  │   ├── Fetch uncached from Yahoo Finance (batches of 20)
+  │   ├── Cache fresh prices in Redis
+  │   └── Update holdings: currentPrice, currentValue, lastPriceUpdate
+  │
+  ├── Step 2: Take snapshot
+  │   ├── Sum total, self, spouse values
+  │   ├── Calculate allocation breakdown
+  │   ├── Compare to previous snapshot → daily change
+  │   └── INSERT portfolio_snapshots
+  │
+  ├── Step 3: Generate alerts
+  │   ├── Allocation drift > 5% → warning/critical
+  │   ├── Daily move > 2% → warning/critical
+  │   ├── Single holding > 25% → concentration risk
+  │   └── INSERT alerts (undismissed)
+  │
+  └── Step 4: Update goal progress
+      └── UPDATE goals.currentAmount + isCompleted
 ```
 
-## 6. AI Chat Flow
+## 5. Plaid Data Refresh (Cron — daily 10 AM UTC)
 
 ```
-User types message         Client (useChat)         API Route            AI Gateway
-──────────────────         ────────────────         ─────────            ──────────
-
-[Chat Input]
-      │
-      ▼
-  sendMessage({text})
-      │
-      ▼
-  POST /api/chat
-  (with UIMessages)  ──→  createAgentUIStreamResponse()
-                               │
-                               ▼
-                          ToolLoopAgent.stream()  ──→  Claude Sonnet 4.6
-                               │                            │
-                               │  ◄── Tool calls ──────────┘
-                               │
-                               ▼
-                          Execute tools:
-                          • getPortfolioSummary → DB queries
-                          • getHoldingsDetail   → DB queries
-                          • calcAllocationDrift  → DB + math
-                               │
-                               ▼
-                          Stream response chunks
-                               │
-      ◄── SSE stream ─────────┘
-      │
-      ▼
-  Render message parts:
-  • text → prose
-  • tool-* → badges/loaders
+GET /api/cron/refresh (CRON_SECRET auth)
+  │
+  For each active plaid_item:
+  ├── Decrypt access_token
+  ├── Plaid API: investmentsHoldingsGet()
+  ├── Update holdings prices + shares
+  └── Update lastSync timestamp
 ```
 
-## 7. Authentication Flow
+## 6. AI Chat
 
 ```
-Unauthenticated user       Clerk Middleware           Clerk
-────────────────────       ────────────────           ─────
-
-  Request to /dashboard
-      │
-      ▼
-  middleware.ts
-  clerkMiddleware()
-      │
-      ▼
-  isProtectedRoute?  ──yes──→  auth.protect()
-      │                              │
-      no                      Has valid session?
-      │                        │            │
-      ▼                       yes           no
-  Pass through               │            │
-                              ▼            ▼
-                          Continue     Redirect to
-                          to page      /sign-in
+User clicks Analysis card or types in chat
+  ↓
+triggerChat(prompt) → event emitter → ChatPanel opens + sends
+  ↓
+POST /api/chat
+  ├── Rate limit check (Upstash Redis, 30 req/min)
+  ├── Read user's AI provider preference from DB
+  ├── convertToModelMessages(UIMessages)
+  ├── streamText({model, messages, tools: 9 tools})
+  │   └── AI calls tools as needed:
+  │       • getPortfolioSummary → DB queries
+  │       • getHoldingsDetail → DB queries
+  │       • calculateAllocationDrift → DB + math
+  │       • getHouseholdSummary → DB (prefs, SS, accounts)
+  │       • generateRebalancingTrades → DB + allocation math
+  │       • scanTaxLossHarvesting → DB (taxable accounts only)
+  │       • getDividendIncome → DB + yield estimates
+  │       • compareBenchmarks → Yahoo Finance historical
+  │       • runRetirementProjection → DB + Monte Carlo engine
+  └── toUIMessageStreamResponse() → SSE stream → chat panel
 ```
 
-## 8. Social Security Data Flow
+## 7. Retirement Projections
 
 ```
-User fills SS form         Server Action                Database
-──────────────────         ──────────────               ────────────
+/projections page (Server Component)
+  ├── Read: portfolio, preferences, contributions, SS benefits
+  ├── Calculate total annual contributions (line items + employer match)
+  ├── calculateProjection() → deterministic year-by-year forecast
+  ├── runMonteCarlo(1000 sims) → percentile fan chart data
+  └── calculateWithdrawalStrategies() → 4 strategies compared
+      ├── Conventional (taxable → tax-deferred → Roth)
+      ├── Tax-Deferred First (reduce RMDs)
+      ├── Roth First (tax-free income early)
+      └── Pro-Rata (balanced)
 
-[SS Form (self)]  ──POST──→  updateSocialSecurity()  ──UPSERT──→  social_security_benefits
-[SS Form (spouse)] ──POST──→  updateSocialSecurity()  ──UPSERT──→  social_security_benefits
-
-Each form stores:
-  • Monthly benefits at age 62, FRA, and 70
-  • Full retirement age and planned claiming age
-  • Whether already claiming + current benefit amount
-  • Spousal benefit eligibility + amount
-  • Assumed COLA percentage
+ScenarioRunner (Client Component)
+  └── Run 6 what-if scenarios in browser:
+      Market crash, early retirement, boost savings,
+      lower returns, high inflation, no Social Security
 ```
 
-## Database Entity Relationship
+## 8. Data Export
+
+```
+Dashboard → Export dropdown
+  ├── Portfolio Report (.txt) → GET /api/export/report
+  │   └── Formatted text: household, accounts, holdings, allocation, SS
+  ├── Holdings (.csv) → GET /api/export/holdings
+  │   └── All positions with gain/loss, account, owner
+  └── Transactions (.csv) → GET /api/export/transactions
+      └── Full history with account, owner, type
+```
+
+## 9. Authentication
+
+```
+Request → middleware.ts (clerkMiddleware)
+  ├── Public routes (/, /sign-in, /sign-up) → pass through
+  └── Protected routes (/dashboard, /api, etc.)
+      ├── Has session → continue to page
+      └── No session → redirect to /sign-in
+```
+
+## Database Entity Relationship (11 tables)
 
 ```
 user_preferences
   ├── clerkId (unique)
-  ├── Self: firstName, currentAge, retirementAge
+  ├── Self: firstName, currentAge, retirementAge, annualSalary
   ├── Spouse: spouseName, spouseCurrentAge, spouseRetirementAge, spouseIsRetired
-  ├── Household: filingStatus, targetAllocation, monthlyExpensesRetirement
-  └── Contributions: annualContribution, spouseAnnualContribution
+  ├── Household: filingStatus, targetAllocation, monthlyExpenses
+  └── AI: aiProvider (anthropic/google/openai)
 
 accounts
-  ├── clerkId
-  ├── owner (self | spouse)  ←── distinguishes whose account
-  ├── plaidItemId? ──→ plaid_items.itemId
-  │
-  ├──→ holdings (1:many, cascade delete)
-  │     └── accountId
-  │
-  └──→ transactions (1:many, cascade delete)
-        ├── accountId
-        └── holdingId? ──→ holdings.id (set null on delete)
+  ├── clerkId + owner (self | spouse)
+  ├── type, institution, taxTreatment
+  ├── plaidItemId? → plaid_items
+  ├── → holdings (1:many, cascade)
+  └── → transactions (1:many, cascade)
+
+holdings ← accounts
+  └── ticker, shares, costBasis, currentPrice, currentValue, assetClass
+
+transactions ← accounts
+  └── type, ticker, shares, amount, date
+
+contributions
+  ├── clerkId + owner
+  ├── accountType, label
+  ├── method (% of salary | fixed amount) + frequency
+  └── employerMatch (rate + max %)
 
 social_security_benefits
-  ├── clerkId
-  ├── owner (self | spouse)  ←── one row per person
-  ├── Benefits: age62, FRA, age70
-  ├── Claiming: isClaiming, currentMonthlyBenefit, startDate
-  └── Spousal: eligibleForSpousalBenefit, spousalBenefitAmount
+  ├── clerkId + owner
+  ├── Benefits at 62 / FRA / 70
+  ├── Claiming status + spousal benefit
+  └── COLA assumption
 
 portfolio_snapshots
   ├── clerkId + snapshotDate (indexed)
-  ├── totalValue, selfValue, spouseValue
-  └── allocation, topHoldings, dailyChange
+  └── totalValue, selfValue, spouseValue, allocation, dailyChange
 
-ai_analyses
-  └── clerkId
+alerts
+  ├── clerkId
+  └── type, severity, title, message, isDismissed
+
+goals
+  ├── clerkId
+  └── name, targetAmount, currentAmount, targetDate, isCompleted
 
 plaid_items
-  └── clerkId
+  └── clerkId, itemId, accessTokenEncrypted, status
+
+ai_analyses
+  └── clerkId, type, result (JSONB)
 ```

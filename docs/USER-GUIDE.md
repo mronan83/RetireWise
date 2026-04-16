@@ -2,146 +2,181 @@
 
 ## Getting Started
 
-### 1. Sign Up
+### Sign Up
+Go to the app and click **Get Started**. Create an account using Clerk (email, Google, etc.).
 
-Navigate to the app and click **Get Started**. Create an account using Clerk's authentication (email, Google, or other social providers).
-
-### 2. Create Your First Account
-
-After signing in, you'll land on the **Dashboard** (empty at first).
-
-1. Go to **Accounts** in the sidebar
-2. Click **Add Account**
-3. Fill in:
-   - **Account Name**: e.g., "Fidelity 401(k)"
-   - **Institution**: e.g., "Fidelity"
-   - **Account Type**: Select from 401(k), IRA, Roth IRA, Brokerage, HSA, etc.
-   - **Tax Treatment**: Tax-Deferred, Tax-Free, or Taxable
-4. Click **Create Account**
-
-### 3. Add Holdings
-
-There are three ways to add holdings:
-
-#### Manual Entry
-1. Go to an account detail page or the **Holdings** page
-2. Click **Add Holding**
-3. Enter ticker, name, asset class, shares, cost basis per share, and current price
-4. Click **Add Holding**
-
-#### CSV Import (recommended for Fidelity)
-1. Go to **Import Data** in the sidebar
-2. Select the target account
-3. Choose format: **Fidelity Positions Export** or **Generic CSV**
-4. Upload your CSV file
-5. Review the parsed holdings in the preview table
-6. Click **Import Holdings**
-
-**Fidelity CSV Export**: In Fidelity, go to Positions → Download → Choose CSV format.
-
-#### Plaid Connection (automatic)
-1. Go to **Settings** in the sidebar
-2. Under **Account Connections**, click **Connect Account via Plaid**
-3. Select your brokerage in the Plaid Link modal
-4. Log in with your brokerage credentials
-5. Holdings are automatically imported and will refresh daily
-
-### 4. View Your Dashboard
-
-The Dashboard shows:
-- **Portfolio Summary Cards**: Total value, gain/loss, daily change, account count
-- **Asset Allocation Pie Chart**: Visual breakdown by asset class
-- **Performance Chart**: Portfolio value over time (populates after the first nightly snapshot)
-- **Account Cards**: Quick view of each account's value
-- **Holdings Table**: All positions with gain/loss
-
-### 5. Use AI Analysis
-
-Click the **chat button** (bottom-right corner, available on any page) to open the AI assistant. Try asking:
-
-- "Analyze my portfolio"
-- "Show my allocation drift"
-- "What are my top holdings?"
-- "How diversified am I?"
-- "Should I rebalance?"
-- "What's my risk exposure?"
-
-The AI has access to your real portfolio data and provides personalized analysis.
-
-### 6. Configure Preferences
-
-Go to **Settings** to set:
-- **Current Age & Retirement Age**: Used for projection calculations
-- **Risk Tolerance**: Conservative, Moderate, or Aggressive
-- **Annual Contribution**: How much you contribute per year
-- **Monthly Expenses in Retirement**: Your expected spending
-- **Target Allocation**: Your desired asset class percentages (used for drift analysis)
+### First-Time Setup
+1. **Settings** → Fill in your details, spouse details, salaries, risk tolerance, target allocation, and monthly expenses in retirement
+2. **Settings → Social Security** → Enter SS benefit estimates for both you and your spouse (get yours at [ssa.gov/myaccount](https://www.ssa.gov/myaccount/))
+3. **Settings → Contributions** → Add your retirement contribution line items (401k, IRA, etc.) with employer match details
+4. **Settings → AI Model** → Choose your preferred AI (Claude, Gemini, or GPT)
+5. **Accounts** → Add your investment accounts (Plaid or manual)
+6. **Import** → Upload Fidelity CSV or other brokerage exports
 
 ---
 
-## Pages Reference
+## Pages
 
-| Page | Purpose |
-|------|---------|
-| **Dashboard** | Portfolio overview with charts and summary |
-| **Accounts** | List, create, edit, and delete investment accounts |
-| **Holdings** | View all positions across all accounts |
-| **Transactions** | Transaction history (populated via Plaid or manual entry) |
-| **AI Analysis** | Hub for AI-powered portfolio insights |
-| **Projections** | Retirement modeling tools (Phase 3) |
-| **Import Data** | Upload CSV files to import holdings |
-| **Settings** | Personal preferences and Plaid account connections |
+### Dashboard
+Your home base. Shows:
+- **Alerts** — drift, market moves, concentration risk (dismiss with X)
+- **Summary Cards** — total portfolio, gain/loss, daily change, account count (with mine/spouse split)
+- **Asset Allocation** pie chart
+- **Performance** area chart (builds over time with daily snapshots)
+- **Goals** — progress bars toward your retirement targets
+- **Accounts** — cards linking to each account
+- **Holdings** — full table with gain/loss
+
+**Actions:**
+- **Refresh Prices** — pulls live prices for all holdings right now
+- **Export** → Portfolio Report (.txt), Holdings (.csv), Transactions (.csv)
+
+### Accounts
+- **Add Account** → Choose "Connect via Plaid" (automatic) or "Add manually"
+- **Quick Import** — 3-step Fidelity CSV flow: pick account → open Fidelity → drop CSV
+- Smart sync: updates existing, adds new, removes sold positions. Safe to re-import daily.
+- Click any account card to see its holdings and manage it
+
+### Holdings
+All positions across all accounts. Shows ticker, shares, price, value, gain/loss, and which account/owner.
+
+### Transactions
+Transaction history with summary cards (total buys, sells, dividends, fees). Transactions come from Plaid sync or CSV import.
+
+### AI Analysis
+**11 clickable cards** — each opens the AI chat with a specific pre-built prompt:
+
+| Card | What it does |
+|------|-------------|
+| Portfolio Review | Full health check |
+| Rebalancing Trades | Specific buy/sell trades to fix allocation |
+| Tax-Loss Harvesting | Find losses to harvest in taxable accounts |
+| Benchmark Comparison | Compare vs S&P 500, total market, bonds |
+| Dividend Income | Estimate annual/monthly passive income |
+| Allocation Drift | Current vs target allocation |
+| Tax Strategy | Asset location optimization |
+| Household Summary | Combined picture for both spouses |
+| Risk Assessment | Concentration and downturn analysis |
+| Retirement Readiness | Are you on track? |
+| Ask Anything | Custom question |
+
+The chat button (bottom-right) is available on every page.
+
+### Projections
+Interactive retirement modeling:
+
+- **Summary Cards** — portfolio at retirement, monthly income, Monte Carlo success rate
+- **Projection Chart** — portfolio growth through accumulation and drawdown
+- **Monte Carlo Fan Chart** — 1,000 simulated scenarios showing probability range (10th–90th percentile)
+- **Withdrawal Strategy Comparison** — 4 strategies showing lifetime taxes and remaining portfolio
+- **Scenario Analysis** — click "Run All Scenarios" to compare 6 what-ifs (market crash, early retirement, boost savings, lower returns, high inflation, no SS)
+
+### Settings
+Four sections:
+
+1. **Household & Retirement Preferences** — ages, salaries, expenses, risk tolerance, target allocation
+2. **Retirement Contributions** — per-account line items with employer match (not a single number)
+3. **AI Model** — switch between Claude, Gemini, or GPT anytime
+4. **Social Security** — side-by-side forms for you and your spouse
 
 ---
 
 ## Data Sources
 
 ### Manual Entry
-Best for: Quick setup, accounts not supported by Plaid.
+Best for: quick setup, accounts not supported by Plaid.
 
-### CSV Import
-Best for: Bulk import from Fidelity or other brokerages. Supports:
-- Fidelity Positions Export format
-- Generic CSV with columns: ticker, shares, price, cost basis
+### CSV Import (Fidelity recommended)
+Best for: bulk import. Steps:
+1. Log into Fidelity.com → Positions → Download (CSV)
+2. In RetireWise, go to Accounts → Quick Import
+3. Pick account, drop the CSV
+
+Smart sync means you can re-import anytime to refresh shares/prices without duplicates.
 
 ### Plaid (Automatic)
-Best for: Ongoing synchronization. Plaid connects to 12,000+ institutions and automatically pulls:
-- Account details (name, type)
-- Holdings (ticker, shares, price)
-- Transactions (buys, sells, dividends)
+Best for: non-Fidelity brokerages. Connects to 12,000+ institutions. Note: Fidelity blocks Plaid — use CSV import for Fidelity accounts.
 
-Data refreshes automatically via a daily cron job and Plaid webhooks.
+### Yahoo Finance (Automatic)
+Daily price updates run automatically at market close (weekdays 6 PM ET). Click "Refresh Prices" on the dashboard for on-demand updates.
 
 ---
 
-## AI Analysis Features
+## Contributions
 
-The RetireWise AI assistant can:
+Contributions are tracked as **individual line items**, not a single annual number. Each line item specifies:
 
-1. **Portfolio Review**: Overall health check of your investments
-2. **Allocation Analysis**: Compare current vs target allocation, identify drift
-3. **Holdings Detail**: Deep dive into individual positions, sorted by value or performance
-4. **Risk Assessment**: Concentration risk, sector exposure
-5. **Rebalancing Suggestions**: Specific actions to return to target allocation
+- **Who** — yours or spouse's
+- **Account type** — 401(k), Roth IRA, brokerage, etc.
+- **Method** — percentage of salary (e.g., 6%) or fixed dollar amount (e.g., $500/month)
+- **Frequency** — biweekly, semi-monthly, monthly, quarterly, annually
+- **Employer match** — match rate (e.g., $1:$1) and cap (e.g., up to 5% of salary)
 
-All AI analysis includes a disclaimer that it is for informational purposes only and does not constitute financial advice.
+The summary shows annualized totals per person with employer match broken out, plus a household total.
+
+---
+
+## AI Analysis
+
+The AI has access to your real portfolio data through 9 specialized tools. It can:
+- Pull your actual holdings, allocation, and household details
+- Generate specific trade recommendations
+- Scan for tax-loss harvesting opportunities
+- Compare you against benchmarks
+- Estimate dividend income
+- Run retirement projections with Monte Carlo simulations
+
+**Choosing a model:** Go to Settings → AI Model. Claude Sonnet 4.5 is recommended for financial analysis. Gemini 2.0 Flash is faster and has a free tier.
+
+---
+
+## Alerts
+
+Auto-generated during the nightly price update:
+- **Allocation drift** — when an asset class is 5%+ off target
+- **Large daily move** — portfolio up/down 2%+ in a day
+- **Concentration risk** — single holding is 25%+ of portfolio
+
+Alerts appear at the top of the dashboard. Dismiss with the X button.
+
+---
+
+## Goals
+
+Set retirement milestones on the dashboard:
+- Click **Add Goal** → name it, set a target amount, optional date
+- Progress bar shows how close your current portfolio is
+- Trophy icon when you reach a goal
+- Progress updates automatically with nightly price updates
+
+---
+
+## Exports
+
+From the dashboard Export dropdown:
+- **Portfolio Report** — formatted text file with household summary, accounts, holdings, allocation, Social Security
+- **Holdings CSV** — all positions with gain/loss for spreadsheets
+- **Transactions CSV** — full transaction history
 
 ---
 
 ## Keyboard Shortcuts
 
-- **Enter**: Send message in AI chat
-- **Shift+Enter**: New line in AI chat
-- **Escape**: Close AI chat panel
+- **Enter** — send message in AI chat
+- **Shift+Enter** — new line in AI chat
 
 ---
 
 ## Troubleshooting
 
-**Dashboard shows no data**: Add accounts and holdings first (manually, CSV, or Plaid).
+**Dashboard shows no data** → Add accounts and holdings first (Accounts page).
 
-**Performance chart is empty**: The chart requires portfolio snapshots, which are created by a nightly cron job. You'll see data the day after adding holdings.
+**Performance chart is empty** → Needs daily snapshots. Will populate after the first nightly cron run. Click "Refresh Prices" to trigger a manual update.
 
-**Plaid connection fails**: Ensure Plaid environment variables are configured. In development, use sandbox mode.
+**Plaid won't connect to Fidelity** → Fidelity blocks Plaid. Use the CSV import instead (Accounts → Quick Import).
 
-**CSV import shows "No holdings found"**: Check that your CSV format matches the selected parser (Fidelity vs Generic). The CSV must have column headers.
+**AI chat gives an error** → Check Settings → AI Model. Make sure you have a valid API key for the selected provider.
+
+**"Invalid phone number" in Plaid** → Make sure you're in production mode, not sandbox.
+
+**Projections page says "set up preferences first"** → Go to Settings and fill in your age and retirement age.
