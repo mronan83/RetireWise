@@ -1,3 +1,5 @@
+import { getCachedPrices, setCachedPrices } from "../redis";
+
 // eslint-disable-next-line @typescript-eslint/no-require-imports
 const yahooFinance = require("yahoo-finance2").default;
 import { eq } from "drizzle-orm";
@@ -30,10 +32,18 @@ export async function fetchPrices(tickers: string[]): Promise<Map<string, number
   const prices = new Map<string, number>();
   const toFetch = tickers.filter((t) => !SKIP_TICKERS.has(t));
 
-  // Fetch in batches of 20 to avoid rate limits
+  // Check Redis cache first
+  const cached = await getCachedPrices(toFetch);
+  for (const [ticker, price] of cached) {
+    prices.set(ticker, price);
+  }
+  const uncached = toFetch.filter((t) => !cached.has(t));
+
+  // Fetch uncached tickers in batches of 20
   const batchSize = 20;
-  for (let i = 0; i < toFetch.length; i += batchSize) {
-    const batch = toFetch.slice(i, i + batchSize);
+  const freshPrices = new Map<string, number>();
+  for (let i = 0; i < uncached.length; i += batchSize) {
+    const batch = uncached.slice(i, i + batchSize);
 
     const results = await Promise.allSettled(
       batch.map(async (ticker): Promise<PriceResult> => {
@@ -54,13 +64,18 @@ export async function fetchPrices(tickers: string[]): Promise<Map<string, number
     for (const result of results) {
       if (result.status === "fulfilled" && result.value.price !== null) {
         prices.set(result.value.ticker, result.value.price);
+        freshPrices.set(result.value.ticker, result.value.price);
       }
     }
 
-    // Small delay between batches to be respectful
-    if (i + batchSize < toFetch.length) {
+    if (i + batchSize < uncached.length) {
       await new Promise((resolve) => setTimeout(resolve, 500));
     }
+  }
+
+  // Cache fresh prices in Redis
+  if (freshPrices.size > 0) {
+    await setCachedPrices(freshPrices);
   }
 
   // Money market funds are always ~$1

@@ -9,8 +9,13 @@ import {
   Shield,
   DollarSign,
   Users,
+  ArrowRightLeft,
+  Scissors,
+  LineChart,
+  Coins,
 } from "lucide-react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Badge } from "@/components/ui/badge";
 import { triggerChat } from "@/lib/utils/chat-events";
 
 const analysisOptions = [
@@ -22,6 +27,47 @@ const analysisOptions = [
       "Allocation, diversification, risk exposure, and performance across both your and your spouse's accounts.",
     prompt:
       "Give me a comprehensive review of our household portfolio. Analyze our allocation, diversification, risk exposure, and overall performance. Include both my accounts and my spouse's.",
+    badge: null,
+  },
+  {
+    icon: ArrowRightLeft,
+    title: "Rebalancing Trades",
+    description: "Specific buy/sell recommendations",
+    detail:
+      "Generate exact trades to return to target allocation. Shows dollar amounts, which tickers, and which accounts to trade in.",
+    prompt:
+      "Generate specific rebalancing trade recommendations for our portfolio. Show me exactly what to buy and sell, the dollar amounts, and which accounts to make the trades in. Consider tax implications.",
+    badge: "Phase 2",
+  },
+  {
+    icon: Scissors,
+    title: "Tax-Loss Harvesting",
+    description: "Find losses to offset gains",
+    detail:
+      "Scan taxable accounts for unrealized losses. Get replacement fund suggestions to maintain exposure while harvesting losses.",
+    prompt:
+      "Scan our taxable accounts for tax-loss harvesting opportunities. Show me which holdings have unrealized losses, how much we could harvest, estimated tax savings, and suggest replacement funds that maintain our market exposure.",
+    badge: "Phase 2",
+  },
+  {
+    icon: LineChart,
+    title: "Benchmark Comparison",
+    description: "How do we stack up?",
+    detail:
+      "Compare your portfolio performance against the S&P 500, total US market, international, and bond benchmarks.",
+    prompt:
+      "Compare our portfolio performance against major benchmarks — S&P 500, total US market, international stocks, and bonds. Show returns for year-to-date and explain how we're doing relative to the market.",
+    badge: "Phase 2",
+  },
+  {
+    icon: Coins,
+    title: "Dividend Income",
+    description: "Passive income projections",
+    detail:
+      "Estimate annual dividend income per holding, monthly passive income, and breakdown by asset class.",
+    prompt:
+      "Estimate our household dividend income. Show total annual dividends, monthly income, our top dividend-paying holdings, and a breakdown by asset class. Include both my and my spouse's accounts.",
+    badge: "Phase 2",
   },
   {
     icon: Target,
@@ -31,24 +77,17 @@ const analysisOptions = [
       "Compare your current allocation against your targets and get specific rebalancing suggestions.",
     prompt:
       "Analyze our allocation drift. Compare our current portfolio allocation against our target allocation and tell us what's over or underweight. Give specific rebalancing suggestions.",
-  },
-  {
-    icon: BarChart3,
-    title: "Holdings Analysis",
-    description: "Deep dive into positions",
-    detail:
-      "Concentration risk, best and worst performers, and opportunities across all holdings.",
-    prompt:
-      "Analyze our holdings in detail. Show our top positions by value, identify concentration risk, and highlight our best and worst performers. Sort by gain/loss.",
+    badge: null,
   },
   {
     icon: DollarSign,
     title: "Tax Strategy",
     description: "Optimize your tax situation",
     detail:
-      "Tax-loss harvesting opportunities and asset location recommendations across account types.",
+      "Asset location analysis across account types. Are the right assets in the right accounts?",
     prompt:
-      "Review our portfolio for tax optimization opportunities. Look for tax-loss harvesting candidates, check if our asset location is efficient across our tax-deferred, tax-free, and taxable accounts, and suggest improvements.",
+      "Review our portfolio for tax optimization. Check if our asset location is efficient — are bonds in tax-deferred accounts? Growth stocks in Roth? Suggest improvements for tax-efficient placement across our account types.",
+    badge: null,
   },
   {
     icon: Users,
@@ -58,6 +97,7 @@ const analysisOptions = [
       "Both spouses' retirement timelines, Social Security, contributions, and how it all adds up.",
     prompt:
       "Give me a complete household retirement summary. Show our combined portfolio, each person's accounts, our Social Security details, contribution rates, and how we're tracking toward retirement.",
+    badge: null,
   },
   {
     icon: Shield,
@@ -67,6 +107,7 @@ const analysisOptions = [
       "Sector concentration, correlation analysis, and how your portfolio might behave in a downturn.",
     prompt:
       "Assess the risk in our portfolio. Look at sector concentration, how correlated our holdings are, and estimate how our portfolio might perform in a market downturn of 20-30%.",
+    badge: null,
   },
   {
     icon: TrendingUp,
@@ -76,6 +117,7 @@ const analysisOptions = [
       "Based on your portfolio, savings rate, and Social Security, are you on track to retire when you want?",
     prompt:
       "Based on our current portfolio value, savings rate, Social Security estimates, and retirement goals, are we on track to retire when we want? What's our projected monthly income in retirement vs our expected expenses?",
+    badge: null,
   },
   {
     icon: MessageSquare,
@@ -84,6 +126,7 @@ const analysisOptions = [
     detail:
       "Ask any question about your investments, retirement planning, tax strategies, or financial goals.",
     prompt: "",
+    badge: null,
   },
 ];
 
@@ -92,7 +135,6 @@ export default function AnalysisPage() {
     if (prompt) {
       triggerChat(prompt);
     } else {
-      // "Ask Anything" — just open the chat
       triggerChat("");
     }
   };
@@ -106,24 +148,31 @@ export default function AnalysisPage() {
         </p>
       </div>
 
-      <div className="grid gap-4 sm:grid-cols-2">
+      <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
         {analysisOptions.map((option) => (
           <Card
             key={option.title}
             className="cursor-pointer transition-colors hover:bg-accent/50 active:scale-[0.99]"
             onClick={() => handleClick(option.prompt)}
           >
-            <CardHeader className="flex flex-row items-center gap-3 pb-2">
-              <option.icon className="h-7 w-7 shrink-0 text-primary" />
-              <div>
-                <CardTitle className="text-base">{option.title}</CardTitle>
-                <p className="text-sm text-muted-foreground">
+            <CardHeader className="flex flex-row items-start gap-3 pb-2">
+              <option.icon className="mt-0.5 h-6 w-6 shrink-0 text-primary" />
+              <div className="flex-1 min-w-0">
+                <div className="flex items-center gap-2">
+                  <CardTitle className="text-sm">{option.title}</CardTitle>
+                  {option.badge && (
+                    <Badge variant="secondary" className="text-[10px] px-1.5 py-0">
+                      {option.badge}
+                    </Badge>
+                  )}
+                </div>
+                <p className="text-xs text-muted-foreground mt-0.5">
                   {option.description}
                 </p>
               </div>
             </CardHeader>
             <CardContent>
-              <p className="text-sm text-muted-foreground">{option.detail}</p>
+              <p className="text-xs text-muted-foreground">{option.detail}</p>
             </CardContent>
           </Card>
         ))}
