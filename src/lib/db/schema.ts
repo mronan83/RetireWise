@@ -1,0 +1,295 @@
+import {
+  pgTable,
+  uuid,
+  text,
+  timestamp,
+  decimal,
+  integer,
+  boolean,
+  date,
+  jsonb,
+  index,
+  pgEnum,
+} from "drizzle-orm/pg-core";
+
+// Enums
+export const accountOwnerEnum = pgEnum("account_owner", ["self", "spouse"]);
+
+export const accountTypeEnum = pgEnum("account_type", [
+  "401k",
+  "403b",
+  "ira_traditional",
+  "ira_roth",
+  "brokerage",
+  "hsa",
+  "529",
+  "pension",
+  "annuity",
+  "social_security",
+  "other",
+]);
+
+export const taxTreatmentEnum = pgEnum("tax_treatment", [
+  "tax_deferred",
+  "tax_free",
+  "taxable",
+]);
+
+export const dataSourceEnum = pgEnum("data_source", [
+  "manual",
+  "csv_import",
+  "plaid",
+]);
+
+export const assetClassEnum = pgEnum("asset_class", [
+  "us_stock",
+  "intl_stock",
+  "bond",
+  "reit",
+  "commodity",
+  "crypto",
+  "cash",
+  "other",
+]);
+
+export const transactionTypeEnum = pgEnum("transaction_type", [
+  "buy",
+  "sell",
+  "dividend",
+  "contribution",
+  "withdrawal",
+  "fee",
+  "transfer",
+  "split",
+]);
+
+export const riskToleranceEnum = pgEnum("risk_tolerance", [
+  "conservative",
+  "moderate",
+  "aggressive",
+]);
+
+export const analysisTypeEnum = pgEnum("analysis_type", [
+  "portfolio_review",
+  "rebalance_suggestion",
+  "tax_harvest",
+  "retirement_projection",
+  "social_security_analysis",
+  "custom",
+]);
+
+export const plaidItemStatusEnum = pgEnum("plaid_item_status", [
+  "active",
+  "error",
+  "requires_reauth",
+]);
+
+export const filingStatusEnum = pgEnum("filing_status", [
+  "married_filing_jointly",
+  "married_filing_separately",
+  "single",
+]);
+
+// Tables
+export const accounts = pgTable("accounts", {
+  id: uuid("id").defaultRandom().primaryKey(),
+  clerkId: text("clerk_id").notNull(),
+  owner: accountOwnerEnum("owner").notNull().default("self"),
+  name: text("name").notNull(),
+  institution: text("institution").notNull(),
+  accountType: accountTypeEnum("account_type").notNull(),
+  taxTreatment: taxTreatmentEnum("tax_treatment").notNull(),
+  plaidItemId: text("plaid_item_id"),
+  plaidAccountId: text("plaid_account_id"),
+  dataSource: dataSourceEnum("data_source").notNull().default("manual"),
+  isActive: boolean("is_active").notNull().default(true),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+  updatedAt: timestamp("updated_at").defaultNow().notNull(),
+});
+
+export const holdings = pgTable("holdings", {
+  id: uuid("id").defaultRandom().primaryKey(),
+  accountId: uuid("account_id")
+    .references(() => accounts.id, { onDelete: "cascade" })
+    .notNull(),
+  ticker: text("ticker").notNull(),
+  name: text("name").notNull(),
+  assetClass: assetClassEnum("asset_class").notNull(),
+  shares: decimal("shares", { precision: 20, scale: 8 }).notNull(),
+  costBasisPerShare: decimal("cost_basis_per_share", {
+    precision: 20,
+    scale: 4,
+  }).notNull(),
+  currentPrice: decimal("current_price", {
+    precision: 20,
+    scale: 4,
+  }).notNull(),
+  currentValue: decimal("current_value", {
+    precision: 20,
+    scale: 2,
+  }).notNull(),
+  lastPriceUpdate: timestamp("last_price_update"),
+  dataSource: dataSourceEnum("data_source").notNull().default("manual"),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+  updatedAt: timestamp("updated_at").defaultNow().notNull(),
+});
+
+export const transactions = pgTable(
+  "transactions",
+  {
+    id: uuid("id").defaultRandom().primaryKey(),
+    accountId: uuid("account_id")
+      .references(() => accounts.id, { onDelete: "cascade" })
+      .notNull(),
+    holdingId: uuid("holding_id").references(() => holdings.id, {
+      onDelete: "set null",
+    }),
+    type: transactionTypeEnum("type").notNull(),
+    ticker: text("ticker"),
+    shares: decimal("shares", { precision: 20, scale: 8 }),
+    pricePerShare: decimal("price_per_share", { precision: 20, scale: 4 }),
+    amount: decimal("amount", { precision: 20, scale: 2 }).notNull(),
+    date: date("date").notNull(),
+    description: text("description"),
+    dataSource: dataSourceEnum("data_source").notNull().default("manual"),
+    plaidTransactionId: text("plaid_transaction_id"),
+    createdAt: timestamp("created_at").defaultNow().notNull(),
+  },
+  (table) => [
+    index("transactions_account_date_idx").on(table.accountId, table.date),
+  ]
+);
+
+export const portfolioSnapshots = pgTable(
+  "portfolio_snapshots",
+  {
+    id: uuid("id").defaultRandom().primaryKey(),
+    clerkId: text("clerk_id").notNull(),
+    snapshotDate: date("snapshot_date").notNull(),
+    totalValue: decimal("total_value", { precision: 20, scale: 2 }).notNull(),
+    selfValue: decimal("self_value", { precision: 20, scale: 2 }),
+    spouseValue: decimal("spouse_value", { precision: 20, scale: 2 }),
+    allocation: jsonb("allocation"),
+    topHoldings: jsonb("top_holdings"),
+    dailyChange: decimal("daily_change", { precision: 20, scale: 2 }),
+    dailyChangePct: decimal("daily_change_pct", { precision: 10, scale: 4 }),
+    ytdReturnPct: decimal("ytd_return_pct", { precision: 10, scale: 4 }),
+    createdAt: timestamp("created_at").defaultNow().notNull(),
+  },
+  (table) => [
+    index("snapshots_clerk_date_idx").on(table.clerkId, table.snapshotDate),
+  ]
+);
+
+export const aiAnalyses = pgTable("ai_analyses", {
+  id: uuid("id").defaultRandom().primaryKey(),
+  clerkId: text("clerk_id").notNull(),
+  type: analysisTypeEnum("type").notNull(),
+  promptSummary: text("prompt_summary"),
+  result: jsonb("result"),
+  modelUsed: text("model_used"),
+  tokensUsed: integer("tokens_used"),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+});
+
+export const plaidItems = pgTable("plaid_items", {
+  id: uuid("id").defaultRandom().primaryKey(),
+  clerkId: text("clerk_id").notNull(),
+  itemId: text("item_id").unique().notNull(),
+  accessTokenEncrypted: text("access_token_encrypted").notNull(),
+  institutionName: text("institution_name").notNull(),
+  status: plaidItemStatusEnum("status").notNull().default("active"),
+  lastSync: timestamp("last_sync"),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+  updatedAt: timestamp("updated_at").defaultNow().notNull(),
+});
+
+export const userPreferences = pgTable("user_preferences", {
+  id: uuid("id").defaultRandom().primaryKey(),
+  clerkId: text("clerk_id").unique().notNull(),
+
+  // Self details
+  currentAge: integer("current_age"),
+  retirementAge: integer("retirement_age"),
+  firstName: text("first_name"),
+
+  // Spouse details
+  spouseName: text("spouse_name"),
+  spouseCurrentAge: integer("spouse_current_age"),
+  spouseRetirementAge: integer("spouse_retirement_age"),
+  spouseIsRetired: boolean("spouse_is_retired").default(false),
+
+  // Household
+  filingStatus: filingStatusEnum("filing_status").default(
+    "married_filing_jointly"
+  ),
+  riskTolerance: riskToleranceEnum("risk_tolerance").default("moderate"),
+  targetAllocation: jsonb("target_allocation"),
+  annualContribution: decimal("annual_contribution", {
+    precision: 20,
+    scale: 2,
+  }),
+  spouseAnnualContribution: decimal("spouse_annual_contribution", {
+    precision: 20,
+    scale: 2,
+  }),
+  monthlyExpensesRetirement: decimal("monthly_expenses_retirement", {
+    precision: 20,
+    scale: 2,
+  }),
+
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+  updatedAt: timestamp("updated_at").defaultNow().notNull(),
+});
+
+export const socialSecurityBenefits = pgTable("social_security_benefits", {
+  id: uuid("id").defaultRandom().primaryKey(),
+  clerkId: text("clerk_id").notNull(),
+  owner: accountOwnerEnum("owner").notNull(),
+
+  // Estimated monthly benefits at key claiming ages
+  benefitAtAge62: decimal("benefit_at_age_62", {
+    precision: 10,
+    scale: 2,
+  }),
+  benefitAtFRA: decimal("benefit_at_fra", {
+    precision: 10,
+    scale: 2,
+  }),
+  benefitAtAge70: decimal("benefit_at_age_70", {
+    precision: 10,
+    scale: 2,
+  }),
+
+  // Full Retirement Age (FRA) — varies by birth year
+  fullRetirementAge: integer("full_retirement_age"),
+
+  // Planned claiming age
+  plannedClaimingAge: integer("planned_claiming_age"),
+
+  // If already claiming
+  isClaiming: boolean("is_claiming").default(false),
+  currentMonthlyBenefit: decimal("current_monthly_benefit", {
+    precision: 10,
+    scale: 2,
+  }),
+  claimingStartDate: date("claiming_start_date"),
+
+  // Spousal benefit eligibility (50% of spouse's FRA benefit)
+  eligibleForSpousalBenefit: boolean("eligible_for_spousal_benefit").default(
+    false
+  ),
+  spousalBenefitAmount: decimal("spousal_benefit_amount", {
+    precision: 10,
+    scale: 2,
+  }),
+
+  // COLA (Cost of Living Adjustment) assumption
+  assumedCOLAPct: decimal("assumed_cola_pct", {
+    precision: 5,
+    scale: 2,
+  }).default("2.5"),
+
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+  updatedAt: timestamp("updated_at").defaultNow().notNull(),
+});

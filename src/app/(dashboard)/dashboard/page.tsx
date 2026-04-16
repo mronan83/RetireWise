@@ -1,0 +1,154 @@
+import { Suspense } from "react";
+import { auth } from "@clerk/nextjs/server";
+import { redirect } from "next/navigation";
+import { PortfolioSummaryCards } from "@/components/dashboard/portfolio-summary-card";
+import { AllocationChart } from "@/components/dashboard/allocation-chart";
+import { PerformanceChart } from "@/components/dashboard/performance-chart";
+import { HoldingsTable } from "@/components/dashboard/holdings-table";
+import { AccountCard } from "@/components/dashboard/account-card";
+import { Skeleton } from "@/components/ui/skeleton";
+import { getAccounts } from "@/lib/queries/accounts";
+import { getHoldingsByClerkId } from "@/lib/queries/holdings";
+import { getSnapshots } from "@/lib/queries/snapshots";
+import { calculatePortfolioSummary, calculateGainLoss } from "@/lib/utils/calculations";
+
+async function DashboardContent() {
+  const { userId } = await auth();
+  if (!userId) redirect("/sign-in");
+
+  const [accountsList, holdingsWithAccounts, snapshots] = await Promise.all([
+    getAccounts(userId),
+    getHoldingsByClerkId(userId),
+    getSnapshots(userId, 90),
+  ]);
+
+  const holdingsForCalc = holdingsWithAccounts.map((h) => ({
+    ...h,
+    lastPriceUpdate: h.lastPriceUpdate,
+  }));
+
+  const summary = calculatePortfolioSummary(holdingsForCalc);
+
+  const latestSnapshot = snapshots[0];
+  const dailyChange = latestSnapshot
+    ? Number(latestSnapshot.dailyChange || 0)
+    : 0;
+  const dailyChangePct = latestSnapshot
+    ? Number(latestSnapshot.dailyChangePct || 0)
+    : 0;
+
+  const holdingsTableData = holdingsWithAccounts.map((h) => {
+    const { gainLoss, gainLossPct } = calculateGainLoss(h);
+    return {
+      id: h.id,
+      ticker: h.ticker,
+      name: h.name,
+      assetClass: h.assetClass,
+      shares: h.shares,
+      costBasisPerShare: h.costBasisPerShare,
+      currentPrice: h.currentPrice,
+      currentValue: h.currentValue,
+      accountName: h.accountName,
+      gainLoss,
+      gainLossPct,
+    };
+  });
+
+  const snapshotChartData = snapshots
+    .map((s) => ({
+      date: s.snapshotDate,
+      value: Number(s.totalValue),
+    }))
+    .reverse();
+
+  // Calculate total value per account + per owner
+  const accountValues: Record<string, number> = {};
+  let selfValue = 0;
+  let spouseValue = 0;
+  for (const h of holdingsWithAccounts) {
+    const val = Number(h.currentValue);
+    accountValues[h.accountId] = (accountValues[h.accountId] || 0) + val;
+    if (h.accountOwner === "spouse") {
+      spouseValue += val;
+    } else {
+      selfValue += val;
+    }
+  }
+
+  return (
+    <div className="space-y-6">
+      <div>
+        <h1 className="text-2xl font-bold tracking-tight">Dashboard</h1>
+        <p className="text-muted-foreground">
+          Your household retirement portfolio
+        </p>
+      </div>
+
+      <PortfolioSummaryCards
+        totalValue={summary.totalValue}
+        selfValue={selfValue}
+        spouseValue={spouseValue}
+        totalGainLoss={summary.totalGainLoss}
+        totalGainLossPct={summary.totalGainLossPct}
+        dailyChange={dailyChange}
+        dailyChangePct={dailyChangePct}
+        accountCount={accountsList.length}
+        holdingCount={holdingsWithAccounts.length}
+      />
+
+      <div className="grid gap-6 lg:grid-cols-2">
+        <AllocationChart data={summary.allocation} />
+        <PerformanceChart data={snapshotChartData} />
+      </div>
+
+      {accountsList.length > 0 && (
+        <div>
+          <h2 className="mb-4 text-lg font-semibold">Accounts</h2>
+          <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+            {accountsList.map((account) => (
+              <AccountCard
+                key={account.id}
+                account={account}
+                totalValue={accountValues[account.id] || 0}
+              />
+            ))}
+          </div>
+        </div>
+      )}
+
+      <div>
+        <h2 className="mb-4 text-lg font-semibold">Holdings</h2>
+        <HoldingsTable holdings={holdingsTableData} />
+      </div>
+    </div>
+  );
+}
+
+function DashboardSkeleton() {
+  return (
+    <div className="space-y-6">
+      <div>
+        <Skeleton className="h-8 w-48" />
+        <Skeleton className="mt-2 h-4 w-64" />
+      </div>
+      <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+        {Array.from({ length: 4 }).map((_, i) => (
+          <Skeleton key={i} className="h-[120px]" />
+        ))}
+      </div>
+      <div className="grid gap-6 lg:grid-cols-2">
+        <Skeleton className="h-[350px]" />
+        <Skeleton className="h-[350px]" />
+      </div>
+      <Skeleton className="h-[300px]" />
+    </div>
+  );
+}
+
+export default function DashboardPage() {
+  return (
+    <Suspense fallback={<DashboardSkeleton />}>
+      <DashboardContent />
+    </Suspense>
+  );
+}
