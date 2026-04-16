@@ -317,6 +317,46 @@ export const socialSecurityBenefits = pgTable("social_security_benefits", {
   updatedAt: timestamp("updated_at").defaultNow().notNull(),
 });
 
+export const alertTypeEnum = pgEnum("alert_type", [
+  "allocation_drift",
+  "large_daily_move",
+  "concentration_risk",
+  "milestone_reached",
+  "rebalance_needed",
+  "goal_progress",
+]);
+
+export const alertSeverityEnum = pgEnum("alert_severity", [
+  "info",
+  "warning",
+  "critical",
+]);
+
+export const alerts = pgTable("alerts", {
+  id: uuid("id").defaultRandom().primaryKey(),
+  clerkId: text("clerk_id").notNull(),
+  type: alertTypeEnum("type").notNull(),
+  severity: alertSeverityEnum("severity").notNull().default("info"),
+  title: text("title").notNull(),
+  message: text("message").notNull(),
+  data: jsonb("data"),
+  isDismissed: boolean("is_dismissed").notNull().default(false),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+});
+
+export const goals = pgTable("goals", {
+  id: uuid("id").defaultRandom().primaryKey(),
+  clerkId: text("clerk_id").notNull(),
+  name: text("name").notNull(),
+  targetAmount: decimal("target_amount", { precision: 20, scale: 2 }).notNull(),
+  currentAmount: decimal("current_amount", { precision: 20, scale: 2 }).default("0"),
+  targetDate: date("target_date"),
+  category: text("category").default("retirement"),
+  isCompleted: boolean("is_completed").default(false),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+  updatedAt: timestamp("updated_at").defaultNow().notNull(),
+});
+
 export const contributions = pgTable("contributions", {
   id: uuid("id").defaultRandom().primaryKey(),
   clerkId: text("clerk_id").notNull(),

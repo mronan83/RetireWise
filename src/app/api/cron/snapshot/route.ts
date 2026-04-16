@@ -4,6 +4,7 @@ import { accounts, holdings, portfolioSnapshots } from "@/lib/db/schema";
 import { calculateAllocation } from "@/lib/utils/calculations";
 import { getLatestSnapshot } from "@/lib/queries/snapshots";
 import { updateAllPrices } from "@/lib/utils/price-feed";
+import { generateAlerts } from "@/lib/utils/alert-generator";
 
 export async function GET(request: Request) {
   const authHeader = request.headers.get("authorization");
@@ -98,6 +99,36 @@ export async function GET(request: Request) {
     });
 
     snapshotsCreated++;
+
+    // Step 3: Generate alerts based on fresh data
+    try {
+      await generateAlerts(clerkId);
+    } catch (e) {
+      console.error(`Alert generation failed for ${clerkId}:`, e);
+    }
+
+    // Step 4: Update goal progress
+    try {
+      const { goals: goalsTable } = await import("@/lib/db/schema");
+      const userGoals = await db
+        .select()
+        .from(goalsTable)
+        .where(eq(goalsTable.clerkId, clerkId));
+
+      for (const goal of userGoals) {
+        const isCompleted = totalValue >= Number(goal.targetAmount);
+        await db
+          .update(goalsTable)
+          .set({
+            currentAmount: String(totalValue),
+            isCompleted,
+            updatedAt: new Date(),
+          })
+          .where(eq(goalsTable.id, goal.id));
+      }
+    } catch (e) {
+      console.error(`Goal update failed for ${clerkId}:`, e);
+    }
   }
 
   return Response.json({

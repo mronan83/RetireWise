@@ -12,15 +12,26 @@ import { getHoldingsByClerkId } from "@/lib/queries/holdings";
 import { getSnapshots } from "@/lib/queries/snapshots";
 import { calculatePortfolioSummary, calculateGainLoss } from "@/lib/utils/calculations";
 import { RefreshPricesButton } from "@/components/dashboard/refresh-prices-button";
+import { AlertsPanel } from "@/components/dashboard/alerts-panel";
+import { GoalsPanel } from "@/components/dashboard/goals-panel";
+import { ExportButtons } from "@/components/dashboard/export-buttons";
+import { eq, and, desc } from "drizzle-orm";
+import { getDb } from "@/lib/db";
+import { alerts as alertsTable, goals as goalsTable } from "@/lib/db/schema";
 
 async function DashboardContent() {
   const { userId } = await auth();
   if (!userId) redirect("/sign-in");
 
-  const [accountsList, holdingsWithAccounts, snapshots] = await Promise.all([
+  const db = getDb();
+  const [accountsList, holdingsWithAccounts, snapshots, activeAlerts, userGoals] = await Promise.all([
     getAccounts(userId),
     getHoldingsByClerkId(userId),
     getSnapshots(userId, 90),
+    db.select().from(alertsTable).where(
+      and(eq(alertsTable.clerkId, userId), eq(alertsTable.isDismissed, false))
+    ).orderBy(desc(alertsTable.createdAt)).limit(10),
+    db.select().from(goalsTable).where(eq(goalsTable.clerkId, userId)),
   ]);
 
   const holdingsForCalc = holdingsWithAccounts.map((h) => ({
@@ -85,8 +96,13 @@ async function DashboardContent() {
             Your household retirement portfolio
           </p>
         </div>
-        <RefreshPricesButton />
+        <div className="flex items-center gap-2">
+          <ExportButtons />
+          <RefreshPricesButton />
+        </div>
       </div>
+
+      <AlertsPanel alerts={activeAlerts} />
 
       <PortfolioSummaryCards
         totalValue={summary.totalValue}
@@ -104,6 +120,8 @@ async function DashboardContent() {
         <AllocationChart data={summary.allocation} />
         <PerformanceChart data={snapshotChartData} />
       </div>
+
+      <GoalsPanel goals={userGoals} portfolioValue={summary.totalValue} />
 
       {accountsList.length > 0 && (
         <div>
