@@ -13,6 +13,7 @@ import { scanTaxLossHarvestingTool } from "@/lib/tools/scan-tax-loss-harvesting"
 import { getDividendIncomeTool } from "@/lib/tools/get-dividend-income";
 import { compareBenchmarksTool } from "@/lib/tools/compare-benchmarks";
 import { runRetirementProjectionTool } from "@/lib/tools/run-retirement-projection";
+import { getNetWorthTool } from "@/lib/tools/get-net-worth";
 import { AI_DISCLAIMER } from "@/lib/constants";
 import { getChatRateLimiter } from "@/lib/redis";
 
@@ -87,6 +88,7 @@ export async function POST(request: Request) {
       getDividendIncome: getDividendIncomeTool,
       compareBenchmarks: compareBenchmarksTool,
       runRetirementProjection: runRetirementProjectionTool,
+      getNetWorth: getNetWorthTool,
     },
     stopWhen: stepCountIs(10),
   });

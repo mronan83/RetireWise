@@ -97,6 +97,27 @@ export const contributionFrequencyEnum = pgEnum("contribution_frequency", [
   "annually",
 ]);
 
+export const debtTypeEnum = pgEnum("debt_type", [
+  "mortgage",
+  "auto_loan",
+  "student_loan",
+  "heloc",
+  "personal_loan",
+  "credit_card",
+  "other_debt",
+]);
+
+export const cashAccountTypeEnum = pgEnum("cash_account_type", [
+  "checking",
+  "savings",
+  "high_yield_savings",
+  "money_market",
+  "cd",
+  "ibonds",
+  "emergency_fund",
+  "other_cash",
+]);
+
 export const filingStatusEnum = pgEnum("filing_status", [
   "married_filing_jointly",
   "married_filing_separately",
@@ -396,6 +417,54 @@ export const contributions = pgTable("contributions", {
   }),
 
   isActive: boolean("is_active").notNull().default(true),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+  updatedAt: timestamp("updated_at").defaultNow().notNull(),
+});
+
+// Net Worth: Real Estate
+export const realEstate = pgTable("real_estate", {
+  id: uuid("id").defaultRandom().primaryKey(),
+  clerkId: text("clerk_id").notNull(),
+  owner: accountOwnerEnum("owner").notNull().default("self"),
+  name: text("name").notNull(),
+  estimatedValue: decimal("estimated_value", { precision: 20, scale: 2 }).notNull(),
+  mortgageBalance: decimal("mortgage_balance", { precision: 20, scale: 2 }).default("0"),
+  monthlyPayment: decimal("monthly_payment", { precision: 10, scale: 2 }),
+  isPrimaryResidence: boolean("is_primary_residence").default(true),
+  lastValuationDate: date("last_valuation_date"),
+  notes: text("notes"),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+  updatedAt: timestamp("updated_at").defaultNow().notNull(),
+});
+
+// Net Worth: Cash Reserves
+export const cashReserves = pgTable("cash_reserves", {
+  id: uuid("id").defaultRandom().primaryKey(),
+  clerkId: text("clerk_id").notNull(),
+  owner: accountOwnerEnum("owner").notNull().default("self"),
+  name: text("name").notNull(),
+  accountType: cashAccountTypeEnum("account_type").notNull(),
+  institution: text("institution"),
+  balance: decimal("balance", { precision: 20, scale: 2 }).notNull(),
+  interestRate: decimal("interest_rate", { precision: 5, scale: 2 }),
+  notes: text("notes"),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+  updatedAt: timestamp("updated_at").defaultNow().notNull(),
+});
+
+// Net Worth: Debts
+export const debts = pgTable("debts", {
+  id: uuid("id").defaultRandom().primaryKey(),
+  clerkId: text("clerk_id").notNull(),
+  owner: accountOwnerEnum("owner").notNull().default("self"),
+  name: text("name").notNull(),
+  debtType: debtTypeEnum("debt_type").notNull(),
+  originalBalance: decimal("original_balance", { precision: 20, scale: 2 }),
+  currentBalance: decimal("current_balance", { precision: 20, scale: 2 }).notNull(),
+  interestRate: decimal("interest_rate", { precision: 5, scale: 2 }).notNull(),
+  monthlyPayment: decimal("monthly_payment", { precision: 10, scale: 2 }).notNull(),
+  payoffDate: date("payoff_date"),
+  notes: text("notes"),
   createdAt: timestamp("created_at").defaultNow().notNull(),
   updatedAt: timestamp("updated_at").defaultNow().notNull(),
 });

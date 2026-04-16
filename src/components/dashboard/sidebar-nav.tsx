@@ -12,6 +12,7 @@ import {
   Settings,
   Upload,
   TrendingUp,
+  Landmark,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 
@@ -20,6 +21,7 @@ const navItems = [
   { href: "/accounts", label: "Accounts", icon: Wallet },
   { href: "/holdings", label: "Holdings", icon: BarChart3 },
   { href: "/transactions", label: "Transactions", icon: ArrowRightLeft },
+  { href: "/net-worth", label: "Net Worth", icon: Landmark },
   { href: "/analysis", label: "AI Analysis", icon: Brain },
   { href: "/projections", label: "Projections", icon: LineChart },
   { href: "/import", label: "Import Data", icon: Upload },
