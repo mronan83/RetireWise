@@ -77,6 +77,7 @@ export function InteractiveProjections({
   const [spouseSSAge, setSpouseSSAge] = useState(spouseFRA || 67);
   const [monthlySpending, setMonthlySpending] = useState(monthlyExpenses);
   const [withdrawalRatePct, setWithdrawalRatePct] = useState(4.0);
+  const [retirementYears, setRetirementYears] = useState(35);
   const [selectedScenario, setSelectedScenario] = useState<string>("moderate");
 
   const scenario = MARKET_SCENARIOS.find((s) => s.id === selectedScenario) || MARKET_SCENARIOS[1];
@@ -102,7 +103,7 @@ export function InteractiveProjections({
         accounts,
         totalAnnualContributions: annualContributions,
         yearsToRetirement,
-        yearsInRetirement: 35,
+        yearsInRetirement: retirementYears,
         startAge: currentAge,
         returnPct: scenario.returnPct,
         inflationPct: scenario.inflationPct,
@@ -110,12 +111,12 @@ export function InteractiveProjections({
         annualSSIncome: combinedSSAnnual,
         ssStartYear,
       }),
-    [accounts, annualContributions, yearsToRetirement, currentAge, scenario, monthlySpending, combinedSSAnnual, ssStartYear]
+    [accounts, annualContributions, yearsToRetirement, retirementYears, currentAge, scenario, monthlySpending, combinedSSAnnual, ssStartYear]
   );
 
   // Run Monte Carlo (client-side, reactive to all controls)
   const monteCarloData = useMemo(() => {
-    const totalYears = yearsToRetirement + 35;
+    const totalYears = yearsToRetirement + retirementYears;
     const meanReturn = scenario.returnPct / 100;
     const stdDev = scenario.volatility / 100;
     const annualExpenses = monthlySpending * 12;
@@ -171,7 +172,7 @@ export function InteractiveProjections({
       worstCase: percentiles.p10[yearsToRetirement - 1] || 0,
       bestCase: percentiles.p90[yearsToRetirement - 1] || 0,
     };
-  }, [accounts, annualContributions, yearsToRetirement, currentAge, scenario, monthlySpending, combinedSSAnnual]);
+  }, [accounts, annualContributions, yearsToRetirement, retirementYears, currentAge, scenario, monthlySpending, combinedSSAnnual]);
 
   // Chart data
   const chartData = projection.ages.map((age, i) => ({
@@ -184,6 +185,28 @@ export function InteractiveProjections({
   const portfolioAt80 = projection.totalValues[80 - currentAge - 1] || 0;
   const portfolioAt90 = projection.totalValues[90 - currentAge - 1] || 0;
   const monthlyFromPortfolio = Math.round((portfolioAtRetirement * (withdrawalRatePct / 100)) / 12);
+  const totalMonthlyRetirementIncome = monthlyFromPortfolio + selfSSMonthly + spouseSSMonthly;
+
+  // Sustainability analysis: does the portfolio last the full retirement period?
+  const endOfRetirementIdx = yearsToRetirement + retirementYears - 1;
+  const portfolioAtEnd = endOfRetirementIdx < projection.totalValues.length
+    ? projection.totalValues[endOfRetirementIdx]
+    : 0;
+  const portfolioLastsFullPeriod = portfolioAtEnd > 0;
+
+  // Find the exact year the portfolio runs out (if it does)
+  let portfolioRunsOutAge: number | null = null;
+  if (!portfolioLastsFullPeriod) {
+    for (let i = yearsToRetirement; i < projection.totalValues.length; i++) {
+      if (projection.totalValues[i] <= 0) {
+        portfolioRunsOutAge = projection.ages[i];
+        break;
+      }
+    }
+  }
+  const yearsPortfolioLasts = portfolioRunsOutAge
+    ? portfolioRunsOutAge - retirementAge
+    : retirementYears;
 
   return (
     <div className="space-y-6">
@@ -313,11 +336,35 @@ export function InteractiveProjections({
               </p>
             </div>
           </div>
+
+          {/* Retirement Duration */}
+          <div className="space-y-3">
+            <div className="flex items-center justify-between">
+              <Label className="text-sm">Years in Retirement</Label>
+              <Badge variant="outline" className="font-mono">
+                {retirementYears} years (to age {retirementAge + retirementYears})
+              </Badge>
+            </div>
+            <Slider
+              value={[retirementYears]}
+              onValueChange={(v) => setRetirementYears(Array.isArray(v) ? v[0] : v)}
+              min={10}
+              max={45}
+              step={1}
+            />
+            <div className="flex justify-between text-xs text-muted-foreground">
+              <span>10 years (age {retirementAge + 10})</span>
+              <span>45 years (age {retirementAge + 45})</span>
+            </div>
+            <p className="text-xs text-muted-foreground">
+              How long your money needs to last. Average life expectancy is ~85, but plan for longer.
+            </p>
+          </div>
         </CardContent>
       </Card>
 
       {/* Summary Cards — all reactive to slider controls */}
-      <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+      <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-5">
         <Card>
           <CardHeader className="pb-2">
             <CardTitle className="text-xs text-muted-foreground">Portfolio at Retirement ({retirementAge})</CardTitle>
@@ -374,6 +421,44 @@ export function InteractiveProjections({
             )}
           </CardContent>
         </Card>
+
+        {/* Will It Last? Card */}
+        <Card className={cn(
+          "border-2",
+          portfolioLastsFullPeriod ? "border-green-500/50 bg-green-500/5" : "border-red-500/50 bg-red-500/5"
+        )}>
+          <CardHeader className="pb-2">
+            <CardTitle className="text-xs text-muted-foreground">
+              Will It Last? ({retirementYears} years)
+            </CardTitle>
+          </CardHeader>
+          <CardContent>
+            {portfolioLastsFullPeriod ? (
+              <>
+                <p className="text-xl font-bold text-green-500">Yes</p>
+                <p className="text-xs text-muted-foreground mt-1">
+                  Portfolio lasts all {retirementYears} years to age {retirementAge + retirementYears}
+                </p>
+                <p className="text-xs text-green-500 mt-0.5">
+                  {formatCurrency(portfolioAtEnd)} remaining at end
+                </p>
+              </>
+            ) : (
+              <>
+                <p className="text-xl font-bold text-red-500">No</p>
+                <p className="text-xs text-muted-foreground mt-1">
+                  Runs out after {yearsPortfolioLasts} years at age {portfolioRunsOutAge}
+                </p>
+                <p className="text-xs text-red-500 mt-0.5">
+                  {retirementYears - yearsPortfolioLasts} year shortfall — need to reduce spending or increase savings
+                </p>
+              </>
+            )}
+            <p className="text-xs text-muted-foreground mt-2">
+              Based on {scenario.name} ({scenario.returnPct}% return), {formatCurrency(monthlySpending)}/mo spending, {withdrawalRatePct}% withdrawal rate
+            </p>
+          </CardContent>
+        </Card>
       </div>
 
       {/* Projection Chart */}
@@ -412,7 +497,7 @@ export function InteractiveProjections({
         <CardHeader className="pb-2">
           <CardTitle>Monte Carlo Simulation</CardTitle>
           <p className="text-sm text-muted-foreground">
-            500 random scenarios — {monteCarloData.successRate}% success rate (money lasts 35+ years)
+            500 random scenarios — {monteCarloData.successRate}% success rate (money lasts {retirementYears}+ years)
           </p>
         </CardHeader>
         <CardContent>
