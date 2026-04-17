@@ -120,6 +120,36 @@ const analysisOptions = [
     badge: null,
   },
   {
+    icon: DollarSign,
+    title: "RMD & Roth Conversion",
+    description: "Tax-efficient withdrawal planning",
+    detail:
+      "Project your Required Minimum Distributions and find the optimal Roth conversion strategy to reduce lifetime taxes.",
+    prompt:
+      "Run the RMD projection and Roth conversion ladder analysis for our household. Show how much we should convert each year between retirement and age 73 to minimize lifetime taxes. What are our projected RMDs without conversions vs with the conversion strategy?",
+    badge: "Analytics",
+  },
+  {
+    icon: Shield,
+    title: "Fee & Sequence Risk",
+    description: "Hidden costs and timing risk",
+    detail:
+      "Analyze fund expense ratios eating your returns and how market timing at retirement impacts your portfolio survival.",
+    prompt:
+      "Run the fee impact analysis on our portfolio — what are we paying in expense ratios and what's the 30-year drag? Also run the sequence of returns risk analysis to show how a bear market in our first years of retirement would affect us vs a bull market start.",
+    badge: "Analytics",
+  },
+  {
+    icon: Users,
+    title: "Healthcare & Income",
+    description: "Healthcare costs + income replacement",
+    detail:
+      "Project healthcare costs through retirement and check if our income replacement ratio meets the 80% target.",
+    prompt:
+      "Run the healthcare cost projection for our retirement — how much should we budget for pre-Medicare and Medicare costs? Also check our income replacement ratio — will our retirement income cover 80% of our current earnings?",
+    badge: "Analytics",
+  },
+  {
     icon: MessageSquare,
     title: "Ask Anything",
     description: "Custom question",

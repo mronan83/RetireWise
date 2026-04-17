@@ -1,7 +1,7 @@
 import { getAuthContext } from "@/lib/auth-helpers";
 import { eq, and } from "drizzle-orm";
 import { getDb } from "@/lib/db";
-import { userPreferences, socialSecurityBenefits } from "@/lib/db/schema";
+import { userPreferences, socialSecurityBenefits, contributions } from "@/lib/db/schema";
 import { getHoldingsByClerkId } from "@/lib/queries/holdings";
 import { getAccounts } from "@/lib/queries/accounts";
 import { AnalyticsDashboard } from "./analytics-dashboard";
@@ -10,7 +10,7 @@ export default async function AnalyticsPage() {
   const { dataClerkId: userId } = await getAuthContext();
 
   const db = getDb();
-  const [holdings, accountsList, prefs, selfSS, spouseSS] = await Promise.all([
+  const [holdings, accountsList, prefs, selfSS, spouseSS, contribs] = await Promise.all([
     getHoldingsByClerkId(userId),
     getAccounts(userId),
     db.select().from(userPreferences).where(eq(userPreferences.clerkId, userId)).limit(1),
@@ -20,9 +20,41 @@ export default async function AnalyticsPage() {
     db.select().from(socialSecurityBenefits).where(
       and(eq(socialSecurityBenefits.clerkId, userId), eq(socialSecurityBenefits.owner, "spouse"))
     ).limit(1),
+    db.select().from(contributions).where(eq(contributions.clerkId, userId)),
   ]);
 
   const pref = prefs[0];
+  const selfSalary = pref?.annualSalary ? Number(pref.annualSalary) : 0;
+  const spouseSalary = pref?.spouseAnnualSalary ? Number(pref.spouseAnnualSalary) : 0;
+
+  // Calculate annual contributions from line items
+  let totalAnnualContributions = 0;
+  let taxDeferredContributions = 0;
+  for (const c of contribs) {
+    const salary = c.owner === "self" ? selfSalary : spouseSalary;
+    let annual = 0;
+    if (c.contributionMethod === "percent_of_salary" && salary > 0) {
+      annual = (Number(c.contributionPercent || 0) / 100) * salary;
+    } else if (c.contributionMethod === "fixed_amount") {
+      const freq: Record<string, number> = {
+        per_paycheck_biweekly: 26, per_paycheck_semimonthly: 24,
+        monthly: 12, quarterly: 4, annually: 1,
+      };
+      annual = Number(c.contributionAmount || 0) * (freq[c.frequency] || 1);
+    }
+    if (c.hasEmployerMatch && salary > 0) {
+      const yourPct = c.contributionMethod === "percent_of_salary"
+        ? Number(c.contributionPercent || 0) : salary > 0 ? (annual / salary) * 100 : 0;
+      const matchablePct = Math.min(yourPct, Number(c.employerMatchMaxPercent || 0));
+      annual += (matchablePct / 100) * salary * Number(c.employerMatchRate || 0);
+    }
+    totalAnnualContributions += annual;
+    // Track what goes to tax-deferred
+    if (["401k", "403b", "ira_traditional"].includes(c.accountType)) {
+      taxDeferredContributions += annual;
+    }
+  }
+
   const totalValue = holdings.reduce((s, h) => s + Number(h.currentValue), 0);
 
   // Categorize by tax treatment
@@ -45,7 +77,7 @@ export default async function AnalyticsPage() {
       <div>
         <h1 className="text-2xl font-bold tracking-tight">Financial Analytics</h1>
         <p className="text-muted-foreground">
-          Advanced retirement planning tools and analysis
+          Advanced retirement planning tools driven by your real accounts, contributions, and settings
         </p>
       </div>
 
@@ -54,8 +86,8 @@ export default async function AnalyticsPage() {
         retirementAge={pref?.retirementAge || 65}
         spouseAge={pref?.spouseCurrentAge || null}
         spouseRetirementAge={pref?.spouseRetirementAge || null}
-        selfSalary={pref?.annualSalary ? Number(pref.annualSalary) : 0}
-        spouseSalary={pref?.spouseAnnualSalary ? Number(pref.spouseAnnualSalary) : 0}
+        selfSalary={selfSalary}
+        spouseSalary={spouseSalary}
         selfSSAtFRA={selfSS[0]?.benefitAtFRA ? Number(selfSS[0].benefitAtFRA) : 0}
         spouseSSAtFRA={spouseSS[0]?.benefitAtFRA ? Number(spouseSS[0].benefitAtFRA) : 0}
         selfFRA={selfSS[0]?.fullRetirementAge || 67}
@@ -70,6 +102,8 @@ export default async function AnalyticsPage() {
         }))}
         riskTolerance={pref?.riskTolerance || "moderate"}
         monthlyExpenses={pref?.monthlyExpensesRetirement ? Number(pref.monthlyExpensesRetirement) : 7000}
+        totalAnnualContributions={Math.round(totalAnnualContributions)}
+        taxDeferredContributions={Math.round(taxDeferredContributions)}
       />
     </div>
   );

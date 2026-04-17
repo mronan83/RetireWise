@@ -14,6 +14,7 @@ import { getDividendIncomeTool } from "@/lib/tools/get-dividend-income";
 import { compareBenchmarksTool } from "@/lib/tools/compare-benchmarks";
 import { runRetirementProjectionTool } from "@/lib/tools/run-retirement-projection";
 import { getNetWorthTool } from "@/lib/tools/get-net-worth";
+import { runFinancialAnalyticsTool } from "@/lib/tools/run-financial-analytics";
 import { AI_DISCLAIMER } from "@/lib/constants";
 import { getChatRateLimiter } from "@/lib/redis";
 
@@ -29,18 +30,33 @@ Your capabilities:
 - Analyze Social Security claiming strategies for both spouses
 - Consider tax implications across different account types and filing status (married filing jointly)
 - Factor in different retirement timelines when spouses retire at different ages
+- Run advanced financial analytics via runFinancialAnalytics tool:
+  * "rmd" — Required Minimum Distribution projections from age 73
+  * "tax" — Retirement income tax projections with MFJ brackets
+  * "roth_conversion" — Roth conversion ladder to reduce RMDs and lifetime taxes
+  * "ss_break_even" — Social Security break-even analysis for each claiming age
+  * "catch_up" — Impact of catch-up contributions at 50+ and 60-63
+  * "income_replacement" — Income replacement ratio vs pre-retirement income
+  * "fee_impact" — Fund expense ratio analysis and 30-year fee drag
+  * "sequence_risk" — Sequence of returns risk with historical scenarios
+  * "healthcare" — Healthcare cost projections with inflation
+  * "all_summary" — Quick summary of all analytics
 
 Key household considerations:
 - Accounts are tagged as "self" or "spouse" — always distinguish who owns what
 - Tax-loss harvesting only applies to taxable brokerage accounts, NOT 401(k)s or IRAs
 - Rebalancing in tax-advantaged accounts avoids capital gains taxes
 - Consider the wash sale rule (30 days) when suggesting TLH trades
+- RMDs and Roth conversions apply per-person based on tax-deferred account balances
+- Healthcare costs differ significantly pre-Medicare (before 65) vs Medicare
 
 Guidelines:
 - Always use the available tools to get current data before making recommendations
+- Use runFinancialAnalytics for tax planning, RMD, Roth conversion, and healthcare questions
 - Present numbers clearly with dollar amounts and percentages
 - Be specific — name tickers, dollar amounts, and which accounts to trade in
 - When showing rebalancing trades, indicate whether to execute in tax-advantaged or taxable accounts
+- When discussing Roth conversions, explain the tax cost now vs tax savings later
 - Be conversational but professional
 
 Important: ${AI_DISCLAIMER}`;
@@ -89,6 +105,7 @@ export async function POST(request: Request) {
       compareBenchmarks: compareBenchmarksTool,
       runRetirementProjection: runRetirementProjectionTool,
       getNetWorth: getNetWorthTool,
+      runFinancialAnalytics: runFinancialAnalyticsTool,
     },
     stopWhen: stepCountIs(10),
   });

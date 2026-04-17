@@ -45,6 +45,8 @@ type Props = {
   holdings: { ticker: string; currentValue: number }[];
   riskTolerance: string;
   monthlyExpenses: number;
+  totalAnnualContributions: number;
+  taxDeferredContributions: number;
 };
 
 const returnByRisk: Record<string, number> = { conservative: 5, moderate: 7, aggressive: 9 };
@@ -55,13 +57,17 @@ export function AnalyticsDashboard(props: Props) {
     selfSSAtFRA, spouseSSAtFRA, selfFRA, spouseFRA,
     taxDeferredBalance, taxFreeBalance, taxableBalance, totalPortfolio,
     holdings, riskTolerance, monthlyExpenses,
+    totalAnnualContributions, taxDeferredContributions,
   } = props;
 
   const returnPct = returnByRisk[riskTolerance] || 7;
   const yearsToRetirement = Math.max(0, retirementAge - currentAge);
-  const growthFactor = Math.pow(1 + returnPct / 100, yearsToRetirement);
-  const projectedTaxDeferred = taxDeferredBalance * growthFactor;
-  const projectedPortfolio = totalPortfolio * growthFactor;
+  const r = returnPct / 100;
+  // Future value with contributions: FV = PV*(1+r)^n + C*((1+r)^n - 1)/r
+  const growthFactor = Math.pow(1 + r, yearsToRetirement);
+  const annuityFactor = r > 0 ? (growthFactor - 1) / r : yearsToRetirement;
+  const projectedTaxDeferred = taxDeferredBalance * growthFactor + taxDeferredContributions * annuityFactor;
+  const projectedPortfolio = totalPortfolio * growthFactor + totalAnnualContributions * annuityFactor;
 
   // 1. RMD Projections
   const rmds = useMemo(() => projectRMDs({
