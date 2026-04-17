@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useActionState } from "react";
-import { Plus, Trash2, AlertCircle } from "lucide-react";
+import { Plus, Trash2, AlertCircle, Pencil } from "lucide-react";
 import Link from "next/link";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -129,12 +129,19 @@ export function LinkedContributions({ contributions: contribs, account }: Props)
                 )}
               </p>
             </div>
-            <button
-              onClick={() => deleteContribution(c.id)}
-              className="text-muted-foreground hover:text-destructive"
-            >
-              <Trash2 className="h-3.5 w-3.5" />
-            </button>
+            <div className="flex items-center gap-1">
+              <Link href="/settings">
+                <button className="text-muted-foreground hover:text-primary p-1">
+                  <Pencil className="h-3 w-3" />
+                </button>
+              </Link>
+              <button
+                onClick={() => deleteContribution(c.id)}
+                className="text-muted-foreground hover:text-destructive p-1"
+              >
+                <Trash2 className="h-3 w-3" />
+              </button>
+            </div>
           </div>
         );
       })}

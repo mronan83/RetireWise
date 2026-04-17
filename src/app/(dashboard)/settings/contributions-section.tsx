@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useActionState } from "react";
-import { Plus, Trash2, Building2, Wallet } from "lucide-react";
+import { Plus, Trash2, Pencil, Wallet } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -27,6 +27,7 @@ import {
 } from "@/lib/constants";
 import {
   createContribution,
+  updateContribution,
   deleteContribution,
 } from "@/lib/actions/contributions";
 import { formatCurrency, formatPercent } from "@/lib/utils/format";
@@ -194,6 +195,7 @@ export function ContributionsSection({
                 yourAnnual={yourAnnual}
                 matchAnnual={matchAnnual}
                 matchedAccountName={matchedAccount?.name || null}
+                accounts={accounts}
               />
             );
           })}
@@ -224,83 +226,101 @@ function ContributionRow({
   yourAnnual,
   matchAnnual,
   matchedAccountName,
+  accounts,
 }: {
   contribution: Contribution;
   yourAnnual: number;
   matchAnnual: number;
   matchedAccountName: string | null;
+  accounts: AccountInfo[];
 }) {
+  const [editOpen, setEditOpen] = useState(false);
+
   const handleDelete = async () => {
     await deleteContribution(c.id);
   };
 
   return (
-    <div className="flex items-center justify-between rounded-lg border p-3">
-      <div className="flex items-center gap-3">
-        <div>
-          <div className="flex items-center gap-2">
-            <span className="font-medium text-sm">{c.label}</span>
-            <Badge variant={c.owner === "spouse" ? "default" : "secondary"} className="text-xs">
-              {ACCOUNT_OWNER_LABELS[c.owner]}
-            </Badge>
-            <Badge variant="outline" className="text-xs">
-              {ACCOUNT_TYPE_LABELS[c.accountType]}
-            </Badge>
-          </div>
-          <div className="text-xs text-muted-foreground mt-0.5">
-            {c.contributionMethod === "percent_of_salary" ? (
-              <span>{Number(c.contributionPercent)}% of salary</span>
-            ) : (
-              <span>
-                {formatCurrency(Number(c.contributionAmount))}{" "}
-                {FREQUENCY_LABELS[c.frequency]?.toLowerCase()}
-              </span>
-            )}
-            {c.hasEmployerMatch && (
-              <span className="text-green-500 ml-2">
-                + {Number(c.employerMatchRate)}:1 match up to{" "}
-                {Number(c.employerMatchMaxPercent)}%
-              </span>
-            )}
-            {c.hasAnnualEscalation && (
-              <span className="text-blue-500 ml-2">
-                +{Number(c.annualEscalationAmount)}
-                {c.contributionMethod === "percent_of_salary" ? "%" : "/yr"}
-                {c.maxAnnualContribution && (
-                  <> cap {formatCurrency(Number(c.maxAnnualContribution))}</>
-                )}
-              </span>
-            )}
-          </div>
-          <div className="text-xs mt-0.5">
-            {matchedAccountName ? (
-              <span className="text-primary">
-                → {matchedAccountName}
-              </span>
-            ) : (
-              <span className="text-yellow-500">
-                No matching account
-              </span>
-            )}
+    <>
+      <div className="flex items-center justify-between rounded-lg border p-3">
+        <div className="flex items-center gap-3 min-w-0 flex-1">
+          <div className="min-w-0">
+            <div className="flex items-center gap-2 flex-wrap">
+              <span className="font-medium text-sm">{c.label}</span>
+              <Badge variant={c.owner === "spouse" ? "default" : "secondary"} className="text-xs">
+                {ACCOUNT_OWNER_LABELS[c.owner]}
+              </Badge>
+              <Badge variant="outline" className="text-xs">
+                {ACCOUNT_TYPE_LABELS[c.accountType]}
+              </Badge>
+            </div>
+            <div className="text-xs text-muted-foreground mt-0.5">
+              {c.contributionMethod === "percent_of_salary" ? (
+                <span>{Number(c.contributionPercent)}% of salary</span>
+              ) : (
+                <span>
+                  {formatCurrency(Number(c.contributionAmount))}{" "}
+                  {FREQUENCY_LABELS[c.frequency]?.toLowerCase()}
+                </span>
+              )}
+              {c.hasEmployerMatch && (
+                <span className="text-green-500 ml-2">
+                  + {Number(c.employerMatchRate)}:1 match up to{" "}
+                  {Number(c.employerMatchMaxPercent)}%
+                </span>
+              )}
+              {c.hasAnnualEscalation && (
+                <span className="text-blue-500 ml-2">
+                  +{Number(c.annualEscalationAmount)}
+                  {c.contributionMethod === "percent_of_salary" ? "%" : "/yr"}
+                  {c.maxAnnualContribution && (
+                    <> cap {formatCurrency(Number(c.maxAnnualContribution))}</>
+                  )}
+                </span>
+              )}
+            </div>
+            <div className="text-xs mt-0.5">
+              {matchedAccountName ? (
+                <span className="text-primary">→ {matchedAccountName}</span>
+              ) : (
+                <span className="text-yellow-500">No matching account</span>
+              )}
+            </div>
           </div>
         </div>
-      </div>
-      <div className="flex items-center gap-3">
-        <div className="text-right">
-          <p className="font-mono text-sm font-medium">
-            {formatCurrency(yourAnnual)}/yr
-          </p>
-          {matchAnnual > 0 && (
-            <p className="font-mono text-xs text-green-500">
-              +{formatCurrency(matchAnnual)} match
+        <div className="flex items-center gap-2 shrink-0">
+          <div className="text-right">
+            <p className="font-mono text-sm font-medium">
+              {formatCurrency(yourAnnual)}/yr
             </p>
-          )}
+            {matchAnnual > 0 && (
+              <p className="font-mono text-xs text-green-500">
+                +{formatCurrency(matchAnnual)} match
+              </p>
+            )}
+          </div>
+          <Button variant="ghost" size="icon" onClick={() => setEditOpen(true)}>
+            <Pencil className="h-3.5 w-3.5 text-muted-foreground" />
+          </Button>
+          <Button variant="ghost" size="icon" onClick={handleDelete}>
+            <Trash2 className="h-3.5 w-3.5 text-muted-foreground" />
+          </Button>
         </div>
-        <Button variant="ghost" size="icon" onClick={handleDelete}>
-          <Trash2 className="h-4 w-4 text-muted-foreground" />
-        </Button>
       </div>
-    </div>
+
+      <Dialog open={editOpen} onOpenChange={setEditOpen}>
+        <DialogContent className="max-w-lg">
+          <DialogHeader>
+            <DialogTitle>Edit Contribution</DialogTitle>
+          </DialogHeader>
+          <EditContributionForm
+            contribution={c}
+            accounts={accounts}
+            onSuccess={() => setEditOpen(false)}
+          />
+        </DialogContent>
+      </Dialog>
+    </>
   );
 }
 
@@ -563,6 +583,150 @@ function AddContributionForm({ accounts, onSuccess }: { accounts: AccountInfo[];
 
       <Button type="submit" disabled={isPending} className="w-full">
         {isPending ? "Adding..." : "Add Contribution"}
+      </Button>
+    </form>
+  );
+}
+
+function EditContributionForm({
+  contribution: c,
+  accounts,
+  onSuccess,
+}: {
+  contribution: Contribution;
+  accounts: AccountInfo[];
+  onSuccess: () => void;
+}) {
+  const [method, setMethod] = useState<"percent_of_salary" | "fixed_amount">(
+    c.contributionMethod as "percent_of_salary" | "fixed_amount"
+  );
+  const [hasMatch, setHasMatch] = useState(c.hasEmployerMatch || false);
+  const [hasEscalation, setHasEscalation] = useState(c.hasAnnualEscalation || false);
+  const [selectedAccountId, setSelectedAccountId] = useState(c.accountId || accounts[0]?.id || "");
+
+  const selectedAccount = accounts.find((a) => a.id === selectedAccountId);
+
+  const [error, formAction, isPending] = useActionState(
+    async (_prev: string | null, formData: FormData) => {
+      try {
+        await updateContribution(c.id, formData);
+        onSuccess();
+        return null;
+      } catch (e) {
+        return e instanceof Error ? e.message : "Something went wrong";
+      }
+    },
+    null
+  );
+
+  return (
+    <form action={formAction} className="space-y-4">
+      <input type="hidden" name="owner" value={selectedAccount?.owner || c.owner} />
+      <input type="hidden" name="accountType" value={selectedAccount?.accountType || c.accountType} />
+      <input type="hidden" name="accountId" value={selectedAccountId} />
+
+      {error && (
+        <div className="rounded-md bg-destructive/10 p-3 text-sm text-destructive">{error}</div>
+      )}
+
+      <div className="space-y-1">
+        <Label>Account</Label>
+        <Select value={selectedAccountId} onValueChange={(v) => v && setSelectedAccountId(v)}>
+          <SelectTrigger><SelectValue placeholder="Select account" /></SelectTrigger>
+          <SelectContent>
+            {accounts.filter((a) => a.isActivelyContributing).map((a) => (
+              <SelectItem key={a.id} value={a.id}>
+                {a.name} ({ACCOUNT_TYPE_LABELS[a.accountType]}) — {ACCOUNT_OWNER_LABELS[a.owner]}
+              </SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
+      </div>
+
+      <div className="space-y-1">
+        <Label>Label</Label>
+        <Input name="label" defaultValue={c.label} required />
+      </div>
+
+      <div className="space-y-1">
+        <Label>Method</Label>
+        <Select name="contributionMethod" defaultValue={c.contributionMethod} onValueChange={(v) => v && setMethod(v as "percent_of_salary" | "fixed_amount")}>
+          <SelectTrigger><SelectValue /></SelectTrigger>
+          <SelectContent>
+            <SelectItem value="percent_of_salary">% of salary</SelectItem>
+            <SelectItem value="fixed_amount">Fixed amount</SelectItem>
+          </SelectContent>
+        </Select>
+      </div>
+
+      {method === "percent_of_salary" ? (
+        <div className="space-y-1">
+          <Label>Contribution (% of salary)</Label>
+          <Input name="contributionPercent" type="number" step="0.5" defaultValue={c.contributionPercent || ""} required />
+        </div>
+      ) : (
+        <div className="grid grid-cols-2 gap-4">
+          <div className="space-y-1">
+            <Label>Amount ($)</Label>
+            <Input name="contributionAmount" type="number" step="0.01" defaultValue={c.contributionAmount || ""} required />
+          </div>
+          <div className="space-y-1">
+            <Label>Frequency</Label>
+            <Select name="frequency" defaultValue={c.frequency}>
+              <SelectTrigger><SelectValue /></SelectTrigger>
+              <SelectContent>
+                {Object.entries(FREQUENCY_LABELS).map(([v, l]) => (
+                  <SelectItem key={v} value={v}>{l}</SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
+        </div>
+      )}
+      {method === "percent_of_salary" && (
+        <input type="hidden" name="frequency" value={c.frequency || "per_paycheck_biweekly"} />
+      )}
+
+      <div className="space-y-3 rounded-lg border p-3">
+        <div className="flex items-center gap-3">
+          <Switch id="editHasMatch" name="hasEmployerMatch" checked={hasMatch} onCheckedChange={setHasMatch} />
+          <Label htmlFor="editHasMatch" className="text-sm">Employer match</Label>
+        </div>
+        {hasMatch && (
+          <div className="grid grid-cols-2 gap-4">
+            <div className="space-y-1">
+              <Label className="text-xs">Match rate</Label>
+              <Input name="employerMatchRate" type="number" step="0.25" defaultValue={c.employerMatchRate || ""} />
+            </div>
+            <div className="space-y-1">
+              <Label className="text-xs">Up to (% of salary)</Label>
+              <Input name="employerMatchMaxPercent" type="number" step="0.5" defaultValue={c.employerMatchMaxPercent || ""} />
+            </div>
+          </div>
+        )}
+      </div>
+
+      <div className="space-y-3 rounded-lg border p-3">
+        <div className="flex items-center gap-3">
+          <Switch id="editHasEsc" name="hasAnnualEscalation" checked={hasEscalation} onCheckedChange={setHasEscalation} />
+          <Label htmlFor="editHasEsc" className="text-sm">Annual auto-increase</Label>
+        </div>
+        {hasEscalation && (
+          <div className="grid grid-cols-2 gap-4">
+            <div className="space-y-1">
+              <Label className="text-xs">{method === "percent_of_salary" ? "Increase/yr (% pts)" : "Increase/yr ($)"}</Label>
+              <Input name="annualEscalationAmount" type="number" step="0.5" defaultValue={c.annualEscalationAmount || ""} />
+            </div>
+            <div className="space-y-1">
+              <Label className="text-xs">Max annual ($)</Label>
+              <Input name="maxAnnualContribution" type="number" step="100" defaultValue={c.maxAnnualContribution || ""} />
+            </div>
+          </div>
+        )}
+      </div>
+
+      <Button type="submit" disabled={isPending} className="w-full">
+        {isPending ? "Saving..." : "Save Changes"}
       </Button>
     </form>
   );

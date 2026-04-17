@@ -97,6 +97,54 @@ export async function createContribution(formData: FormData) {
   revalidatePath("/settings");
 }
 
+export async function updateContribution(id: string, formData: FormData) {
+  const { userId } = await auth();
+  if (!userId) throw new Error("Unauthorized");
+
+  const parsed = contributionSchema.parse({
+    owner: formData.get("owner"),
+    accountId: formData.get("accountId") || undefined,
+    label: formData.get("label"),
+    accountType: formData.get("accountType"),
+    contributionMethod: formData.get("contributionMethod"),
+    contributionPercent: formData.get("contributionPercent") || undefined,
+    contributionAmount: formData.get("contributionAmount") || undefined,
+    frequency: formData.get("frequency"),
+    hasAnnualEscalation: formData.get("hasAnnualEscalation") === "on",
+    annualEscalationAmount: formData.get("annualEscalationAmount") || undefined,
+    maxAnnualContribution: formData.get("maxAnnualContribution") || undefined,
+    hasEmployerMatch: formData.get("hasEmployerMatch") === "on",
+    employerMatchRate: formData.get("employerMatchRate") || undefined,
+    employerMatchMaxPercent: formData.get("employerMatchMaxPercent") || undefined,
+  });
+
+  const db = getDb();
+  await db
+    .update(contributions)
+    .set({
+      owner: parsed.owner,
+      accountId: parsed.accountId || null,
+      label: parsed.label,
+      accountType: parsed.accountType,
+      contributionMethod: parsed.contributionMethod,
+      contributionPercent: parsed.contributionPercent ? String(parsed.contributionPercent) : null,
+      contributionAmount: parsed.contributionAmount ? String(parsed.contributionAmount) : null,
+      frequency: parsed.frequency,
+      hasAnnualEscalation: parsed.hasAnnualEscalation || false,
+      annualEscalationAmount: parsed.annualEscalationAmount ? String(parsed.annualEscalationAmount) : null,
+      maxAnnualContribution: parsed.maxAnnualContribution ? String(parsed.maxAnnualContribution) : null,
+      hasEmployerMatch: parsed.hasEmployerMatch || false,
+      employerMatchRate: parsed.employerMatchRate ? String(parsed.employerMatchRate) : null,
+      employerMatchMaxPercent: parsed.employerMatchMaxPercent ? String(parsed.employerMatchMaxPercent) : null,
+      updatedAt: new Date(),
+    })
+    .where(and(eq(contributions.id, id), eq(contributions.clerkId, userId)));
+
+  revalidatePath("/settings");
+  revalidatePath("/accounts");
+  revalidatePath("/projections");
+}
+
 export async function deleteContribution(id: string) {
   const { userId } = await auth();
   if (!userId) throw new Error("Unauthorized");
@@ -107,4 +155,6 @@ export async function deleteContribution(id: string) {
     .where(and(eq(contributions.id, id), eq(contributions.clerkId, userId)));
 
   revalidatePath("/settings");
+  revalidatePath("/accounts");
+  revalidatePath("/projections");
 }
