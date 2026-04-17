@@ -17,8 +17,12 @@ export function RefreshPricesButton() {
       const res = await fetch("/api/prices/refresh", { method: "POST" });
       const data = await res.json();
       if (data.success) {
-        setResult(`${data.updated} prices updated`);
-        router.refresh();
+        const diag = data.diagnostic;
+        const detail = data.updated > 0
+          ? `${data.updated} prices updated (${data.tickers?.length || 0} tickers)`
+          : `0 updated — ${diag?.holdingsFound?.length || 0} holdings found, clerkId: ${diag?.isHouseholdMember ? 'household' : 'self'}, accounts: ${diag?.accountsUnderRawId?.length || 0}`;
+        setResult(detail);
+        if (data.updated > 0) router.refresh();
       } else {
         setResult(data.error || "Failed");
       }
