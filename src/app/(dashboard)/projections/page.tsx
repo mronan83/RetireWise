@@ -154,6 +154,18 @@ export default async function ProjectionsPage() {
           const contribMethod = matchingContribs[0]?.contributionMethod || "fixed_amount";
           const salary = a.owner === "self" ? selfSalary : spouseSalary;
 
+          // Get contribution details for salary-growth-aware projections
+          const mainContrib = matchingContribs[0];
+          const contribPct = mainContrib?.contributionMethod === "percent_of_salary"
+            ? Number(mainContrib.contributionPercent || 0) : 0;
+          const matchRate = mainContrib?.hasEmployerMatch
+            ? Number(mainContrib.employerMatchRate || 0) : 0;
+          const matchMaxPct = mainContrib?.hasEmployerMatch
+            ? Number(mainContrib.employerMatchMaxPercent || 0) : 0;
+          const salaryGrowthConfig = a.owner === "self"
+            ? (pref.salaryGrowth as import("@/lib/utils/salary-growth").SalaryGrowthConfig | null)
+            : (pref.spouseSalaryGrowth as import("@/lib/utils/salary-growth").SalaryGrowthConfig | null);
+
           return {
             name: a.name,
             owner: a.owner,
@@ -165,7 +177,11 @@ export default async function ProjectionsPage() {
             annualEscalation,
             maxAnnualContribution: maxAnnual,
             contributionMethod: contribMethod,
+            contributionPct: contribPct,
+            employerMatchRate: matchRate,
+            employerMatchMaxPct: matchMaxPct,
             salary,
+            salaryGrowth: salaryGrowthConfig,
           };
         }).filter((a) => a.value > 0 || a.annualContribution > 0)}
         currentAge={pref.currentAge}

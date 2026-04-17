@@ -45,7 +45,11 @@ type AccountInput = {
   annualEscalation: number;
   maxAnnualContribution: number;
   contributionMethod: string;
+  contributionPct: number;
+  employerMatchRate: number;
+  employerMatchMaxPct: number;
   salary: number;
+  salaryGrowth: import("@/lib/utils/salary-growth").SalaryGrowthConfig | null;
 };
 
 type Props = {

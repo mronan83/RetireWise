@@ -2,6 +2,8 @@
  * Market scenario presets and detailed projection tables.
  */
 
+import { getSalaryAtYear, type SalaryGrowthConfig } from "./salary-growth";
+
 export type MarketScenario = {
   id: string;
   name: string;
@@ -109,7 +111,11 @@ export function runDetailedProjection(params: {
     annualEscalation: number; // amount to add per year (% points for pct method, $ for fixed)
     maxAnnualContribution: number; // cap (0 = no cap)
     contributionMethod: string; // "percent_of_salary" | "fixed_amount"
-    salary: number; // needed to recalculate pct-based contributions with escalation
+    contributionPct: number; // the base % if percent_of_salary
+    employerMatchRate: number; // e.g., 1.0 for dollar-for-dollar
+    employerMatchMaxPct: number; // e.g., 5 for up to 5%
+    salary: number; // current salary for this account's owner
+    salaryGrowth: import("./salary-growth").SalaryGrowthConfig | null;
   }[];
   totalAnnualContributions: number; // kept for backward compat / summary
   yearsToRetirement: number;
@@ -174,6 +180,7 @@ export function runDetailedProjection(params: {
     ssIncomeArr.push(yearSS);
 
     // Grow each account
+    let yearTotalContributions = 0;
     for (const ap of accountProjs) {
       const prev =
         ap.projectedValues.length > 0
@@ -183,30 +190,38 @@ export function runDetailedProjection(params: {
       let newVal = prev + growth;
 
       if (!isRetirement) {
-        // Add this account's annual contribution with escalation
+        // Calculate this year's contribution accounting for salary growth + escalation
         const idx = accountProjs.indexOf(ap);
         const acct = accounts[idx];
-        if (acct.annualContribution > 0 || acct.annualEscalation > 0) {
-          // Calculate escalated contribution for year y
-          let yearContrib = acct.annualContribution;
-          if (acct.annualEscalation > 0 && y > 0) {
-            if (acct.contributionMethod === "percent_of_salary" && acct.salary > 0) {
-              // Base % + escalation per year, recalculate from salary
-              const basePct = acct.annualContribution > 0 && acct.salary > 0
-                ? (acct.annualContribution / acct.salary) * 100
-                : 0;
-              const escalatedPct = basePct + acct.annualEscalation * y;
-              yearContrib = (escalatedPct / 100) * acct.salary;
-            } else {
-              // Fixed amount + $ increase per year
-              yearContrib = acct.annualContribution + acct.annualEscalation * y;
+        if (acct.annualContribution > 0 || acct.annualEscalation > 0 || (acct.contributionPct > 0 && acct.salary > 0)) {
+          // Get this year's salary (accounts for salary growth config)
+          const yearSalary = getSalaryAtYear(acct.salary, acct.salaryGrowth, y);
+
+          let yearContrib: number;
+          if (acct.contributionMethod === "percent_of_salary" && yearSalary > 0) {
+            // Base contribution % + escalation per year
+            const pct = acct.contributionPct + (acct.annualEscalation > 0 ? acct.annualEscalation * y : 0);
+            yearContrib = (pct / 100) * yearSalary;
+
+            // Add employer match (calculated on the growing salary too)
+            if (acct.employerMatchRate > 0 && acct.employerMatchMaxPct > 0) {
+              const matchablePct = Math.min(pct, acct.employerMatchMaxPct);
+              yearContrib += (matchablePct / 100) * yearSalary * acct.employerMatchRate;
             }
+          } else {
+            // Fixed amount + $ increase per year
+            yearContrib = acct.annualContribution + (acct.annualEscalation > 0 ? acct.annualEscalation * y : 0);
           }
-          // Apply cap
+
+          // Apply IRS cap
           if (acct.maxAnnualContribution > 0) {
+            // Cap applies to employee portion only, not employer match
+            // But for simplicity, cap the total for now
             yearContrib = Math.min(yearContrib, acct.maxAnnualContribution);
           }
-          newVal += Math.max(0, yearContrib);
+          const actualContrib = Math.max(0, yearContrib);
+          newVal += actualContrib;
+          yearTotalContributions += actualContrib;
         }
       }
 
@@ -258,8 +273,7 @@ export function runDetailedProjection(params: {
     }
 
     withdrawalsArr.push(Math.round(yearWithdrawal));
-    const yearContribs = isRetirement ? 0 : accounts.reduce((s, a) => s + a.annualContribution, 0);
-    contributionsArr.push(Math.round(yearContribs));
+    contributionsArr.push(Math.round(yearTotalContributions));
 
     const yearTotal = accountProjs.reduce(
       (s, ap) => s + ap.projectedValues[ap.projectedValues.length - 1],
