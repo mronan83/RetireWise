@@ -1,14 +1,14 @@
 "use client";
 
 import { useState, useActionState } from "react";
-import { Plus, Trash2, Target, Trophy } from "lucide-react";
+import { Plus, Trash2, Pencil, Target, Trophy } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { formatCurrency } from "@/lib/utils/format";
-import { createGoal, deleteGoal } from "@/lib/actions/goals";
+import { createGoal, updateGoal, deleteGoal } from "@/lib/actions/goals";
 import { cn } from "@/lib/utils";
 
 type Goal = {
@@ -29,6 +29,7 @@ export function GoalsPanel({
   portfolioValue: number;
 }) {
   const [addOpen, setAddOpen] = useState(false);
+  const [editingGoal, setEditingGoal] = useState<Goal | null>(null);
 
   return (
     <Card>
@@ -68,15 +69,21 @@ export function GoalsPanel({
                         {goal.name}
                       </span>
                     </div>
-                    <div className="flex items-center gap-2">
+                    <div className="flex items-center gap-1.5">
                       <span className="font-mono text-xs">
                         {formatCurrency(portfolioValue)} / {formatCurrency(target)}
                       </span>
                       <button
-                        onClick={() => deleteGoal(goal.id)}
-                        className="text-muted-foreground hover:text-destructive"
+                        onClick={() => setEditingGoal(goal)}
+                        className="text-muted-foreground hover:text-primary p-0.5"
                       >
-                        <Trash2 className="h-3.5 w-3.5" />
+                        <Pencil className="h-3 w-3" />
+                      </button>
+                      <button
+                        onClick={() => deleteGoal(goal.id)}
+                        className="text-muted-foreground hover:text-destructive p-0.5"
+                      >
+                        <Trash2 className="h-3 w-3" />
                       </button>
                     </div>
                   </div>
@@ -105,18 +112,33 @@ export function GoalsPanel({
           <DialogHeader>
             <DialogTitle>Add Goal</DialogTitle>
           </DialogHeader>
-          <AddGoalForm onSuccess={() => setAddOpen(false)} />
+          <GoalForm onSuccess={() => setAddOpen(false)} />
+        </DialogContent>
+      </Dialog>
+
+      <Dialog open={editingGoal !== null} onOpenChange={(open) => !open && setEditingGoal(null)}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Edit Goal</DialogTitle>
+          </DialogHeader>
+          {editingGoal && (
+            <GoalForm goal={editingGoal} onSuccess={() => setEditingGoal(null)} />
+          )}
         </DialogContent>
       </Dialog>
     </Card>
   );
 }
 
-function AddGoalForm({ onSuccess }: { onSuccess: () => void }) {
+function GoalForm({ goal, onSuccess }: { goal?: Goal; onSuccess: () => void }) {
   const [error, formAction, isPending] = useActionState(
     async (_prev: string | null, formData: FormData) => {
       try {
-        await createGoal(formData);
+        if (goal) {
+          await updateGoal(goal.id, formData);
+        } else {
+          await createGoal(formData);
+        }
         onSuccess();
         return null;
       } catch (e) {
@@ -135,7 +157,13 @@ function AddGoalForm({ onSuccess }: { onSuccess: () => void }) {
       )}
       <div className="space-y-2">
         <Label htmlFor="name">Goal Name</Label>
-        <Input id="name" name="name" placeholder="e.g. $2M retirement target" required />
+        <Input
+          id="name"
+          name="name"
+          defaultValue={goal?.name || ""}
+          placeholder="e.g. $2M retirement target"
+          required
+        />
       </div>
       <div className="space-y-2">
         <Label htmlFor="targetAmount">Target Amount ($)</Label>
@@ -144,16 +172,22 @@ function AddGoalForm({ onSuccess }: { onSuccess: () => void }) {
           name="targetAmount"
           type="number"
           step="0.01"
+          defaultValue={goal?.targetAmount || ""}
           placeholder="2000000"
           required
         />
       </div>
       <div className="space-y-2">
         <Label htmlFor="targetDate">Target Date (optional)</Label>
-        <Input id="targetDate" name="targetDate" type="date" />
+        <Input
+          id="targetDate"
+          name="targetDate"
+          type="date"
+          defaultValue={goal?.targetDate || ""}
+        />
       </div>
       <Button type="submit" disabled={isPending} className="w-full">
-        {isPending ? "Adding..." : "Add Goal"}
+        {isPending ? "Saving..." : goal ? "Save Changes" : "Add Goal"}
       </Button>
     </form>
   );

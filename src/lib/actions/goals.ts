@@ -37,6 +37,32 @@ export async function createGoal(formData: FormData) {
   revalidatePath("/dashboard");
 }
 
+export async function updateGoal(id: string, formData: FormData) {
+  const { userId } = await auth();
+  if (!userId) throw new Error("Unauthorized");
+
+  const parsed = goalSchema.parse({
+    name: formData.get("name"),
+    targetAmount: formData.get("targetAmount"),
+    targetDate: formData.get("targetDate") || undefined,
+    category: formData.get("category") || "retirement",
+  });
+
+  const db = getDb();
+  await db
+    .update(goals)
+    .set({
+      name: parsed.name,
+      targetAmount: String(parsed.targetAmount),
+      targetDate: parsed.targetDate || null,
+      category: parsed.category,
+      updatedAt: new Date(),
+    })
+    .where(and(eq(goals.id, id), eq(goals.clerkId, userId)));
+
+  revalidatePath("/dashboard");
+}
+
 export async function deleteGoal(id: string) {
   const { userId } = await auth();
   if (!userId) throw new Error("Unauthorized");
