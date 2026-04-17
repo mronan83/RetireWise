@@ -58,7 +58,28 @@ type Props = {
   spouseFRA: number;
   monthlyExpenses: number;
   annualContributions: number;
+  savedControls?: {
+    ssClaimAgeSelf: number | null;
+    ssClaimAgeSpouse: number | null;
+    monthlySpending: number | null;
+    withdrawalRate: number | null;
+    retirementYears: number | null;
+    marketScenario: string | null;
+  };
 };
+
+// Debounced save to avoid hammering the API on every slider tick
+let saveTimeout: ReturnType<typeof setTimeout> | null = null;
+function saveControls(data: Record<string, unknown>) {
+  if (saveTimeout) clearTimeout(saveTimeout);
+  saveTimeout = setTimeout(() => {
+    fetch("/api/settings/projection-controls", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(data),
+    }).catch(() => {}); // fire-and-forget
+  }, 800);
+}
 
 export function InteractiveProjections({
   accounts,
@@ -71,16 +92,25 @@ export function InteractiveProjections({
   spouseFRA,
   monthlyExpenses,
   annualContributions,
+  savedControls,
 }: Props) {
-  // Interactive state
-  const [selfSSAge, setSelfSSAge] = useState(selfFRA || 67);
-  const [spouseSSAge, setSpouseSSAge] = useState(spouseFRA || 67);
-  const [monthlySpending, setMonthlySpending] = useState(monthlyExpenses);
-  const [withdrawalRatePct, setWithdrawalRatePct] = useState(4.0);
-  const [retirementYears, setRetirementYears] = useState(35);
-  const [selectedScenario, setSelectedScenario] = useState<string>("moderate");
+  // Interactive state — initialize from saved values or defaults
+  const [selfSSAge, setSelfSSAge] = useState(savedControls?.ssClaimAgeSelf || selfFRA || 67);
+  const [spouseSSAge, setSpouseSSAge] = useState(savedControls?.ssClaimAgeSpouse || spouseFRA || 67);
+  const [monthlySpending, setMonthlySpending] = useState(savedControls?.monthlySpending || monthlyExpenses);
+  const [withdrawalRatePct, setWithdrawalRatePct] = useState(savedControls?.withdrawalRate || 4.0);
+  const [retirementYears, setRetirementYears] = useState(savedControls?.retirementYears || 35);
+  const [selectedScenario, setSelectedScenario] = useState<string>(savedControls?.marketScenario || "moderate");
 
   const scenario = MARKET_SCENARIOS.find((s) => s.id === selectedScenario) || MARKET_SCENARIOS[1];
+
+  // Wrapper functions that update state AND persist
+  const updateSelfSSAge = (v: number) => { setSelfSSAge(v); saveControls({ ssClaimAgeSelf: v }); };
+  const updateSpouseSSAge = (v: number) => { setSpouseSSAge(v); saveControls({ ssClaimAgeSpouse: v }); };
+  const updateSpending = (v: number) => { setMonthlySpending(v); saveControls({ monthlySpending: v }); };
+  const updateWithdrawalRate = (v: number) => { setWithdrawalRatePct(v); saveControls({ withdrawalRate: v }); };
+  const updateRetirementYears = (v: number) => { setRetirementYears(v); saveControls({ retirementYears: v }); };
+  const updateScenario = (v: string) => { setSelectedScenario(v); saveControls({ marketScenario: v }); };
 
   // Calculate adjusted SS benefits
   const selfSSMonthly = adjustSSBenefit(selfSSAtFRA, selfFRA || 67, selfSSAge);
@@ -229,7 +259,7 @@ export function InteractiveProjections({
               {MARKET_SCENARIOS.map((s) => (
                 <button
                   key={s.id}
-                  onClick={() => setSelectedScenario(s.id)}
+                  onClick={() => updateScenario(s.id)}
                   className={cn(
                     "rounded-lg border p-2.5 text-left transition-colors text-xs",
                     selectedScenario === s.id
@@ -255,7 +285,7 @@ export function InteractiveProjections({
               </div>
               <Slider
                 value={[selfSSAge]}
-                onValueChange={(v) => setSelfSSAge(Array.isArray(v) ? v[0] : v)}
+                onValueChange={(v) => updateSelfSSAge(Array.isArray(v) ? v[0] : v)}
                 min={62}
                 max={70}
                 step={1}
@@ -276,7 +306,7 @@ export function InteractiveProjections({
               </div>
               <Slider
                 value={[spouseSSAge]}
-                onValueChange={(v) => setSpouseSSAge(Array.isArray(v) ? v[0] : v)}
+                onValueChange={(v) => updateSpouseSSAge(Array.isArray(v) ? v[0] : v)}
                 min={62}
                 max={70}
                 step={1}
@@ -302,7 +332,7 @@ export function InteractiveProjections({
               </div>
               <Slider
                 value={[monthlySpending]}
-                onValueChange={(v) => setMonthlySpending(Array.isArray(v) ? v[0] : v)}
+                onValueChange={(v) => updateSpending(Array.isArray(v) ? v[0] : v)}
                 min={2000}
                 max={25000}
                 step={250}
@@ -325,7 +355,7 @@ export function InteractiveProjections({
               </div>
               <Slider
                 value={[withdrawalRatePct * 10]}
-                onValueChange={(v) => setWithdrawalRatePct((Array.isArray(v) ? v[0] : v) / 10)}
+                onValueChange={(v) => updateWithdrawalRate((Array.isArray(v) ? v[0] : v) / 10)}
                 min={20}
                 max={60}
                 step={5}
@@ -350,7 +380,7 @@ export function InteractiveProjections({
             </div>
             <Slider
               value={[retirementYears]}
-              onValueChange={(v) => setRetirementYears(Array.isArray(v) ? v[0] : v)}
+              onValueChange={(v) => updateRetirementYears(Array.isArray(v) ? v[0] : v)}
               min={10}
               max={45}
               step={1}

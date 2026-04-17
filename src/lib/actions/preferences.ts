@@ -59,6 +59,23 @@ export async function updatePreferences(formData: FormData) {
     cash: Number(formData.get("target_cash") || 5),
   };
 
+  // Salary growth configs
+  const salaryGrowthMethod = formData.get("salaryGrowthMethod") as string;
+  const salaryGrowth = salaryGrowthMethod ? {
+    method: salaryGrowthMethod,
+    value: Number(formData.get("salaryGrowthValue") || 3),
+    years: Number(formData.get("salaryGrowthYears") || 10),
+    targetAmount: salaryGrowthMethod === "target_by_year" ? Number(formData.get("salaryGrowthValue") || 0) : undefined,
+  } : null;
+
+  const spouseSalaryGrowthMethod = formData.get("spouseSalaryGrowthMethod") as string;
+  const spouseSalaryGrowth = spouseSalaryGrowthMethod ? {
+    method: spouseSalaryGrowthMethod,
+    value: Number(formData.get("spouseSalaryGrowthValue") || 3),
+    years: Number(formData.get("spouseSalaryGrowthYears") || 10),
+    targetAmount: spouseSalaryGrowthMethod === "target_by_year" ? Number(formData.get("spouseSalaryGrowthValue") || 0) : undefined,
+  } : null;
+
   const db = getDb();
   const existing = await db
     .select({ id: userPreferences.id })
@@ -90,6 +107,8 @@ export async function updatePreferences(formData: FormData) {
     spouseAnnualContribution: parsed.spouseAnnualContribution
       ? String(parsed.spouseAnnualContribution)
       : null,
+    salaryGrowth,
+    spouseSalaryGrowth,
     targetAllocation,
     updatedAt: new Date(),
   };

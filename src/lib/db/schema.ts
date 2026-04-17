@@ -283,6 +283,20 @@ export const userPreferences = pgTable("user_preferences", {
     scale: 2,
   }),
 
+  // Salary growth projections (JSONB for flexibility)
+  // Format: { method: "pct_per_year" | "target_by_year" | "pct_for_years",
+  //           value: number, years: number, targetAmount?: number }
+  salaryGrowth: jsonb("salary_growth"),
+  spouseSalaryGrowth: jsonb("spouse_salary_growth"),
+
+  // Persisted projection controls
+  projectionSSClaimAgeSelf: integer("projection_ss_claim_age_self"),
+  projectionSSClaimAgeSpouse: integer("projection_ss_claim_age_spouse"),
+  projectionMonthlySpending: decimal("projection_monthly_spending", { precision: 10, scale: 2 }),
+  projectionWithdrawalRate: decimal("projection_withdrawal_rate", { precision: 5, scale: 2 }),
+  projectionRetirementYears: integer("projection_retirement_years"),
+  projectionMarketScenario: text("projection_market_scenario"),
+
   // Household
   filingStatus: filingStatusEnum("filing_status").default(
     "married_filing_jointly"

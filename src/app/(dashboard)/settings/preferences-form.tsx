@@ -33,6 +33,9 @@ export function PreferencesForm({ preferences }: Props) {
     (preferences?.targetAllocation as Record<string, number>) ||
     DEFAULT_TARGET_ALLOCATION;
 
+  const selfGrowth = preferences?.salaryGrowth as { method: string; value: number; years: number } | null;
+  const spouseGrowth = preferences?.spouseSalaryGrowth as { method: string; value: number; years: number } | null;
+
   const [message, formAction, isPending] = useActionState(
     async (_prev: string | null, formData: FormData) => {
       try {
@@ -177,6 +180,66 @@ export function PreferencesForm({ preferences }: Props) {
             />
             <HelpText>
               Spouse&apos;s gross annual income (0 if retired)
+            </HelpText>
+          </div>
+        </div>
+
+        {/* Salary Growth Projections */}
+        <div className="grid gap-4 sm:grid-cols-2">
+          <div className="rounded-lg border p-3 space-y-2">
+            <Label className="text-xs font-medium">Your Salary Growth</Label>
+            <Select name="salaryGrowthMethod" defaultValue={selfGrowth?.method || "pct_per_year"}>
+              <SelectTrigger className="h-8 text-xs">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="pct_per_year">% increase each year (ongoing)</SelectItem>
+                <SelectItem value="pct_for_years">% increase for X years then flat</SelectItem>
+                <SelectItem value="target_by_year">Reach target salary in X years</SelectItem>
+              </SelectContent>
+            </Select>
+            <div className="grid grid-cols-2 gap-2">
+              <div>
+                <Label className="text-[10px]">Rate (%) or Target ($)</Label>
+                <Input name="salaryGrowthValue" type="number" step="0.1" className="h-7 text-xs"
+                  defaultValue={selfGrowth?.value || "3"} placeholder="3" />
+              </div>
+              <div>
+                <Label className="text-[10px]">Years</Label>
+                <Input name="salaryGrowthYears" type="number" step="1" className="h-7 text-xs"
+                  defaultValue={selfGrowth?.years || "10"} placeholder="10" />
+              </div>
+            </div>
+            <HelpText>
+              e.g., 3% per year = $150k → $155k → $159k...
+            </HelpText>
+          </div>
+          <div className="rounded-lg border p-3 space-y-2">
+            <Label className="text-xs font-medium">Spouse Salary Growth</Label>
+            <Select name="spouseSalaryGrowthMethod" defaultValue={spouseGrowth?.method || "pct_per_year"}>
+              <SelectTrigger className="h-8 text-xs">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="pct_per_year">% increase each year (ongoing)</SelectItem>
+                <SelectItem value="pct_for_years">% increase for X years then flat</SelectItem>
+                <SelectItem value="target_by_year">Reach target salary in X years</SelectItem>
+              </SelectContent>
+            </Select>
+            <div className="grid grid-cols-2 gap-2">
+              <div>
+                <Label className="text-[10px]">Rate (%) or Target ($)</Label>
+                <Input name="spouseSalaryGrowthValue" type="number" step="0.1" className="h-7 text-xs"
+                  defaultValue={spouseGrowth?.value || "3"} placeholder="3" />
+              </div>
+              <div>
+                <Label className="text-[10px]">Years</Label>
+                <Input name="spouseSalaryGrowthYears" type="number" step="1" className="h-7 text-xs"
+                  defaultValue={spouseGrowth?.years || "10"} placeholder="10" />
+              </div>
+            </div>
+            <HelpText>
+              Set to 0% if spouse is retired or salary is stable
             </HelpText>
           </div>
         </div>

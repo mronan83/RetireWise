@@ -177,6 +177,14 @@ export default async function ProjectionsPage() {
         spouseFRA={spouseSS[0]?.fullRetirementAge || 67}
         monthlyExpenses={monthlyExpenses}
         annualContributions={totalAnnualContributions}
+        savedControls={{
+          ssClaimAgeSelf: pref.projectionSSClaimAgeSelf || null,
+          ssClaimAgeSpouse: pref.projectionSSClaimAgeSpouse || null,
+          monthlySpending: pref.projectionMonthlySpending ? Number(pref.projectionMonthlySpending) : null,
+          withdrawalRate: pref.projectionWithdrawalRate ? Number(pref.projectionWithdrawalRate) : null,
+          retirementYears: pref.projectionRetirementYears || null,
+          marketScenario: pref.projectionMarketScenario || null,
+        }}
       />
 
       <ScenarioRunner
