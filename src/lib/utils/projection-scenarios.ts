@@ -235,9 +235,14 @@ export function runDetailedProjection(params: {
       }
 
       // Use the higher of expense-based or rate-based withdrawal
-      const needed = withdrawalRatePct
+      let needed = withdrawalRatePct
         ? Math.max(expenseBasedWithdrawal, rateBasedWithdrawal)
         : expenseBasedWithdrawal;
+
+      // Apply max cap to the final withdrawal amount (absolute cap)
+      if (maxAnnualWithdrawal && maxAnnualWithdrawal > 0) {
+        needed = Math.min(needed, maxAnnualWithdrawal);
+      }
       let remaining = needed;
 
       if (totalCurrent > 0 && remaining > 0) {

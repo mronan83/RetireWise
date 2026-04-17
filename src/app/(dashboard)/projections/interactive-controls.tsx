@@ -179,12 +179,13 @@ export function InteractiveProjections({
         } else {
           // Grow withdrawals with inflation each year of retirement
           const retYear = y - yearsToRetirement;
-          let rateBasedWithdrawal = portfolio * (withdrawalRatePct / 100);
-          if (maxWithdrawalAmount && maxWithdrawalAmount > 0) {
-            rateBasedWithdrawal = Math.min(rateBasedWithdrawal, maxWithdrawalAmount);
-          }
+          const rateBasedWithdrawal = portfolio * (withdrawalRatePct / 100);
           const inflatedExpenseWithdrawal = expenseBasedWithdrawal * Math.pow(1 + scenario.inflationPct / 100, retYear);
-          const withdrawal = Math.max(inflatedExpenseWithdrawal, rateBasedWithdrawal);
+          let withdrawal = Math.max(inflatedExpenseWithdrawal, rateBasedWithdrawal);
+          // Apply absolute cap
+          if (maxWithdrawalAmount && maxWithdrawalAmount > 0) {
+            withdrawal = Math.min(withdrawal, maxWithdrawalAmount);
+          }
           portfolio = portfolio + growth - Math.min(withdrawal, portfolio + growth);
         }
         portfolio = Math.max(0, portfolio);
