@@ -227,11 +227,11 @@ export function InteractiveProjections({
         </CardContent>
       </Card>
 
-      {/* Summary */}
+      {/* Summary Cards — all reactive to slider controls */}
       <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
         <Card>
           <CardHeader className="pb-2">
-            <CardTitle className="text-xs text-muted-foreground">At Retirement ({retirementAge})</CardTitle>
+            <CardTitle className="text-xs text-muted-foreground">Portfolio at Retirement ({retirementAge})</CardTitle>
           </CardHeader>
           <CardContent>
             <p className="text-xl font-bold font-mono">{formatCurrency(portfolioAtRetirement)}</p>
@@ -239,20 +239,32 @@ export function InteractiveProjections({
         </Card>
         <Card>
           <CardHeader className="pb-2">
-            <CardTitle className="text-xs text-muted-foreground">Monthly Income (4% rule + SS)</CardTitle>
+            <CardTitle className="text-xs text-muted-foreground">Monthly Spending vs Income</CardTitle>
           </CardHeader>
           <CardContent>
-            <p className="text-xl font-bold font-mono">
-              {formatCurrency(monthlyFromPortfolio + selfSSMonthly + spouseSSMonthly)}
+            <p className="text-xs text-muted-foreground">
+              Spending: <span className="font-mono text-foreground">{formatCurrency(monthlyIncome)}</span>/mo
             </p>
             <p className="text-xs text-muted-foreground">
-              {formatCurrency(monthlyFromPortfolio)} portfolio + {formatCurrency(selfSSMonthly + spouseSSMonthly)} SS
+              Income: <span className="font-mono text-foreground">{formatCurrency(monthlyFromPortfolio + selfSSMonthly + spouseSSMonthly)}</span>/mo
             </p>
+            <p className="text-xs mt-1">
+              ({formatCurrency(monthlyFromPortfolio)} 4% rule + {formatCurrency(selfSSMonthly + spouseSSMonthly)} SS)
+            </p>
+            {monthlyFromPortfolio + selfSSMonthly + spouseSSMonthly >= monthlyIncome ? (
+              <p className="text-xs text-green-500 font-medium mt-1">
+                +{formatCurrency(monthlyFromPortfolio + selfSSMonthly + spouseSSMonthly - monthlyIncome)} surplus
+              </p>
+            ) : (
+              <p className="text-xs text-red-500 font-medium mt-1">
+                -{formatCurrency(monthlyIncome - monthlyFromPortfolio - selfSSMonthly - spouseSSMonthly)} shortfall
+              </p>
+            )}
           </CardContent>
         </Card>
         <Card>
           <CardHeader className="pb-2">
-            <CardTitle className="text-xs text-muted-foreground">At Age 80</CardTitle>
+            <CardTitle className="text-xs text-muted-foreground">Portfolio at 80</CardTitle>
           </CardHeader>
           <CardContent>
             <p className={cn("text-xl font-bold font-mono", portfolioAt80 > 0 ? "" : "text-red-500")}>
@@ -262,12 +274,15 @@ export function InteractiveProjections({
         </Card>
         <Card>
           <CardHeader className="pb-2">
-            <CardTitle className="text-xs text-muted-foreground">At Age 90</CardTitle>
+            <CardTitle className="text-xs text-muted-foreground">Portfolio at 90</CardTitle>
           </CardHeader>
           <CardContent>
             <p className={cn("text-xl font-bold font-mono", portfolioAt90 > 0 ? "" : "text-red-500")}>
               {formatCurrency(portfolioAt90)}
             </p>
+            {portfolioAt90 <= 0 && (
+              <p className="text-xs text-red-500">Money runs out before 90</p>
+            )}
           </CardContent>
         </Card>
       </div>

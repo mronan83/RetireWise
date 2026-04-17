@@ -4,13 +4,7 @@ import { eq, and } from "drizzle-orm";
 import { getDb } from "@/lib/db";
 import { userPreferences, socialSecurityBenefits, contributions } from "@/lib/db/schema";
 import { getHoldingsByClerkId } from "@/lib/queries/holdings";
-import {
-  calculateProjection,
-  runMonteCarlo,
-  calculateWithdrawalStrategies,
-  type ProjectionInput,
-} from "@/lib/utils/projections";
-import { ProjectionCharts } from "./projection-charts";
+import type { ProjectionInput } from "@/lib/utils/projections";
 import { ScenarioRunner } from "./scenario-runner";
 import { InteractiveProjections } from "./interactive-controls";
 import { getAccounts } from "@/lib/queries/accounts";
@@ -96,6 +90,7 @@ export default async function ProjectionsPage() {
   const monthlyExpenses = pref.monthlyExpensesRetirement
     ? Number(pref.monthlyExpensesRetirement) : 7000;
 
+  // Input passed to ScenarioRunner (uses base assumptions)
   const input: ProjectionInput = {
     currentPortfolioValue: totalValue,
     annualContributions: totalAnnualContributions,
@@ -106,37 +101,6 @@ export default async function ProjectionsPage() {
     socialSecurityMonthlyIncome: combinedSSMonthly,
     yearsInRetirement: 30,
   };
-
-  const projection = calculateProjection(input, pref.currentAge);
-  const monteCarlo = runMonteCarlo(input, pref.currentAge, 1000);
-
-  // Withdrawal strategies
-  let taxDeferredBalance = 0;
-  let taxFreeBalance = 0;
-  let taxableBalance = 0;
-  for (const h of holdings) {
-    const val = Number(h.currentValue);
-    const t = h.accountType;
-    if (t === "401k" || t === "403b" || t === "ira_traditional" || t === "pension") {
-      taxDeferredBalance += val;
-    } else if (t === "ira_roth" || t === "hsa") {
-      taxFreeBalance += val;
-    } else {
-      taxableBalance += val;
-    }
-  }
-
-  const growthFactor = Math.pow(1 + expectedReturn / 100, yearsToRetirement);
-  const strategies = calculateWithdrawalStrategies({
-    taxDeferredBalance: taxDeferredBalance * growthFactor,
-    taxFreeBalance: taxFreeBalance * growthFactor,
-    taxableBalance: taxableBalance * growthFactor,
-    annualExpenses: monthlyExpenses * 12,
-    annualSSIncome: combinedSSMonthly * 12,
-    yearsInRetirement: 30,
-    returnRate: expectedReturn / 100,
-    startAge: pref.retirementAge,
-  });
 
   return (
     <div className="space-y-6">
@@ -215,15 +179,6 @@ export default async function ProjectionsPage() {
         spouseFRA={spouseSS[0]?.fullRetirementAge || 67}
         monthlyExpenses={monthlyExpenses}
         annualContributions={totalAnnualContributions}
-      />
-
-      <ProjectionCharts
-        projection={projection}
-        monteCarlo={monteCarlo}
-        strategies={strategies}
-        input={input}
-        currentAge={pref.currentAge}
-        retirementAge={pref.retirementAge}
       />
 
       <ScenarioRunner
