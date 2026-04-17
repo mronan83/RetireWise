@@ -13,6 +13,7 @@ import {
   Upload,
   TrendingUp,
   Landmark,
+  UserCircle,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 
@@ -26,6 +27,7 @@ const navItems = [
   { href: "/projections", label: "Projections", icon: LineChart },
   { href: "/import", label: "Import Data", icon: Upload },
   { href: "/settings", label: "Settings", icon: Settings },
+  { href: "/account", label: "Account", icon: UserCircle },
 ];
 
 export function SidebarNav() {

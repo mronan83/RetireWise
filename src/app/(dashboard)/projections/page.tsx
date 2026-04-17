@@ -12,13 +12,15 @@ import {
 } from "@/lib/utils/projections";
 import { ProjectionCharts } from "./projection-charts";
 import { ScenarioRunner } from "./scenario-runner";
+import { InteractiveProjections } from "./interactive-controls";
+import { getAccounts } from "@/lib/queries/accounts";
 
 export default async function ProjectionsPage() {
   const { userId } = await auth();
   if (!userId) redirect("/sign-in");
 
   const db = getDb();
-  const [holdings, prefs, selfSS, spouseSS, contribs] = await Promise.all([
+  const [holdings, prefs, selfSS, spouseSS, contribs, accountsList] = await Promise.all([
     getHoldingsByClerkId(userId),
     db.select().from(userPreferences).where(eq(userPreferences.clerkId, userId)).limit(1),
     db.select().from(socialSecurityBenefits).where(
@@ -28,6 +30,7 @@ export default async function ProjectionsPage() {
       and(eq(socialSecurityBenefits.clerkId, userId), eq(socialSecurityBenefits.owner, "spouse"))
     ).limit(1),
     db.select().from(contributions).where(eq(contributions.clerkId, userId)),
+    getAccounts(userId),
   ]);
 
   const pref = prefs[0];
@@ -143,6 +146,29 @@ export default async function ProjectionsPage() {
           Based on your current portfolio, contributions, and goals
         </p>
       </div>
+
+      <InteractiveProjections
+        accounts={accountsList.map((a) => {
+          const acctHoldings = holdings.filter((h) => h.accountId === a.id);
+          const value = acctHoldings.reduce((s, h) => s + Number(h.currentValue), 0);
+          return {
+            name: a.name,
+            owner: a.owner,
+            type: a.accountType,
+            taxTreatment: a.taxTreatment,
+            value,
+          };
+        }).filter((a) => a.value > 0)}
+        currentAge={pref.currentAge}
+        retirementAge={pref.retirementAge}
+        spouseAge={pref.spouseCurrentAge}
+        selfSSAtFRA={selfSSMonthly}
+        spouseSSAtFRA={spouseSSMonthly}
+        selfFRA={selfSS[0]?.fullRetirementAge || 67}
+        spouseFRA={spouseSS[0]?.fullRetirementAge || 67}
+        monthlyExpenses={monthlyExpenses}
+        annualContributions={totalAnnualContributions}
+      />
 
       <ProjectionCharts
         projection={projection}
