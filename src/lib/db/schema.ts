@@ -294,6 +294,7 @@ export const userPreferences = pgTable("user_preferences", {
   projectionSSClaimAgeSpouse: integer("projection_ss_claim_age_spouse"),
   projectionMonthlySpending: decimal("projection_monthly_spending", { precision: 10, scale: 2 }),
   projectionWithdrawalRate: decimal("projection_withdrawal_rate", { precision: 5, scale: 2 }),
+  projectionMaxWithdrawalAmount: decimal("projection_max_withdrawal_amount", { precision: 20, scale: 2 }),
   projectionRetirementYears: integer("projection_retirement_years"),
   projectionMarketScenario: text("projection_market_scenario"),
 

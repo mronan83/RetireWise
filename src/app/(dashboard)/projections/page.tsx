@@ -182,6 +182,7 @@ export default async function ProjectionsPage() {
           ssClaimAgeSpouse: pref.projectionSSClaimAgeSpouse || null,
           monthlySpending: pref.projectionMonthlySpending ? Number(pref.projectionMonthlySpending) : null,
           withdrawalRate: pref.projectionWithdrawalRate ? Number(pref.projectionWithdrawalRate) : null,
+          maxWithdrawalAmount: pref.projectionMaxWithdrawalAmount ? Number(pref.projectionMaxWithdrawalAmount) : null,
           retirementYears: pref.projectionRetirementYears || null,
           marketScenario: pref.projectionMarketScenario || null,
         }}

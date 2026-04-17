@@ -22,6 +22,7 @@ export async function POST(request: Request) {
   if (body.ssClaimAgeSpouse !== undefined) data.projectionSSClaimAgeSpouse = body.ssClaimAgeSpouse;
   if (body.monthlySpending !== undefined) data.projectionMonthlySpending = String(body.monthlySpending);
   if (body.withdrawalRate !== undefined) data.projectionWithdrawalRate = String(body.withdrawalRate);
+  if (body.maxWithdrawalAmount !== undefined) data.projectionMaxWithdrawalAmount = body.maxWithdrawalAmount != null ? String(body.maxWithdrawalAmount) : null;
   if (body.retirementYears !== undefined) data.projectionRetirementYears = body.retirementYears;
   if (body.marketScenario !== undefined) data.projectionMarketScenario = body.marketScenario;
 
@@ -45,6 +46,7 @@ export async function GET() {
       ssClaimAgeSpouse: userPreferences.projectionSSClaimAgeSpouse,
       monthlySpending: userPreferences.projectionMonthlySpending,
       withdrawalRate: userPreferences.projectionWithdrawalRate,
+      maxWithdrawalAmount: userPreferences.projectionMaxWithdrawalAmount,
       retirementYears: userPreferences.projectionRetirementYears,
       marketScenario: userPreferences.projectionMarketScenario,
     })

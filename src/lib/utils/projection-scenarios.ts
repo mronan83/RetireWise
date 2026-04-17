@@ -119,6 +119,7 @@ export function runDetailedProjection(params: {
   inflationPct: number;
   annualExpenses: number;
   withdrawalRatePct?: number; // if set, withdrawals = max(expenses, portfolio * rate)
+  maxAnnualWithdrawal?: number; // cap on annual withdrawal (null/0 = unlimited)
   annualSSIncome: number;
   ssStartYear: number; // year when SS starts (0-indexed from now)
 }): DetailedProjection {
@@ -132,6 +133,7 @@ export function runDetailedProjection(params: {
     inflationPct,
     annualExpenses,
     withdrawalRatePct,
+    maxAnnualWithdrawal,
     annualSSIncome,
     ssStartYear,
   } = params;
@@ -225,7 +227,12 @@ export function runDetailedProjection(params: {
         (s, ap) => s + ap.projectedValues[ap.projectedValues.length - 1],
         0
       );
-      const rateBasedWithdrawal = withdrawalRatePct ? totalCurrent * (withdrawalRatePct / 100) : 0;
+      let rateBasedWithdrawal = withdrawalRatePct ? totalCurrent * (withdrawalRatePct / 100) : 0;
+
+      // Apply max annual withdrawal cap if set
+      if (maxAnnualWithdrawal && maxAnnualWithdrawal > 0) {
+        rateBasedWithdrawal = Math.min(rateBasedWithdrawal, maxAnnualWithdrawal);
+      }
 
       // Use the higher of expense-based or rate-based withdrawal
       const needed = withdrawalRatePct

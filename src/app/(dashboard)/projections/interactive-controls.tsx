@@ -12,6 +12,7 @@ import {
   ReferenceLine,
 } from "recharts";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Slider } from "@/components/ui/slider";
 import { Badge } from "@/components/ui/badge";
@@ -63,6 +64,7 @@ type Props = {
     ssClaimAgeSpouse: number | null;
     monthlySpending: number | null;
     withdrawalRate: number | null;
+    maxWithdrawalAmount: number | null;
     retirementYears: number | null;
     marketScenario: string | null;
   };
@@ -99,6 +101,9 @@ export function InteractiveProjections({
   const [spouseSSAge, setSpouseSSAge] = useState(savedControls?.ssClaimAgeSpouse || spouseFRA || 67);
   const [monthlySpending, setMonthlySpending] = useState(savedControls?.monthlySpending || monthlyExpenses);
   const [withdrawalRatePct, setWithdrawalRatePct] = useState(savedControls?.withdrawalRate || 4.0);
+  const [maxWithdrawalAmount, setMaxWithdrawalAmount] = useState<number | null>(
+    savedControls?.maxWithdrawalAmount ?? null
+  );
   const [retirementYears, setRetirementYears] = useState(savedControls?.retirementYears || 35);
   const [selectedScenario, setSelectedScenario] = useState<string>(savedControls?.marketScenario || "moderate");
 
@@ -109,6 +114,7 @@ export function InteractiveProjections({
   const updateSpouseSSAge = (v: number) => { setSpouseSSAge(v); saveControls({ ssClaimAgeSpouse: v }); };
   const updateSpending = (v: number) => { setMonthlySpending(v); saveControls({ monthlySpending: v }); };
   const updateWithdrawalRate = (v: number) => { setWithdrawalRatePct(v); saveControls({ withdrawalRate: v }); };
+  const updateMaxWithdrawal = (v: number | null) => { setMaxWithdrawalAmount(v); saveControls({ maxWithdrawalAmount: v }); };
   const updateRetirementYears = (v: number) => { setRetirementYears(v); saveControls({ retirementYears: v }); };
   const updateScenario = (v: string) => { setSelectedScenario(v); saveControls({ marketScenario: v }); };
 
@@ -139,6 +145,7 @@ export function InteractiveProjections({
         inflationPct: scenario.inflationPct,
         annualExpenses: monthlySpending * 12,
         withdrawalRatePct,
+        maxAnnualWithdrawal: maxWithdrawalAmount || undefined,
         annualSSIncome: combinedSSAnnual,
         ssStartYear,
       }),
@@ -172,7 +179,10 @@ export function InteractiveProjections({
         } else {
           // Grow withdrawals with inflation each year of retirement
           const retYear = y - yearsToRetirement;
-          const rateBasedWithdrawal = portfolio * (withdrawalRatePct / 100);
+          let rateBasedWithdrawal = portfolio * (withdrawalRatePct / 100);
+          if (maxWithdrawalAmount && maxWithdrawalAmount > 0) {
+            rateBasedWithdrawal = Math.min(rateBasedWithdrawal, maxWithdrawalAmount);
+          }
           const inflatedExpenseWithdrawal = expenseBasedWithdrawal * Math.pow(1 + scenario.inflationPct / 100, retYear);
           const withdrawal = Math.max(inflatedExpenseWithdrawal, rateBasedWithdrawal);
           portfolio = portfolio + growth - Math.min(withdrawal, portfolio + growth);
@@ -208,7 +218,7 @@ export function InteractiveProjections({
       worstCase: percentiles.p10[yearsToRetirement - 1] || 0,
       bestCase: percentiles.p90[yearsToRetirement - 1] || 0,
     };
-  }, [accounts, annualContributions, yearsToRetirement, retirementYears, currentAge, scenario, monthlySpending, withdrawalRatePct, combinedSSAnnual]);
+  }, [accounts, annualContributions, yearsToRetirement, retirementYears, currentAge, scenario, monthlySpending, withdrawalRatePct, maxWithdrawalAmount, combinedSSAnnual]);
 
   // Chart data
   const chartData = projection.ages.map((age, i) => ({
@@ -220,7 +230,11 @@ export function InteractiveProjections({
   const portfolioAtRetirement = projection.totalValues[yearsToRetirement - 1] || 0;
   const portfolioAt80 = projection.totalValues[80 - currentAge - 1] || 0;
   const portfolioAt90 = projection.totalValues[90 - currentAge - 1] || 0;
-  const monthlyFromPortfolio = Math.round((portfolioAtRetirement * (withdrawalRatePct / 100)) / 12);
+  let annualFromPortfolio = portfolioAtRetirement * (withdrawalRatePct / 100);
+  if (maxWithdrawalAmount && maxWithdrawalAmount > 0) {
+    annualFromPortfolio = Math.min(annualFromPortfolio, maxWithdrawalAmount);
+  }
+  const monthlyFromPortfolio = Math.round(annualFromPortfolio / 12);
   const totalMonthlyRetirementIncome = monthlyFromPortfolio + selfSSMonthly + spouseSSMonthly;
 
   // Sustainability analysis: does the portfolio last the full retirement period?
@@ -353,23 +367,37 @@ export function InteractiveProjections({
               <div className="flex items-center justify-between">
                 <Label className="text-sm">Withdrawal Rate</Label>
                 <Badge variant="outline" className="font-mono">
-                  {withdrawalRatePct}%
+                  {withdrawalRatePct}%{maxWithdrawalAmount ? ` (max ${formatCurrency(maxWithdrawalAmount)}/yr)` : ""}
                 </Badge>
               </div>
               <Slider
                 value={[withdrawalRatePct * 10]}
                 onValueChange={(v) => updateWithdrawalRate((Array.isArray(v) ? v[0] : v) / 10)}
-                min={20}
-                max={60}
-                step={5}
+                min={10}
+                max={80}
+                step={1}
               />
               <div className="flex justify-between text-xs text-muted-foreground">
-                <span>2% (conservative)</span>
-                <span>6% (aggressive)</span>
+                <span>1% (conservative)</span>
+                <span>8% (aggressive)</span>
               </div>
-              <p className="text-xs text-muted-foreground">
-                Annual % of portfolio withdrawn in retirement. 4% is the traditional &quot;safe withdrawal rate&quot;.
-              </p>
+              <div className="space-y-1">
+                <Label className="text-xs">Max annual withdrawal ($)</Label>
+                <Input
+                  type="number"
+                  step="0.01"
+                  placeholder="Unlimited (leave blank)"
+                  value={maxWithdrawalAmount ?? ""}
+                  onChange={(e) => {
+                    const val = e.target.value ? Number(e.target.value) : null;
+                    updateMaxWithdrawal(val);
+                  }}
+                  className="h-7 text-xs font-mono"
+                />
+                <p className="text-[10px] text-muted-foreground">
+                  Cap the annual withdrawal at this dollar amount regardless of the rate. Blank = no cap (rate drives everything).
+                </p>
+              </div>
             </div>
           </div>
 
