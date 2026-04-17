@@ -454,6 +454,18 @@ export const contributions = pgTable("contributions", {
   updatedAt: timestamp("updated_at").defaultNow().notNull(),
 });
 
+// IRS Contribution Limits (updated annually)
+export const irsLimits = pgTable("irs_limits", {
+  id: uuid("id").defaultRandom().primaryKey(),
+  taxYear: integer("tax_year").notNull(),
+  accountType: text("account_type").notNull(), // "401k", "ira", "hsa", etc.
+  limitUnder50: decimal("limit_under_50", { precision: 10, scale: 2 }).notNull(),
+  limitOver50: decimal("limit_over_50", { precision: 10, scale: 2 }).notNull(),
+  limitAge60to63: decimal("limit_age_60_to_63", { precision: 10, scale: 2 }),
+  notes: text("notes"),
+  updatedAt: timestamp("updated_at").defaultNow().notNull(),
+});
+
 // Net Worth: Real Estate
 export const realEstate = pgTable("real_estate", {
   id: uuid("id").defaultRandom().primaryKey(),

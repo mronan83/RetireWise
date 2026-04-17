@@ -17,6 +17,7 @@ import { SocialSecurityForm } from "./social-security-form";
 import { ContributionsSection } from "./contributions-section";
 import { AiProviderSection } from "./ai-provider-section";
 import { HouseholdSharing } from "./household-sharing";
+import { IrsLimitsSection } from "./irs-limits-section";
 
 export default async function SettingsPage() {
   const { userId } = await auth();
@@ -144,6 +145,15 @@ export default async function SettingsPage() {
               isActivelyContributing: a.isActivelyContributing,
             }))}
           />
+        </CardContent>
+      </Card>
+
+      <Card>
+        <CardHeader>
+          <CardTitle>IRS Contribution Limits</CardTitle>
+        </CardHeader>
+        <CardContent>
+          <IrsLimitsSection />
         </CardContent>
       </Card>
 
