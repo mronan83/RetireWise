@@ -85,6 +85,15 @@ export const DEFAULT_TARGET_ALLOCATION = {
   cash: 5,
 };
 
+// 2025 IRS contribution limits (employee portion only)
+export const IRS_LIMITS: Record<string, { under50: number; over50: number; label: string }> = {
+  "401k": { under50: 23500, over50: 31000, label: "401(k) limit" },
+  "403b": { under50: 23500, over50: 31000, label: "403(b) limit" },
+  ira_traditional: { under50: 7000, over50: 8000, label: "Traditional IRA limit" },
+  ira_roth: { under50: 7000, over50: 8000, label: "Roth IRA limit" },
+  hsa: { under50: 4300, over50: 5550, label: "HSA limit (family)" },
+};
+
 export const AI_MODEL = "anthropic/claude-sonnet-4.6";
 
 export const AI_DISCLAIMER =

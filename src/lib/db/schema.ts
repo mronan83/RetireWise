@@ -423,6 +423,19 @@ export const contributions = pgTable("contributions", {
     .notNull()
     .default("per_paycheck_biweekly"),
 
+  // Annual escalation (auto-increase)
+  hasAnnualEscalation: boolean("has_annual_escalation").default(false),
+  // How much to increase per year (e.g., 1 = +1% of salary per year for percent method, or +$500/yr for fixed)
+  annualEscalationAmount: decimal("annual_escalation_amount", {
+    precision: 10,
+    scale: 2,
+  }),
+  // Max annual contribution cap (e.g., IRS 401k limit $23,500 for 2025)
+  maxAnnualContribution: decimal("max_annual_contribution", {
+    precision: 20,
+    scale: 2,
+  }),
+
   // Employer match (optional — only applies to employer-sponsored plans)
   hasEmployerMatch: boolean("has_employer_match").default(false),
   // Match formula: employer matches at this rate (e.g., 1.0 = dollar for dollar, 0.5 = 50 cents per dollar)

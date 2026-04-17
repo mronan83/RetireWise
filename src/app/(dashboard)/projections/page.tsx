@@ -153,11 +153,11 @@ export default async function ProjectionsPage() {
           const value = acctHoldings.reduce((s, h) => s + Number(h.currentValue), 0);
 
           // Match contribution line items to this account by owner + accountType
+          const matchingContribs = contribs.filter(
+            (c) => c.owner === a.owner && c.accountType === a.accountType
+          );
           let acctAnnualContribution = 0;
           if (a.isActivelyContributing) {
-            const matchingContribs = contribs.filter(
-              (c) => c.owner === a.owner && c.accountType === a.accountType
-            );
             for (const c of matchingContribs) {
               const salary = c.owner === "self" ? selfSalary : spouseSalary;
               let annual = 0;
@@ -181,6 +181,17 @@ export default async function ProjectionsPage() {
             }
           }
 
+          // Get escalation from matching contributions
+          const escalationContrib = matchingContribs.find((c) => c.hasAnnualEscalation);
+          const annualEscalation = escalationContrib
+            ? Number(escalationContrib.annualEscalationAmount || 0)
+            : 0;
+          const maxAnnual = escalationContrib?.maxAnnualContribution
+            ? Number(escalationContrib.maxAnnualContribution)
+            : 0;
+          const contribMethod = matchingContribs[0]?.contributionMethod || "fixed_amount";
+          const salary = a.owner === "self" ? selfSalary : spouseSalary;
+
           return {
             name: a.name,
             owner: a.owner,
@@ -189,6 +200,10 @@ export default async function ProjectionsPage() {
             value,
             isActivelyContributing: a.isActivelyContributing,
             annualContribution: Math.round(acctAnnualContribution),
+            annualEscalation,
+            maxAnnualContribution: maxAnnual,
+            contributionMethod: contribMethod,
+            salary,
           };
         }).filter((a) => a.value > 0 || a.annualContribution > 0)}
         currentAge={pref.currentAge}

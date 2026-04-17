@@ -41,6 +41,10 @@ type AccountInput = {
   value: number;
   isActivelyContributing: boolean;
   annualContribution: number;
+  annualEscalation: number;
+  maxAnnualContribution: number;
+  contributionMethod: string;
+  salary: number;
 };
 
 type Props = {

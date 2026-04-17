@@ -103,7 +103,14 @@ export type DetailedProjection = {
 };
 
 export function runDetailedProjection(params: {
-  accounts: { name: string; owner: string; type: string; taxTreatment: string; value: number; isActivelyContributing: boolean; annualContribution: number }[];
+  accounts: {
+    name: string; owner: string; type: string; taxTreatment: string;
+    value: number; isActivelyContributing: boolean; annualContribution: number;
+    annualEscalation: number; // amount to add per year (% points for pct method, $ for fixed)
+    maxAnnualContribution: number; // cap (0 = no cap)
+    contributionMethod: string; // "percent_of_salary" | "fixed_amount"
+    salary: number; // needed to recalculate pct-based contributions with escalation
+  }[];
   totalAnnualContributions: number; // kept for backward compat / summary
   yearsToRetirement: number;
   yearsInRetirement: number;
@@ -172,10 +179,30 @@ export function runDetailedProjection(params: {
       let newVal = prev + growth;
 
       if (!isRetirement) {
-        // Add this account's specific annual contribution
-        const acct = accounts[accountProjs.indexOf(ap)];
-        if (acct.annualContribution > 0) {
-          newVal += acct.annualContribution;
+        // Add this account's annual contribution with escalation
+        const idx = accountProjs.indexOf(ap);
+        const acct = accounts[idx];
+        if (acct.annualContribution > 0 || acct.annualEscalation > 0) {
+          // Calculate escalated contribution for year y
+          let yearContrib = acct.annualContribution;
+          if (acct.annualEscalation > 0 && y > 0) {
+            if (acct.contributionMethod === "percent_of_salary" && acct.salary > 0) {
+              // Base % + escalation per year, recalculate from salary
+              const basePct = acct.annualContribution > 0 && acct.salary > 0
+                ? (acct.annualContribution / acct.salary) * 100
+                : 0;
+              const escalatedPct = basePct + acct.annualEscalation * y;
+              yearContrib = (escalatedPct / 100) * acct.salary;
+            } else {
+              // Fixed amount + $ increase per year
+              yearContrib = acct.annualContribution + acct.annualEscalation * y;
+            }
+          }
+          // Apply cap
+          if (acct.maxAnnualContribution > 0) {
+            yearContrib = Math.min(yearContrib, acct.maxAnnualContribution);
+          }
+          newVal += Math.max(0, yearContrib);
         }
       }
 

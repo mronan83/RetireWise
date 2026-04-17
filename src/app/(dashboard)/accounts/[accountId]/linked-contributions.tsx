@@ -176,6 +176,7 @@ function QuickAddContribution({
     "percent_of_salary"
   );
   const [hasMatch, setHasMatch] = useState(false);
+  const [hasEscalation, setHasEscalation] = useState(false);
 
   const [error, formAction, isPending] = useActionState(
     async (_prev: string | null, formData: FormData) => {
@@ -319,6 +320,47 @@ function QuickAddContribution({
                 step="0.5"
                 placeholder="5"
               />
+            </div>
+          </div>
+        )}
+      </div>
+
+      <div className="space-y-3 rounded-lg border p-3">
+        <div className="flex items-center gap-3">
+          <Switch
+            id="qhasEscalation"
+            name="hasAnnualEscalation"
+            checked={hasEscalation}
+            onCheckedChange={setHasEscalation}
+          />
+          <Label htmlFor="qhasEscalation" className="text-sm">
+            Annual auto-increase
+          </Label>
+        </div>
+        {hasEscalation && (
+          <div className="grid grid-cols-2 gap-4">
+            <div className="space-y-1">
+              <Label className="text-xs">
+                {method === "percent_of_salary" ? "Increase/yr (% pts)" : "Increase/yr ($)"}
+              </Label>
+              <Input
+                name="annualEscalationAmount"
+                type="number"
+                step="0.5"
+                placeholder={method === "percent_of_salary" ? "1" : "500"}
+              />
+            </div>
+            <div className="space-y-1">
+              <Label className="text-xs">Max annual ($)</Label>
+              <Input
+                name="maxAnnualContribution"
+                type="number"
+                step="100"
+                placeholder="23500"
+              />
+              <p className="text-[10px] text-muted-foreground">
+                IRS 2025: 401k $23,500 / IRA $7,000
+              </p>
             </div>
           </div>
         )}

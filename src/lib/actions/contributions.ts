@@ -32,6 +32,9 @@ const contributionSchema = z.object({
     "quarterly",
     "annually",
   ]),
+  hasAnnualEscalation: z.coerce.boolean().optional(),
+  annualEscalationAmount: z.coerce.number().min(0).optional(),
+  maxAnnualContribution: z.coerce.number().min(0).optional(),
   hasEmployerMatch: z.coerce.boolean().optional(),
   employerMatchRate: z.coerce.number().min(0).max(10).optional(),
   employerMatchMaxPercent: z.coerce.number().min(0).max(100).optional(),
@@ -49,6 +52,9 @@ export async function createContribution(formData: FormData) {
     contributionPercent: formData.get("contributionPercent") || undefined,
     contributionAmount: formData.get("contributionAmount") || undefined,
     frequency: formData.get("frequency"),
+    hasAnnualEscalation: formData.get("hasAnnualEscalation") === "on",
+    annualEscalationAmount: formData.get("annualEscalationAmount") || undefined,
+    maxAnnualContribution: formData.get("maxAnnualContribution") || undefined,
     hasEmployerMatch: formData.get("hasEmployerMatch") === "on",
     employerMatchRate: formData.get("employerMatchRate") || undefined,
     employerMatchMaxPercent:
@@ -69,6 +75,13 @@ export async function createContribution(formData: FormData) {
       ? String(parsed.contributionAmount)
       : null,
     frequency: parsed.frequency,
+    hasAnnualEscalation: parsed.hasAnnualEscalation || false,
+    annualEscalationAmount: parsed.annualEscalationAmount
+      ? String(parsed.annualEscalationAmount)
+      : null,
+    maxAnnualContribution: parsed.maxAnnualContribution
+      ? String(parsed.maxAnnualContribution)
+      : null,
     hasEmployerMatch: parsed.hasEmployerMatch || false,
     employerMatchRate: parsed.employerMatchRate
       ? String(parsed.employerMatchRate)

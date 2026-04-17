@@ -261,6 +261,15 @@ function ContributionRow({
                 {Number(c.employerMatchMaxPercent)}%
               </span>
             )}
+            {c.hasAnnualEscalation && (
+              <span className="text-blue-500 ml-2">
+                +{Number(c.annualEscalationAmount)}
+                {c.contributionMethod === "percent_of_salary" ? "%" : "/yr"}
+                {c.maxAnnualContribution && (
+                  <> cap {formatCurrency(Number(c.maxAnnualContribution))}</>
+                )}
+              </span>
+            )}
           </div>
           <div className="text-xs mt-0.5">
             {matchedAccountName ? (
@@ -299,6 +308,7 @@ function AddContributionForm({ onSuccess }: { onSuccess: () => void }) {
     "percent_of_salary"
   );
   const [hasMatch, setHasMatch] = useState(false);
+  const [hasEscalation, setHasEscalation] = useState(false);
 
   const [error, formAction, isPending] = useActionState(
     async (_prev: string | null, formData: FormData) => {
@@ -490,6 +500,61 @@ function AddContributionForm({ onSuccess }: { onSuccess: () => void }) {
               />
               <p className="text-xs text-muted-foreground">
                 Employer matches your contributions up to this % of salary
+              </p>
+            </div>
+          </div>
+        )}
+      </div>
+
+      <div className="space-y-3 rounded-lg border p-3">
+        <div className="flex items-center gap-3">
+          <Switch
+            id="hasAnnualEscalation"
+            name="hasAnnualEscalation"
+            checked={hasEscalation}
+            onCheckedChange={setHasEscalation}
+          />
+          <Label htmlFor="hasAnnualEscalation" className="text-sm">
+            Annual auto-increase
+          </Label>
+        </div>
+
+        {hasEscalation && (
+          <div className="grid gap-4 sm:grid-cols-2">
+            <div className="space-y-1">
+              <Label htmlFor="annualEscalationAmount" className="text-xs">
+                {method === "percent_of_salary"
+                  ? "Increase per year (% points)"
+                  : "Increase per year ($)"}
+              </Label>
+              <Input
+                id="annualEscalationAmount"
+                name="annualEscalationAmount"
+                type="number"
+                step="0.5"
+                min="0"
+                placeholder={method === "percent_of_salary" ? "1" : "500"}
+              />
+              <p className="text-xs text-muted-foreground">
+                {method === "percent_of_salary"
+                  ? "e.g., 1 = increase from 6% to 7% next year"
+                  : "e.g., 500 = increase by $500/yr"}
+              </p>
+            </div>
+            <div className="space-y-1">
+              <Label htmlFor="maxAnnualContribution" className="text-xs">
+                Max annual contribution ($)
+              </Label>
+              <Input
+                id="maxAnnualContribution"
+                name="maxAnnualContribution"
+                type="number"
+                step="100"
+                min="0"
+                placeholder="23500"
+              />
+              <p className="text-xs text-muted-foreground">
+                IRS 2025 limits: 401k $23,500 (under 50) / $31,000 (50+), IRA $7,000 / $8,000
               </p>
             </div>
           </div>
