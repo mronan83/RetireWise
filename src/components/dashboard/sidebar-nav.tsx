@@ -14,6 +14,7 @@ import {
   TrendingUp,
   Landmark,
   UserCircle,
+  Calculator,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 
@@ -25,6 +26,7 @@ const navItems = [
   { href: "/net-worth", label: "Net Worth", icon: Landmark },
   { href: "/analysis", label: "AI Analysis", icon: Brain },
   { href: "/projections", label: "Projections", icon: LineChart },
+  { href: "/analytics", label: "Analytics", icon: Calculator },
   { href: "/import", label: "Import Data", icon: Upload },
   { href: "/settings", label: "Settings", icon: Settings },
   { href: "/account", label: "Account", icon: UserCircle },
