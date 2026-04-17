@@ -103,8 +103,8 @@ export type DetailedProjection = {
 };
 
 export function runDetailedProjection(params: {
-  accounts: { name: string; owner: string; type: string; taxTreatment: string; value: number; isActivelyContributing: boolean }[];
-  totalAnnualContributions: number;
+  accounts: { name: string; owner: string; type: string; taxTreatment: string; value: number; isActivelyContributing: boolean; annualContribution: number }[];
+  totalAnnualContributions: number; // kept for backward compat / summary
   yearsToRetirement: number;
   yearsInRetirement: number;
   startAge: number;
@@ -172,11 +172,10 @@ export function runDetailedProjection(params: {
       let newVal = prev + growth;
 
       if (!isRetirement) {
-        // Only distribute contributions to actively contributing accounts
+        // Add this account's specific annual contribution
         const acct = accounts[accountProjs.indexOf(ap)];
-        if (acct.isActivelyContributing && contributingValue > 0) {
-          const share = acct.value / contributingValue;
-          newVal += totalAnnualContributions * share;
+        if (acct.annualContribution > 0) {
+          newVal += acct.annualContribution;
         }
       }
 
@@ -208,7 +207,8 @@ export function runDetailedProjection(params: {
     }
 
     withdrawalsArr.push(Math.round(yearWithdrawal));
-    contributionsArr.push(isRetirement ? 0 : Math.round(totalAnnualContributions));
+    const yearContribs = isRetirement ? 0 : accounts.reduce((s, a) => s + a.annualContribution, 0);
+    contributionsArr.push(Math.round(yearContribs));
 
     const yearTotal = accountProjs.reduce(
       (s, ap) => s + ap.projectedValues[ap.projectedValues.length - 1],

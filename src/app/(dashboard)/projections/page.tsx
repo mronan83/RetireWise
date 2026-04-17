@@ -151,6 +151,36 @@ export default async function ProjectionsPage() {
         accounts={accountsList.map((a) => {
           const acctHoldings = holdings.filter((h) => h.accountId === a.id);
           const value = acctHoldings.reduce((s, h) => s + Number(h.currentValue), 0);
+
+          // Match contribution line items to this account by owner + accountType
+          let acctAnnualContribution = 0;
+          if (a.isActivelyContributing) {
+            const matchingContribs = contribs.filter(
+              (c) => c.owner === a.owner && c.accountType === a.accountType
+            );
+            for (const c of matchingContribs) {
+              const salary = c.owner === "self" ? selfSalary : spouseSalary;
+              let annual = 0;
+              if (c.contributionMethod === "percent_of_salary" && salary > 0) {
+                annual = (Number(c.contributionPercent || 0) / 100) * salary;
+              } else if (c.contributionMethod === "fixed_amount") {
+                const freq: Record<string, number> = {
+                  per_paycheck_biweekly: 26, per_paycheck_semimonthly: 24,
+                  monthly: 12, quarterly: 4, annually: 1,
+                };
+                annual = Number(c.contributionAmount || 0) * (freq[c.frequency] || 1);
+              }
+              if (c.hasEmployerMatch && salary > 0) {
+                const yourPct = c.contributionMethod === "percent_of_salary"
+                  ? Number(c.contributionPercent || 0)
+                  : salary > 0 ? (annual / salary) * 100 : 0;
+                const matchablePct = Math.min(yourPct, Number(c.employerMatchMaxPercent || 0));
+                annual += (matchablePct / 100) * salary * Number(c.employerMatchRate || 0);
+              }
+              acctAnnualContribution += annual;
+            }
+          }
+
           return {
             name: a.name,
             owner: a.owner,
@@ -158,6 +188,7 @@ export default async function ProjectionsPage() {
             taxTreatment: a.taxTreatment,
             value,
             isActivelyContributing: a.isActivelyContributing,
+            annualContribution: Math.round(acctAnnualContribution),
           };
         }).filter((a) => a.value > 0)}
         currentAge={pref.currentAge}
