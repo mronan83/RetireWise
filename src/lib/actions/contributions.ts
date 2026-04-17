@@ -9,6 +9,7 @@ import { contributions } from "../db/schema";
 
 const contributionSchema = z.object({
   owner: z.enum(["self", "spouse"]),
+  accountId: z.string().optional(),
   label: z.string().min(1, "Label is required"),
   accountType: z.enum([
     "401k",
@@ -46,6 +47,7 @@ export async function createContribution(formData: FormData) {
 
   const parsed = contributionSchema.parse({
     owner: formData.get("owner"),
+    accountId: formData.get("accountId") || undefined,
     label: formData.get("label"),
     accountType: formData.get("accountType"),
     contributionMethod: formData.get("contributionMethod"),
@@ -65,6 +67,7 @@ export async function createContribution(formData: FormData) {
   await db.insert(contributions).values({
     clerkId: userId,
     owner: parsed.owner,
+    accountId: parsed.accountId || null,
     label: parsed.label,
     accountType: parsed.accountType,
     contributionMethod: parsed.contributionMethod,

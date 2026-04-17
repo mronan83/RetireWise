@@ -80,6 +80,7 @@ function annualizeContribution(
 }
 
 type AccountInfo = {
+  id: string;
   name: string;
   owner: string;
   accountType: string;
@@ -184,7 +185,7 @@ export function ContributionsSection({
             );
             // Find matched account
             const matchedAccount = accounts.find(
-              (a) => a.owner === c.owner && a.accountType === c.accountType && a.isActivelyContributing
+              (a) => c.accountId ? a.id === c.accountId : (a.owner === c.owner && a.accountType === c.accountType && a.isActivelyContributing)
             );
             return (
               <ContributionRow
@@ -211,7 +212,7 @@ export function ContributionsSection({
           <DialogHeader>
             <DialogTitle>Add Contribution</DialogTitle>
           </DialogHeader>
-          <AddContributionForm onSuccess={() => setAddOpen(false)} />
+          <AddContributionForm accounts={accounts} onSuccess={() => setAddOpen(false)} />
         </DialogContent>
       </Dialog>
     </div>
@@ -303,12 +304,15 @@ function ContributionRow({
   );
 }
 
-function AddContributionForm({ onSuccess }: { onSuccess: () => void }) {
+function AddContributionForm({ accounts, onSuccess }: { accounts: AccountInfo[]; onSuccess: () => void }) {
   const [method, setMethod] = useState<"percent_of_salary" | "fixed_amount">(
     "percent_of_salary"
   );
   const [hasMatch, setHasMatch] = useState(false);
   const [hasEscalation, setHasEscalation] = useState(false);
+  const [selectedAccountId, setSelectedAccountId] = useState(accounts[0]?.id || "");
+
+  const selectedAccount = accounts.find((a) => a.id === selectedAccountId);
 
   const [error, formAction, isPending] = useActionState(
     async (_prev: string | null, formData: FormData) => {
@@ -331,38 +335,34 @@ function AddContributionForm({ onSuccess }: { onSuccess: () => void }) {
         </div>
       )}
 
-      <div className="grid gap-4 sm:grid-cols-2">
-        <div className="space-y-1">
-          <Label>Who</Label>
-          <Select name="owner" defaultValue="self">
-            <SelectTrigger>
-              <SelectValue />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value="self">Mine</SelectItem>
-              <SelectItem value="spouse">Spouse</SelectItem>
-            </SelectContent>
-          </Select>
-        </div>
-        <div className="space-y-1">
-          <Label>Account Type</Label>
-          <Select name="accountType" defaultValue="401k">
-            <SelectTrigger>
-              <SelectValue />
-            </SelectTrigger>
-            <SelectContent>
-              {Object.entries(ACCOUNT_TYPE_LABELS)
-                .filter(([k]) => k !== "social_security")
-                .map(([value, label]) => (
-                  <SelectItem key={value} value={value}>
-                    {label}
-                  </SelectItem>
-                ))}
-            </SelectContent>
-          </Select>
-        </div>
+      {/* Hidden fields auto-filled from selected account */}
+      <input type="hidden" name="owner" value={selectedAccount?.owner || "self"} />
+      <input type="hidden" name="accountType" value={selectedAccount?.accountType || "401k"} />
+      <input type="hidden" name="accountId" value={selectedAccountId} />
+
+      <div className="space-y-1">
+        <Label>Which account?</Label>
+        <Select
+          value={selectedAccountId}
+          onValueChange={(v) => v && setSelectedAccountId(v)}
+        >
+          <SelectTrigger>
+            <SelectValue placeholder="Select an account" />
+          </SelectTrigger>
+          <SelectContent>
+            {accounts.filter((a) => a.isActivelyContributing).map((a) => (
+              <SelectItem key={a.id} value={a.id}>
+                {a.name} ({ACCOUNT_TYPE_LABELS[a.accountType]}) — {ACCOUNT_OWNER_LABELS[a.owner]}
+              </SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
+        <p className="text-xs text-muted-foreground">
+          Only actively contributing accounts are shown
+        </p>
       </div>
 
+      {/* Keep account type selector as hidden fallback - removed visible one */}
       <div className="space-y-1">
         <Label htmlFor="label">Label</Label>
         <Input

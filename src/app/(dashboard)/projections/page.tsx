@@ -152,9 +152,9 @@ export default async function ProjectionsPage() {
           const acctHoldings = holdings.filter((h) => h.accountId === a.id);
           const value = acctHoldings.reduce((s, h) => s + Number(h.currentValue), 0);
 
-          // Match contribution line items to this account by owner + accountType
+          // Match contributions: prefer direct accountId link, fall back to owner+type
           const matchingContribs = contribs.filter(
-            (c) => c.owner === a.owner && c.accountType === a.accountType
+            (c) => c.accountId ? c.accountId === a.id : (c.owner === a.owner && c.accountType === a.accountType)
           );
           let acctAnnualContribution = 0;
           if (a.isActivelyContributing) {

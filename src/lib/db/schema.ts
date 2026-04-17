@@ -403,7 +403,8 @@ export const contributions = pgTable("contributions", {
   clerkId: text("clerk_id").notNull(),
   owner: accountOwnerEnum("owner").notNull(),
 
-  // What this contribution is for
+  // What this contribution is for — linked to a specific account
+  accountId: uuid("account_id").references(() => accounts.id, { onDelete: "set null" }),
   label: text("label").notNull(),
   accountType: accountTypeEnum("account_type").notNull(),
 

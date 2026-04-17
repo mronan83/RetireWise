@@ -44,9 +44,9 @@ export default async function AccountDetailPage({
     0
   );
 
-  // Find contributions linked to this account (by owner + accountType)
+  // Find contributions linked to this account (prefer direct accountId, fall back to owner+type)
   const linkedContribs = allContributions.filter(
-    (c) => c.owner === account.owner && c.accountType === account.accountType
+    (c) => c.accountId ? c.accountId === account.id : (c.owner === account.owner && c.accountType === account.accountType)
   );
 
   const holdingsTableData = holdingsList.map((h) => {

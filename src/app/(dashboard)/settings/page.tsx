@@ -139,6 +139,7 @@ export default async function SettingsPage() {
                 : null
             }
             accounts={accountsList.map((a) => ({
+              id: a.id,
               name: a.name,
               owner: a.owner,
               accountType: a.accountType,

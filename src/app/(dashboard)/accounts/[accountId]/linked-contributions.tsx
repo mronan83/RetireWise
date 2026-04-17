@@ -193,9 +193,10 @@ function QuickAddContribution({
 
   return (
     <form action={formAction} className="space-y-4">
-      {/* Pre-fill owner and account type from the account */}
+      {/* Pre-fill from the account — direct link by accountId */}
       <input type="hidden" name="owner" value={account.owner} />
       <input type="hidden" name="accountType" value={account.accountType} />
+      <input type="hidden" name="accountId" value={account.id} />
 
       {error && (
         <div className="rounded-md bg-destructive/10 p-3 text-sm text-destructive">
