@@ -190,7 +190,7 @@ export default async function ProjectionsPage() {
             isActivelyContributing: a.isActivelyContributing,
             annualContribution: Math.round(acctAnnualContribution),
           };
-        }).filter((a) => a.value > 0)}
+        }).filter((a) => a.value > 0 || a.annualContribution > 0)}
         currentAge={pref.currentAge}
         retirementAge={pref.retirementAge}
         spouseAge={pref.spouseCurrentAge}

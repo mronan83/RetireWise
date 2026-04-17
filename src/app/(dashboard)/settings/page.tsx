@@ -2,6 +2,7 @@ import { auth } from "@clerk/nextjs/server";
 import { redirect } from "next/navigation";
 import { eq, and } from "drizzle-orm";
 import { getDb } from "@/lib/db";
+import { getAccounts } from "@/lib/queries/accounts";
 import {
   userPreferences,
   socialSecurityBenefits,
@@ -22,7 +23,7 @@ export default async function SettingsPage() {
   if (!userId) redirect("/sign-in");
 
   const db = getDb();
-  const [prefs, selfSS, spouseSS, contributionsList, householdData] = await Promise.all([
+  const [prefs, selfSS, spouseSS, contributionsList, householdData, accountsList] = await Promise.all([
     db
       .select()
       .from(userPreferences)
@@ -83,6 +84,7 @@ export default async function SettingsPage() {
         members,
       };
     })(),
+    getAccounts(userId),
   ]);
 
   const currentPrefs = prefs[0] || null;
@@ -135,6 +137,12 @@ export default async function SettingsPage() {
                 ? Number(currentPrefs.spouseAnnualSalary)
                 : null
             }
+            accounts={accountsList.map((a) => ({
+              name: a.name,
+              owner: a.owner,
+              accountType: a.accountType,
+              isActivelyContributing: a.isActivelyContributing,
+            }))}
           />
         </CardContent>
       </Card>

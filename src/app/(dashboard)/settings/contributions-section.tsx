@@ -79,16 +79,25 @@ function annualizeContribution(
   return { yourAnnual, matchAnnual };
 }
 
+type AccountInfo = {
+  name: string;
+  owner: string;
+  accountType: string;
+  isActivelyContributing: boolean;
+};
+
 type Props = {
   contributions: Contribution[];
   selfSalary: number | null;
   spouseSalary: number | null;
+  accounts?: AccountInfo[];
 };
 
 export function ContributionsSection({
   contributions: items,
   selfSalary,
   spouseSalary,
+  accounts = [],
 }: Props) {
   const [addOpen, setAddOpen] = useState(false);
   const [showMatch, setShowMatch] = useState(false);
@@ -173,12 +182,17 @@ export function ContributionsSection({
               c,
               salary
             );
+            // Find matched account
+            const matchedAccount = accounts.find(
+              (a) => a.owner === c.owner && a.accountType === c.accountType && a.isActivelyContributing
+            );
             return (
               <ContributionRow
                 key={c.id}
                 contribution={c}
                 yourAnnual={yourAnnual}
                 matchAnnual={matchAnnual}
+                matchedAccountName={matchedAccount?.name || null}
               />
             );
           })}
@@ -208,10 +222,12 @@ function ContributionRow({
   contribution: c,
   yourAnnual,
   matchAnnual,
+  matchedAccountName,
 }: {
   contribution: Contribution;
   yourAnnual: number;
   matchAnnual: number;
+  matchedAccountName: string | null;
 }) {
   const handleDelete = async () => {
     await deleteContribution(c.id);
@@ -243,6 +259,17 @@ function ContributionRow({
               <span className="text-green-500 ml-2">
                 + {Number(c.employerMatchRate)}:1 match up to{" "}
                 {Number(c.employerMatchMaxPercent)}%
+              </span>
+            )}
+          </div>
+          <div className="text-xs mt-0.5">
+            {matchedAccountName ? (
+              <span className="text-primary">
+                → {matchedAccountName}
+              </span>
+            ) : (
+              <span className="text-yellow-500">
+                No matching account
               </span>
             )}
           </div>
