@@ -118,6 +118,7 @@ export function runDetailedProjection(params: {
   returnPct: number;
   inflationPct: number;
   annualExpenses: number;
+  withdrawalRatePct?: number; // if set, withdrawals = max(expenses, portfolio * rate)
   annualSSIncome: number;
   ssStartYear: number; // year when SS starts (0-indexed from now)
 }): DetailedProjection {
@@ -130,6 +131,7 @@ export function runDetailedProjection(params: {
     returnPct,
     inflationPct,
     annualExpenses,
+    withdrawalRatePct,
     annualSSIncome,
     ssStartYear,
   } = params;
@@ -210,19 +212,26 @@ export function runDetailedProjection(params: {
     }
 
     // Withdrawals in retirement — expenses grow with inflation
+    // If withdrawal rate is set, use the higher of (expenses - SS) or (portfolio * rate)
     let yearWithdrawal = 0;
     if (isRetirement) {
       const retirementYear = y - yearsToRetirement;
       const inflatedExpenses = annualExpenses * Math.pow(1 + inflationPct / 100, retirementYear);
       const inflatedSS = yearSS * Math.pow(1 + inflationPct / 100, retirementYear);
-      const needed = Math.max(0, inflatedExpenses - inflatedSS);
-      let remaining = needed;
+      const expenseBasedWithdrawal = Math.max(0, inflatedExpenses - inflatedSS);
 
-      // Withdraw proportionally from all accounts
+      // Calculate rate-based withdrawal if withdrawal rate is specified
       const totalCurrent = accountProjs.reduce(
         (s, ap) => s + ap.projectedValues[ap.projectedValues.length - 1],
         0
       );
+      const rateBasedWithdrawal = withdrawalRatePct ? totalCurrent * (withdrawalRatePct / 100) : 0;
+
+      // Use the higher of expense-based or rate-based withdrawal
+      const needed = withdrawalRatePct
+        ? Math.max(expenseBasedWithdrawal, rateBasedWithdrawal)
+        : expenseBasedWithdrawal;
+      let remaining = needed;
 
       if (totalCurrent > 0 && remaining > 0) {
         for (const ap of accountProjs) {

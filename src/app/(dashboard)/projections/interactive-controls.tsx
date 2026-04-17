@@ -138,10 +138,11 @@ export function InteractiveProjections({
         returnPct: scenario.returnPct,
         inflationPct: scenario.inflationPct,
         annualExpenses: monthlySpending * 12,
+        withdrawalRatePct,
         annualSSIncome: combinedSSAnnual,
         ssStartYear,
       }),
-    [accounts, annualContributions, yearsToRetirement, retirementYears, currentAge, scenario, monthlySpending, combinedSSAnnual, ssStartYear]
+    [accounts, annualContributions, yearsToRetirement, retirementYears, currentAge, scenario, monthlySpending, withdrawalRatePct, combinedSSAnnual, ssStartYear]
   );
 
   // Run Monte Carlo (client-side, reactive to all controls)
@@ -150,7 +151,7 @@ export function InteractiveProjections({
     const meanReturn = scenario.returnPct / 100;
     const stdDev = scenario.volatility / 100;
     const annualExpenses = monthlySpending * 12;
-    const annualWithdrawal = Math.max(0, annualExpenses - combinedSSAnnual);
+    const expenseBasedWithdrawal = Math.max(0, annualExpenses - combinedSSAnnual);
     const startValue = accounts.reduce((s, a) => s + a.value, 0);
     const numSims = 500;
 
@@ -171,8 +172,10 @@ export function InteractiveProjections({
         } else {
           // Grow withdrawals with inflation each year of retirement
           const retYear = y - yearsToRetirement;
-          const inflatedWithdrawal = annualWithdrawal * Math.pow(1 + scenario.inflationPct / 100, retYear);
-          portfolio = portfolio + growth - Math.min(inflatedWithdrawal, portfolio + growth);
+          const rateBasedWithdrawal = portfolio * (withdrawalRatePct / 100);
+          const inflatedExpenseWithdrawal = expenseBasedWithdrawal * Math.pow(1 + scenario.inflationPct / 100, retYear);
+          const withdrawal = Math.max(inflatedExpenseWithdrawal, rateBasedWithdrawal);
+          portfolio = portfolio + growth - Math.min(withdrawal, portfolio + growth);
         }
         portfolio = Math.max(0, portfolio);
         path.push(Math.round(portfolio));
@@ -205,7 +208,7 @@ export function InteractiveProjections({
       worstCase: percentiles.p10[yearsToRetirement - 1] || 0,
       bestCase: percentiles.p90[yearsToRetirement - 1] || 0,
     };
-  }, [accounts, annualContributions, yearsToRetirement, retirementYears, currentAge, scenario, monthlySpending, combinedSSAnnual]);
+  }, [accounts, annualContributions, yearsToRetirement, retirementYears, currentAge, scenario, monthlySpending, withdrawalRatePct, combinedSSAnnual]);
 
   // Chart data
   const chartData = projection.ages.map((age, i) => ({
