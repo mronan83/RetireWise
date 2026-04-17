@@ -157,6 +157,7 @@ export default async function ProjectionsPage() {
             type: a.accountType,
             taxTreatment: a.taxTreatment,
             value,
+            isActivelyContributing: a.isActivelyContributing,
           };
         }).filter((a) => a.value > 0)}
         currentAge={pref.currentAge}

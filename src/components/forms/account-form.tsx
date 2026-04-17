@@ -4,6 +4,7 @@ import { useState, useActionState } from "react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { Switch } from "@/components/ui/switch";
 import {
   Select,
   SelectContent,
@@ -142,6 +143,24 @@ export function AccountForm({ account, action, onSuccess }: Props) {
           Auto-set based on account type. Override if needed (e.g. Roth
           401k should be Tax-Free).
         </p>
+      </div>
+
+      <div className="flex items-center gap-3 rounded-lg border p-3">
+        <Switch
+          id="isActivelyContributing"
+          name="isActivelyContributing"
+          defaultChecked={account?.isActivelyContributing ?? true}
+        />
+        <div>
+          <Label htmlFor="isActivelyContributing" className="text-sm">
+            Actively contributing
+          </Label>
+          <p className="text-xs text-muted-foreground">
+            Turn off for old employer accounts (e.g. prior 401k). The account
+            still grows with the market but won&apos;t receive new contributions
+            in projections.
+          </p>
+        </div>
       </div>
 
       <Button type="submit" disabled={isPending} className="w-full">

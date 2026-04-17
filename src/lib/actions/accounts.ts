@@ -25,6 +25,7 @@ const accountSchema = z.object({
     "other",
   ]),
   taxTreatment: z.enum(["tax_deferred", "tax_free", "taxable"]),
+  isActivelyContributing: z.coerce.boolean().optional(),
 });
 
 export async function createAccount(formData: FormData) {
@@ -37,12 +38,14 @@ export async function createAccount(formData: FormData) {
     owner: formData.get("owner"),
     accountType: formData.get("accountType"),
     taxTreatment: formData.get("taxTreatment"),
+    isActivelyContributing: formData.get("isActivelyContributing") === "on",
   });
 
   const db = getDb();
   await db.insert(accounts).values({
     clerkId: userId,
     ...parsed,
+    isActivelyContributing: parsed.isActivelyContributing ?? true,
   });
 
   revalidatePath("/dashboard");
@@ -59,12 +62,13 @@ export async function updateAccount(id: string, formData: FormData) {
     owner: formData.get("owner"),
     accountType: formData.get("accountType"),
     taxTreatment: formData.get("taxTreatment"),
+    isActivelyContributing: formData.get("isActivelyContributing") === "on",
   });
 
   const db = getDb();
   await db
     .update(accounts)
-    .set({ ...parsed, updatedAt: new Date() })
+    .set({ ...parsed, isActivelyContributing: parsed.isActivelyContributing ?? true, updatedAt: new Date() })
     .where(and(eq(accounts.id, id), eq(accounts.clerkId, userId)));
 
   revalidatePath("/dashboard");

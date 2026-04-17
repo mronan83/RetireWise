@@ -156,6 +156,7 @@ export const accounts = pgTable("accounts", {
   plaidAccountId: text("plaid_account_id"),
   dataSource: dataSourceEnum("data_source").notNull().default("manual"),
   isActive: boolean("is_active").notNull().default(true),
+  isActivelyContributing: boolean("is_actively_contributing").notNull().default(true),
   createdAt: timestamp("created_at").defaultNow().notNull(),
   updatedAt: timestamp("updated_at").defaultNow().notNull(),
 });

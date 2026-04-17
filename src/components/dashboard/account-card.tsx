@@ -43,6 +43,11 @@ export function AccountCard({ account, totalValue }: Props) {
               {TAX_TREATMENT_LABELS[account.taxTreatment] ||
                 account.taxTreatment}
             </Badge>
+            {!account.isActivelyContributing && (
+              <Badge variant="outline" className="text-xs text-muted-foreground">
+                No contributions
+              </Badge>
+            )}
           </div>
           <p className="mt-1 text-xs text-muted-foreground">
             {account.institution}

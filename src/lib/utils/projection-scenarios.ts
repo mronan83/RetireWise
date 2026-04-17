@@ -103,7 +103,7 @@ export type DetailedProjection = {
 };
 
 export function runDetailedProjection(params: {
-  accounts: { name: string; owner: string; type: string; taxTreatment: string; value: number }[];
+  accounts: { name: string; owner: string; type: string; taxTreatment: string; value: number; isActivelyContributing: boolean }[];
   totalAnnualContributions: number;
   yearsToRetirement: number;
   yearsInRetirement: number;
@@ -141,6 +141,9 @@ export function runDetailedProjection(params: {
   }));
 
   const totalPortfolio = accounts.reduce((s, a) => s + a.value, 0);
+  const contributingValue = accounts
+    .filter((a) => a.isActivelyContributing)
+    .reduce((s, a) => s + a.value, 0);
   const years: number[] = [];
   const ages: number[] = [];
   const phases: string[] = [];
@@ -169,9 +172,12 @@ export function runDetailedProjection(params: {
       let newVal = prev + growth;
 
       if (!isRetirement) {
-        // Distribute contributions proportionally
-        const share = totalPortfolio > 0 ? ap.currentValue / totalPortfolio : 1 / accounts.length;
-        newVal += totalAnnualContributions * share;
+        // Only distribute contributions to actively contributing accounts
+        const acct = accounts[accountProjs.indexOf(ap)];
+        if (acct.isActivelyContributing && contributingValue > 0) {
+          const share = acct.value / contributingValue;
+          newVal += totalAnnualContributions * share;
+        }
       }
 
       ap.projectedValues.push(Math.max(0, Math.round(newVal)));

@@ -39,6 +39,7 @@ type AccountInput = {
   type: string;
   taxTreatment: string;
   value: number;
+  isActivelyContributing: boolean;
 };
 
 type Props = {
