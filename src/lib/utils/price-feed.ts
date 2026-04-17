@@ -28,7 +28,10 @@ type PriceResult = {
  * Fetch current prices for a list of tickers via Yahoo Finance.
  * Batches requests and handles failures gracefully.
  */
+export const _lastFetchErrors: { ticker: string; error: string }[] = [];
+
 export async function fetchPrices(tickers: string[]): Promise<Map<string, number>> {
+  _lastFetchErrors.length = 0;
   const prices = new Map<string, number>();
   const toFetch = tickers.filter((t) => !SKIP_TICKERS.has(t));
 
@@ -55,8 +58,10 @@ export async function fetchPrices(tickers: string[]): Promise<Map<string, number
           const price =
             quote.regularMarketPrice ?? quote.postMarketPrice ?? null;
           return { ticker, price };
-        } catch {
-          return { ticker, price: null, error: "Failed to fetch" };
+        } catch (e) {
+          const errMsg = e instanceof Error ? e.message : String(e);
+          _lastFetchErrors.push({ ticker, error: errMsg });
+          return { ticker, price: null, error: errMsg };
         }
       })
     );

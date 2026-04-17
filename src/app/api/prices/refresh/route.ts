@@ -3,7 +3,7 @@ import { eq } from "drizzle-orm";
 import { revalidatePath } from "next/cache";
 import { getDb } from "@/lib/db";
 import { holdings, accounts, households, householdMembers } from "@/lib/db/schema";
-import { updateAllPrices } from "@/lib/utils/price-feed";
+import { updateAllPrices, _lastFetchErrors } from "@/lib/utils/price-feed";
 
 export async function POST() {
   const { userId } = await auth();
@@ -61,6 +61,7 @@ export async function POST() {
         accountsUnderRawId: accountsUnderSelf.map((a) => a.name),
         accountsUnderResolvedId: accountsUnderHousehold.map((a) => a.name),
         holdingsFound: holdingsCount.map((h) => h.ticker),
+        fetchErrors: _lastFetchErrors.slice(0, 5),
       },
     });
   } catch (e) {

@@ -20,7 +20,8 @@ export function RefreshPricesButton() {
         const diag = data.diagnostic;
         const detail = data.updated > 0
           ? `${data.updated} prices updated (${data.tickers?.length || 0} tickers)`
-          : `0 updated — ${diag?.holdingsFound?.length || 0} holdings found, clerkId: ${diag?.isHouseholdMember ? 'household' : 'self'}, accounts: ${diag?.accountsUnderRawId?.length || 0}`;
+          : `0 updated — ${diag?.holdingsFound?.length || 0} holdings, ${diag?.fetchErrors?.length || 0} errors. ${diag?.fetchErrors?.[0]?.error || 'unknown'}`;
+        if (data.updated === 0) console.log("Price refresh diagnostic:", JSON.stringify(data, null, 2));
         setResult(detail);
         if (data.updated > 0) router.refresh();
       } else {
