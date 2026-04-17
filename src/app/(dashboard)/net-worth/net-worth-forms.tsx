@@ -1,7 +1,8 @@
 "use client";
 
 import { useState, useActionState } from "react";
-import { Plus, Home, PiggyBank, CreditCard } from "lucide-react";
+import { useState as useLocalState } from "react";
+import { Plus, Home, PiggyBank, CreditCard, ExternalLink } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -69,6 +70,8 @@ export function NetWorthForms() {
 }
 
 function RealEstateForm({ onSuccess }: { onSuccess: () => void }) {
+  const [address, setAddress] = useLocalState("");
+
   const [error, formAction, isPending] = useActionState(
     async (_prev: string | null, formData: FormData) => {
       try {
@@ -81,6 +84,10 @@ function RealEstateForm({ onSuccess }: { onSuccess: () => void }) {
     },
     null
   );
+
+  const zillowUrl = address.trim()
+    ? `https://www.zillow.com/homes/${encodeURIComponent(address.trim().replace(/\s+/g, "-"))}_rb/`
+    : null;
 
   return (
     <form action={formAction} className="space-y-4">
@@ -102,25 +109,59 @@ function RealEstateForm({ onSuccess }: { onSuccess: () => void }) {
           <Input name="name" placeholder="e.g. Primary Home" required />
         </div>
       </div>
+
+      <div className="space-y-1">
+        <Label>Address</Label>
+        <Input
+          name="address"
+          placeholder="123 Main St, City, State ZIP"
+          value={address}
+          onChange={(e) => setAddress(e.target.value)}
+        />
+      </div>
+
+      {/* Zillow lookup */}
+      <div className="flex items-center gap-3">
+        {zillowUrl ? (
+          <Button
+            type="button"
+            variant="outline"
+            size="sm"
+            onClick={() => window.open(zillowUrl, "_blank")}
+          >
+            <ExternalLink className="mr-2 h-3.5 w-3.5" />
+            Check Zestimate on Zillow
+          </Button>
+        ) : (
+          <p className="text-xs text-muted-foreground">
+            Enter an address above to get a one-click Zillow Zestimate lookup
+          </p>
+        )}
+      </div>
+
       <div className="grid grid-cols-2 gap-4">
         <div className="space-y-1">
           <Label>Estimated Value ($)</Label>
-          <Input name="estimatedValue" type="number" step="1000" placeholder="450000" required />
-          <p className="text-xs text-muted-foreground">Check Zillow or recent comps</p>
+          <Input name="estimatedValue" type="number" step="1" placeholder="450000" required />
+          <p className="text-xs text-muted-foreground">From Zillow Zestimate or recent comps</p>
         </div>
         <div className="space-y-1">
           <Label>Mortgage Balance ($)</Label>
-          <Input name="mortgageBalance" type="number" step="100" placeholder="280000" />
+          <Input name="mortgageBalance" type="number" step="1" placeholder="280000" />
           <p className="text-xs text-muted-foreground">0 if paid off</p>
         </div>
       </div>
-      <div className="grid grid-cols-2 gap-4">
+      <div className="grid grid-cols-3 gap-4">
+        <div className="space-y-1">
+          <Label>Mortgage Rate (%)</Label>
+          <Input name="mortgageRate" type="number" step="0.001" placeholder="6.5" />
+        </div>
         <div className="space-y-1">
           <Label>Monthly Payment ($)</Label>
           <Input name="monthlyPayment" type="number" step="1" placeholder="2100" />
         </div>
         <div className="space-y-1">
-          <Label>Last Valuation Date</Label>
+          <Label>Valuation Date</Label>
           <Input name="lastValuationDate" type="date" />
         </div>
       </div>

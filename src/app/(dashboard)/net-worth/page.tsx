@@ -205,8 +205,8 @@ export default async function NetWorthPage() {
             <div className="space-y-2 mb-4">
               {properties.map((p) => (
                 <div key={p.id} className="flex items-center justify-between rounded-lg border p-3">
-                  <div>
-                    <div className="flex items-center gap-2">
+                  <div className="min-w-0 flex-1">
+                    <div className="flex items-center gap-2 flex-wrap">
                       <span className="font-medium text-sm">{p.name}</span>
                       <Badge variant={p.owner === "spouse" ? "default" : "secondary"} className="text-xs">
                         {ACCOUNT_OWNER_LABELS[p.owner]}
@@ -214,17 +214,31 @@ export default async function NetWorthPage() {
                       {p.isPrimaryResidence && (
                         <Badge variant="outline" className="text-xs">Primary</Badge>
                       )}
+                      {p.address && (
+                        <a
+                          href={`https://www.zillow.com/homes/${encodeURIComponent(p.address.replace(/\s+/g, "-"))}_rb/`}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="text-[10px] text-primary hover:underline"
+                        >
+                          Zillow
+                        </a>
+                      )}
                     </div>
+                    {p.address && (
+                      <p className="text-xs text-muted-foreground truncate">{p.address}</p>
+                    )}
                     <p className="text-xs text-muted-foreground mt-0.5">
                       Value: {formatCurrency(Number(p.estimatedValue))}
                       {Number(p.mortgageBalance) > 0 && (
                         <> | Mortgage: {formatCurrency(Number(p.mortgageBalance))}
+                        {p.mortgageRate && <> @ {Number(p.mortgageRate)}%</>}
                         {p.monthlyPayment && <> | {formatCurrency(Number(p.monthlyPayment))}/mo</>}
                         </>
                       )}
                     </p>
                   </div>
-                  <div className="text-right">
+                  <div className="text-right shrink-0 ml-3">
                     <p className="font-mono font-medium text-sm text-green-500">
                       {formatCurrency(Number(p.estimatedValue) - Number(p.mortgageBalance || 0))}
                     </p>
