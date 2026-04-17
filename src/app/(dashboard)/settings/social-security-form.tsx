@@ -63,7 +63,7 @@ export function SocialSecurityForm({ owner, benefits }: Props) {
             id={`${owner}_benefitAtAge62`}
             name="benefitAtAge62"
             type="number"
-            step="1"
+            step="0.01"
             defaultValue={benefits?.benefitAtAge62 || ""}
             placeholder="1800"
           />
@@ -76,7 +76,7 @@ export function SocialSecurityForm({ owner, benefits }: Props) {
             id={`${owner}_benefitAtFRA`}
             name="benefitAtFRA"
             type="number"
-            step="1"
+            step="0.01"
             defaultValue={benefits?.benefitAtFRA || ""}
             placeholder="2800"
           />
@@ -89,7 +89,7 @@ export function SocialSecurityForm({ owner, benefits }: Props) {
             id={`${owner}_benefitAtAge70`}
             name="benefitAtAge70"
             type="number"
-            step="1"
+            step="0.01"
             defaultValue={benefits?.benefitAtAge70 || ""}
             placeholder="3500"
           />
@@ -151,7 +151,7 @@ export function SocialSecurityForm({ owner, benefits }: Props) {
               id={`${owner}_currentMonthlyBenefit`}
               name="currentMonthlyBenefit"
               type="number"
-              step="1"
+              step="0.01"
               defaultValue={benefits?.currentMonthlyBenefit || ""}
               placeholder="0"
             />
@@ -197,7 +197,7 @@ export function SocialSecurityForm({ owner, benefits }: Props) {
               id={`${owner}_spousalBenefitAmount`}
               name="spousalBenefitAmount"
               type="number"
-              step="1"
+              step="0.01"
               defaultValue={benefits?.spousalBenefitAmount || ""}
               placeholder="0"
             />

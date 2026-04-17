@@ -157,7 +157,7 @@ export function PreferencesForm({ preferences }: Props) {
               id="annualSalary"
               name="annualSalary"
               type="number"
-              step="1"
+              step="0.01"
               defaultValue={preferences?.annualSalary || ""}
               placeholder="150000"
             />
@@ -171,7 +171,7 @@ export function PreferencesForm({ preferences }: Props) {
               id="spouseAnnualSalary"
               name="spouseAnnualSalary"
               type="number"
-              step="1"
+              step="0.01"
               defaultValue={preferences?.spouseAnnualSalary || ""}
               placeholder="80000"
             />
@@ -189,7 +189,7 @@ export function PreferencesForm({ preferences }: Props) {
             id="monthlyExpensesRetirement"
             name="monthlyExpensesRetirement"
             type="number"
-            step="500"
+            step="0.01"
             defaultValue={preferences?.monthlyExpensesRetirement || ""}
             placeholder="7000"
           />

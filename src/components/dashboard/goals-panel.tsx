@@ -143,7 +143,7 @@ function AddGoalForm({ onSuccess }: { onSuccess: () => void }) {
           id="targetAmount"
           name="targetAmount"
           type="number"
-          step="1000"
+          step="0.01"
           placeholder="2000000"
           required
         />

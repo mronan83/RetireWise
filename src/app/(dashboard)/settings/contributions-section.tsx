@@ -387,7 +387,7 @@ function AddContributionForm({ onSuccess }: { onSuccess: () => void }) {
               id="contributionAmount"
               name="contributionAmount"
               type="number"
-              step="50"
+              step="0.01"
               min="0"
               placeholder="500"
               required

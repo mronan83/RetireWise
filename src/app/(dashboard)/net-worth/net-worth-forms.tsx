@@ -142,12 +142,12 @@ function RealEstateForm({ onSuccess }: { onSuccess: () => void }) {
       <div className="grid grid-cols-2 gap-4">
         <div className="space-y-1">
           <Label>Estimated Value ($)</Label>
-          <Input name="estimatedValue" type="number" step="1" placeholder="450000" required />
+          <Input name="estimatedValue" type="number" step="0.01" placeholder="450000" required />
           <p className="text-xs text-muted-foreground">From Zillow Zestimate or recent comps</p>
         </div>
         <div className="space-y-1">
           <Label>Mortgage Balance ($)</Label>
-          <Input name="mortgageBalance" type="number" step="1" placeholder="280000" />
+          <Input name="mortgageBalance" type="number" step="0.01" placeholder="280000" />
           <p className="text-xs text-muted-foreground">0 if paid off</p>
         </div>
       </div>
@@ -158,7 +158,7 @@ function RealEstateForm({ onSuccess }: { onSuccess: () => void }) {
         </div>
         <div className="space-y-1">
           <Label>Monthly Payment ($)</Label>
-          <Input name="monthlyPayment" type="number" step="1" placeholder="2100" />
+          <Input name="monthlyPayment" type="number" step="0.01" placeholder="2100" />
         </div>
         <div className="space-y-1">
           <Label>Valuation Date</Label>
@@ -224,7 +224,7 @@ function CashForm({ onSuccess }: { onSuccess: () => void }) {
       <div className="grid grid-cols-3 gap-4">
         <div className="space-y-1">
           <Label>Balance ($)</Label>
-          <Input name="balance" type="number" step="1" placeholder="15000" required />
+          <Input name="balance" type="number" step="0.01" placeholder="15000" required />
         </div>
         <div className="space-y-1">
           <Label>APY (%)</Label>
@@ -290,7 +290,7 @@ function DebtForm({ onSuccess }: { onSuccess: () => void }) {
       <div className="grid grid-cols-3 gap-4">
         <div className="space-y-1">
           <Label>Balance ($)</Label>
-          <Input name="currentBalance" type="number" step="1" placeholder="280000" required />
+          <Input name="currentBalance" type="number" step="0.01" placeholder="280000" required />
         </div>
         <div className="space-y-1">
           <Label>Rate (%)</Label>
@@ -298,7 +298,7 @@ function DebtForm({ onSuccess }: { onSuccess: () => void }) {
         </div>
         <div className="space-y-1">
           <Label>Monthly ($)</Label>
-          <Input name="monthlyPayment" type="number" step="1" placeholder="2100" required />
+          <Input name="monthlyPayment" type="number" step="0.01" placeholder="2100" required />
         </div>
       </div>
       <div className="space-y-1">
