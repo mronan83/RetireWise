@@ -75,7 +75,8 @@ export function InteractiveProjections({
   // Interactive state
   const [selfSSAge, setSelfSSAge] = useState(selfFRA || 67);
   const [spouseSSAge, setSpouseSSAge] = useState(spouseFRA || 67);
-  const [monthlyIncome, setMonthlyIncome] = useState(monthlyExpenses);
+  const [monthlySpending, setMonthlySpending] = useState(monthlyExpenses);
+  const [withdrawalRatePct, setWithdrawalRatePct] = useState(4.0);
   const [selectedScenario, setSelectedScenario] = useState<string>("moderate");
 
   const scenario = MARKET_SCENARIOS.find((s) => s.id === selectedScenario) || MARKET_SCENARIOS[1];
@@ -94,7 +95,7 @@ export function InteractiveProjections({
 
   const yearsToRetirement = Math.max(0, retirementAge - currentAge);
 
-  // Run projection
+  // Run deterministic projection
   const projection = useMemo(
     () =>
       runDetailedProjection({
@@ -105,12 +106,72 @@ export function InteractiveProjections({
         startAge: currentAge,
         returnPct: scenario.returnPct,
         inflationPct: scenario.inflationPct,
-        annualExpenses: monthlyIncome * 12,
+        annualExpenses: monthlySpending * 12,
         annualSSIncome: combinedSSAnnual,
         ssStartYear,
       }),
-    [accounts, annualContributions, yearsToRetirement, currentAge, scenario, monthlyIncome, combinedSSAnnual, ssStartYear]
+    [accounts, annualContributions, yearsToRetirement, currentAge, scenario, monthlySpending, combinedSSAnnual, ssStartYear]
   );
+
+  // Run Monte Carlo (client-side, reactive to all controls)
+  const monteCarloData = useMemo(() => {
+    const totalYears = yearsToRetirement + 35;
+    const meanReturn = scenario.returnPct / 100;
+    const stdDev = scenario.volatility / 100;
+    const annualExpenses = monthlySpending * 12;
+    const annualWithdrawal = Math.max(0, annualExpenses - combinedSSAnnual);
+    const startValue = accounts.reduce((s, a) => s + a.value, 0);
+    const numSims = 500;
+
+    const allPaths: number[][] = [];
+    let successes = 0;
+
+    for (let sim = 0; sim < numSims; sim++) {
+      const path: number[] = [];
+      let portfolio = startValue;
+      for (let y = 0; y < totalYears; y++) {
+        const u1 = Math.random();
+        const u2 = Math.random();
+        const z = Math.sqrt(-2 * Math.log(u1)) * Math.cos(2 * Math.PI * u2);
+        const yearReturn = meanReturn + stdDev * z;
+        const growth = portfolio * yearReturn;
+        if (y < yearsToRetirement) {
+          portfolio += growth + annualContributions;
+        } else {
+          portfolio = portfolio + growth - Math.min(annualWithdrawal, portfolio + growth);
+        }
+        portfolio = Math.max(0, portfolio);
+        path.push(Math.round(portfolio));
+      }
+      allPaths.push(path);
+      if (path[path.length - 1] > 0) successes++;
+    }
+
+    const percentiles = { p10: [] as number[], p25: [] as number[], p50: [] as number[], p75: [] as number[], p90: [] as number[] };
+    const ages: number[] = [];
+    for (let y = 0; y < totalYears; y++) {
+      const values = allPaths.map((p) => p[y]).sort((a, b) => a - b);
+      percentiles.p10.push(values[Math.floor(numSims * 0.1)]);
+      percentiles.p25.push(values[Math.floor(numSims * 0.25)]);
+      percentiles.p50.push(values[Math.floor(numSims * 0.5)]);
+      percentiles.p75.push(values[Math.floor(numSims * 0.75)]);
+      percentiles.p90.push(values[Math.floor(numSims * 0.9)]);
+      ages.push(currentAge + y + 1);
+    }
+
+    return {
+      chartData: ages.map((age, i) => ({
+        age,
+        p10: percentiles.p10[i], p25: percentiles.p25[i],
+        p50: percentiles.p50[i], p75: percentiles.p75[i],
+        p90: percentiles.p90[i],
+      })),
+      successRate: Math.round((successes / numSims) * 100),
+      medianAtRetirement: percentiles.p50[yearsToRetirement - 1] || 0,
+      worstCase: percentiles.p10[yearsToRetirement - 1] || 0,
+      bestCase: percentiles.p90[yearsToRetirement - 1] || 0,
+    };
+  }, [accounts, annualContributions, yearsToRetirement, currentAge, scenario, monthlySpending, combinedSSAnnual]);
 
   // Chart data
   const chartData = projection.ages.map((age, i) => ({
@@ -122,7 +183,7 @@ export function InteractiveProjections({
   const portfolioAtRetirement = projection.totalValues[yearsToRetirement - 1] || 0;
   const portfolioAt80 = projection.totalValues[80 - currentAge - 1] || 0;
   const portfolioAt90 = projection.totalValues[90 - currentAge - 1] || 0;
-  const monthlyFromPortfolio = Math.round((portfolioAtRetirement * 0.04) / 12);
+  const monthlyFromPortfolio = Math.round((portfolioAtRetirement * (withdrawalRatePct / 100)) / 12);
 
   return (
     <div className="space-y-6">
@@ -204,24 +265,52 @@ export function InteractiveProjections({
             </div>
           </div>
 
-          {/* Monthly Retirement Expenses */}
-          <div className="space-y-3">
-            <div className="flex items-center justify-between">
-              <Label className="text-sm">Monthly Retirement Spending</Label>
-              <Badge variant="outline" className="font-mono">
-                {formatCurrency(monthlyIncome)}/mo
-              </Badge>
+          {/* Monthly Retirement Spending + Withdrawal Rate */}
+          <div className="grid gap-6 sm:grid-cols-2">
+            <div className="space-y-3">
+              <div className="flex items-center justify-between">
+                <Label className="text-sm">Monthly Retirement Spending</Label>
+                <Badge variant="outline" className="font-mono">
+                  {formatCurrency(monthlySpending)}/mo
+                </Badge>
+              </div>
+              <Slider
+                value={[monthlySpending]}
+                onValueChange={(v) => setMonthlySpending(Array.isArray(v) ? v[0] : v)}
+                min={2000}
+                max={25000}
+                step={250}
+              />
+              <div className="flex justify-between text-xs text-muted-foreground">
+                <span>$2,000/mo</span>
+                <span>$25,000/mo</span>
+              </div>
+              <p className="text-xs text-muted-foreground">
+                Your expected monthly household expenses in retirement
+              </p>
             </div>
-            <Slider
-              value={[monthlyIncome]}
-              onValueChange={(v) => setMonthlyIncome(Array.isArray(v) ? v[0] : v)}
-              min={2000}
-              max={20000}
-              step={500}
-            />
-            <div className="flex justify-between text-xs text-muted-foreground">
-              <span>$2,000/mo</span>
-              <span>$20,000/mo</span>
+
+            <div className="space-y-3">
+              <div className="flex items-center justify-between">
+                <Label className="text-sm">Withdrawal Rate</Label>
+                <Badge variant="outline" className="font-mono">
+                  {withdrawalRatePct}%
+                </Badge>
+              </div>
+              <Slider
+                value={[withdrawalRatePct * 10]}
+                onValueChange={(v) => setWithdrawalRatePct((Array.isArray(v) ? v[0] : v) / 10)}
+                min={20}
+                max={60}
+                step={5}
+              />
+              <div className="flex justify-between text-xs text-muted-foreground">
+                <span>2% (conservative)</span>
+                <span>6% (aggressive)</span>
+              </div>
+              <p className="text-xs text-muted-foreground">
+                Annual % of portfolio withdrawn in retirement. 4% is the traditional &quot;safe withdrawal rate&quot;.
+              </p>
             </div>
           </div>
         </CardContent>
@@ -243,7 +332,7 @@ export function InteractiveProjections({
           </CardHeader>
           <CardContent>
             <p className="text-xs text-muted-foreground">
-              Spending: <span className="font-mono text-foreground">{formatCurrency(monthlyIncome)}</span>/mo
+              Spending: <span className="font-mono text-foreground">{formatCurrency(monthlySpending)}</span>/mo
             </p>
             <p className="text-xs text-muted-foreground">
               Income: <span className="font-mono text-foreground">{formatCurrency(monthlyFromPortfolio + selfSSMonthly + spouseSSMonthly)}</span>/mo
@@ -251,13 +340,13 @@ export function InteractiveProjections({
             <p className="text-xs mt-1">
               ({formatCurrency(monthlyFromPortfolio)} 4% rule + {formatCurrency(selfSSMonthly + spouseSSMonthly)} SS)
             </p>
-            {monthlyFromPortfolio + selfSSMonthly + spouseSSMonthly >= monthlyIncome ? (
+            {monthlyFromPortfolio + selfSSMonthly + spouseSSMonthly >= monthlySpending ? (
               <p className="text-xs text-green-500 font-medium mt-1">
-                +{formatCurrency(monthlyFromPortfolio + selfSSMonthly + spouseSSMonthly - monthlyIncome)} surplus
+                +{formatCurrency(monthlyFromPortfolio + selfSSMonthly + spouseSSMonthly - monthlySpending)} surplus
               </p>
             ) : (
               <p className="text-xs text-red-500 font-medium mt-1">
-                -{formatCurrency(monthlyIncome - monthlyFromPortfolio - selfSSMonthly - spouseSSMonthly)} shortfall
+                -{formatCurrency(monthlySpending - monthlyFromPortfolio - selfSSMonthly - spouseSSMonthly)} shortfall
               </p>
             )}
           </CardContent>
@@ -314,6 +403,57 @@ export function InteractiveProjections({
                 <Area type="monotone" dataKey="total" stroke="#6366f1" fill="url(#interactiveGrad)" strokeWidth={2.5} dot={false} />
               </AreaChart>
             </ResponsiveContainer>
+          </div>
+        </CardContent>
+      </Card>
+
+      {/* Monte Carlo Fan Chart */}
+      <Card>
+        <CardHeader className="pb-2">
+          <CardTitle>Monte Carlo Simulation</CardTitle>
+          <p className="text-sm text-muted-foreground">
+            500 random scenarios — {monteCarloData.successRate}% success rate (money lasts 35+ years)
+          </p>
+        </CardHeader>
+        <CardContent>
+          <div className="h-[280px] sm:h-[320px] -ml-2">
+            <ResponsiveContainer width="100%" height="100%">
+              <AreaChart data={monteCarloData.chartData} margin={{ top: 5, right: 5, left: 0, bottom: 0 }}>
+                <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" strokeOpacity={0.5} vertical={false} />
+                <XAxis dataKey="age" tick={{ fill: "hsl(var(--muted-foreground))", fontSize: 11 }} axisLine={false} tickLine={false} />
+                <YAxis tickFormatter={(v) => formatCompactCurrency(v)} tick={{ fill: "hsl(var(--muted-foreground))", fontSize: 11 }} axisLine={false} tickLine={false} width={60} />
+                <Tooltip
+                  formatter={(value) => formatCurrency(Number(value))}
+                  labelFormatter={(age) => `Age ${age}`}
+                  contentStyle={{ backgroundColor: "hsl(var(--card))", border: "1px solid hsl(var(--border))", borderRadius: "8px", boxShadow: "0 4px 12px rgba(0,0,0,0.15)", fontSize: "13px", padding: "8px 12px" }}
+                />
+                <ReferenceLine x={retirementAge} stroke="hsl(var(--muted-foreground))" strokeDasharray="5 5" />
+                <Area type="monotone" dataKey="p90" stackId="1" stroke="none" fill="#22c55e" fillOpacity={0.08} name="90th %" />
+                <Area type="monotone" dataKey="p75" stackId="2" stroke="none" fill="#22c55e" fillOpacity={0.12} name="75th %" />
+                <Area type="monotone" dataKey="p50" stackId="3" stroke="#22c55e" fill="#22c55e" fillOpacity={0.2} strokeWidth={2.5} name="Median" dot={false} />
+                <Area type="monotone" dataKey="p25" stackId="4" stroke="none" fill="#22c55e" fillOpacity={0.12} name="25th %" />
+                <Area type="monotone" dataKey="p10" stackId="5" stroke="none" fill="#22c55e" fillOpacity={0.08} name="10th %" />
+              </AreaChart>
+            </ResponsiveContainer>
+          </div>
+          <div className="grid grid-cols-3 gap-4 mt-3 text-center">
+            <div>
+              <p className="text-xs text-muted-foreground">Success Rate</p>
+              <p className={cn("font-mono font-bold text-lg",
+                monteCarloData.successRate >= 80 ? "text-green-500" :
+                monteCarloData.successRate >= 60 ? "text-yellow-500" : "text-red-500"
+              )}>
+                {monteCarloData.successRate}%
+              </p>
+            </div>
+            <div>
+              <p className="text-xs text-muted-foreground">Median at Retirement</p>
+              <p className="font-mono font-medium">{formatCurrency(monteCarloData.medianAtRetirement)}</p>
+            </div>
+            <div>
+              <p className="text-xs text-muted-foreground">Range (10th-90th)</p>
+              <p className="font-mono text-sm">{formatCurrency(monteCarloData.worstCase)} — {formatCurrency(monteCarloData.bestCase)}</p>
+            </div>
           </div>
         </CardContent>
       </Card>
