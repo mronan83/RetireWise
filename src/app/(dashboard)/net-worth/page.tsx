@@ -1,5 +1,4 @@
-import { auth } from "@clerk/nextjs/server";
-import { redirect } from "next/navigation";
+import { getAuthContext } from "@/lib/auth-helpers";
 import { eq } from "drizzle-orm";
 import { getDb } from "@/lib/db";
 import { realEstate, cashReserves, debts } from "@/lib/db/schema";
@@ -20,8 +19,7 @@ import { NetWorthForms } from "./net-worth-forms";
 import { cn } from "@/lib/utils";
 
 export default async function NetWorthPage() {
-  const { userId } = await auth();
-  if (!userId) redirect("/sign-in");
+  const { dataClerkId: userId } = await getAuthContext();
 
   const db = getDb();
   const [holdings, properties, cash, debtsList] = await Promise.all([
@@ -54,7 +52,8 @@ export default async function NetWorthPage() {
     0
   );
 
-  const totalAssets = investmentTotal + realEstateTotal + cashTotal;
+  // Use equity for real estate (value minus embedded mortgages) to avoid double-counting
+  const totalAssets = investmentTotal + realEstateEquity + cashTotal;
   const netWorth = totalAssets - debtTotal;
 
   return (

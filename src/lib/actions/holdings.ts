@@ -85,7 +85,16 @@ export async function updateHolding(id: string, formData: FormData) {
 
   const currentValue = parsed.shares * parsed.currentPrice;
 
+  // Verify the holding belongs to an account owned by this user
   const db = getDb();
+  const holding = await db
+    .select({ accountId: holdings.accountId })
+    .from(holdings)
+    .innerJoin(accounts, eq(holdings.accountId, accounts.id))
+    .where(and(eq(holdings.id, id), eq(accounts.clerkId, userId)))
+    .limit(1);
+  if (holding.length === 0) throw new Error("Holding not found");
+
   await db
     .update(holdings)
     .set({
@@ -110,7 +119,16 @@ export async function deleteHolding(id: string, accountId: string) {
   const { userId } = await auth();
   if (!userId) throw new Error("Unauthorized");
 
+  // Verify ownership before deleting
   const db = getDb();
+  const holding = await db
+    .select({ id: holdings.id })
+    .from(holdings)
+    .innerJoin(accounts, eq(holdings.accountId, accounts.id))
+    .where(and(eq(holdings.id, id), eq(accounts.clerkId, userId)))
+    .limit(1);
+  if (holding.length === 0) throw new Error("Holding not found");
+
   await db.delete(holdings).where(eq(holdings.id, id));
 
   revalidatePath("/dashboard");

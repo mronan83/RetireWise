@@ -1,5 +1,4 @@
-import { auth } from "@clerk/nextjs/server";
-import { redirect } from "next/navigation";
+import { getAuthContext } from "@/lib/auth-helpers";
 import { eq, and } from "drizzle-orm";
 import { getDb } from "@/lib/db";
 import { userPreferences, socialSecurityBenefits, contributions } from "@/lib/db/schema";
@@ -10,8 +9,7 @@ import { InteractiveProjections } from "./interactive-controls";
 import { getAccounts } from "@/lib/queries/accounts";
 
 export default async function ProjectionsPage() {
-  const { userId } = await auth();
-  if (!userId) redirect("/sign-in");
+  const { dataClerkId: userId } = await getAuthContext();
 
   const db = getDb();
   const [holdings, prefs, selfSS, spouseSS, contribs, accountsList] = await Promise.all([

@@ -1,5 +1,4 @@
-import { auth } from "@clerk/nextjs/server";
-import { redirect } from "next/navigation";
+import { getAuthContext } from "@/lib/auth-helpers";
 import { eq, and } from "drizzle-orm";
 import { getDb } from "@/lib/db";
 import { getAccounts } from "@/lib/queries/accounts";
@@ -20,8 +19,7 @@ import { HouseholdSharing } from "./household-sharing";
 import { IrsLimitsSection } from "./irs-limits-section";
 
 export default async function SettingsPage() {
-  const { userId } = await auth();
-  if (!userId) redirect("/sign-in");
+  const { dataClerkId: userId } = await getAuthContext();
 
   const db = getDb();
   const [prefs, selfSS, spouseSS, contributionsList, householdData, accountsList] = await Promise.all([

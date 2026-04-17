@@ -209,10 +209,13 @@ export function runDetailedProjection(params: {
       ap.projectedValues.push(Math.max(0, Math.round(newVal)));
     }
 
-    // Withdrawals in retirement
+    // Withdrawals in retirement — expenses grow with inflation
     let yearWithdrawal = 0;
     if (isRetirement) {
-      const needed = Math.max(0, annualExpenses - yearSS);
+      const retirementYear = y - yearsToRetirement;
+      const inflatedExpenses = annualExpenses * Math.pow(1 + inflationPct / 100, retirementYear);
+      const inflatedSS = yearSS * Math.pow(1 + inflationPct / 100, retirementYear);
+      const needed = Math.max(0, inflatedExpenses - inflatedSS);
       let remaining = needed;
 
       // Withdraw proportionally from all accounts

@@ -91,13 +91,19 @@ export function calculateProjection(
   const annualSSIncome = socialSecurityMonthlyIncome * 12;
   const annualWithdrawalNeeded = Math.max(0, annualExpenses - annualSSIncome);
 
-  // Retirement/drawdown phase
+  // Retirement/drawdown phase — expenses grow with inflation each year
+  const inflationRate = inflationPct / 100;
   let yearsPortfolioLasts = 0;
   for (let y = 0; y < yearsInRetirement; y++) {
     if (portfolio <= 0) break;
 
+    // Expenses grow with inflation; SS has its own COLA (approximate as same rate)
+    const inflatedExpenses = annualExpenses * Math.pow(1 + inflationRate, y);
+    const inflatedSS = annualSSIncome * Math.pow(1 + inflationRate, y);
+    const yearWithdrawalNeeded = Math.max(0, inflatedExpenses - inflatedSS);
+
     const growth = portfolio * nominalReturnRate;
-    const withdrawal = Math.min(annualWithdrawalNeeded, portfolio + growth);
+    const withdrawal = Math.min(yearWithdrawalNeeded, portfolio + growth);
     portfolio = portfolio + growth - withdrawal;
     yearsPortfolioLasts = y + 1;
 

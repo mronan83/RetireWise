@@ -33,7 +33,7 @@ export const getNetWorthTool = tool({
     const debtTotal = debtsList.reduce((s, d) => s + Number(d.currentBalance), 0);
     const monthlyDebtPayments = debtsList.reduce((s, d) => s + Number(d.monthlyPayment), 0);
 
-    const totalAssets = investmentTotal + realEstateTotal + cashTotal;
+    const totalAssets = investmentTotal + realEstateEquity + cashTotal;
     const netWorth = totalAssets - debtTotal;
 
     return {

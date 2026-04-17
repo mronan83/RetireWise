@@ -1,11 +1,9 @@
-import { auth } from "@clerk/nextjs/server";
-import { redirect } from "next/navigation";
+import { getAuthContext } from "@/lib/auth-helpers";
 import { getAccounts } from "@/lib/queries/accounts";
 import { CsvImportForm } from "./csv-import-form";
 
 export default async function ImportPage() {
-  const { userId } = await auth();
-  if (!userId) redirect("/sign-in");
+  const { dataClerkId: userId } = await getAuthContext();
 
   const accountsList = await getAccounts(userId);
 

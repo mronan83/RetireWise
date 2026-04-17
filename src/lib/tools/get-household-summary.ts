@@ -7,6 +7,7 @@ import {
   userPreferences,
   socialSecurityBenefits,
   accounts,
+  contributions,
 } from "../db/schema";
 import { getHoldingsByClerkId } from "../queries/holdings";
 import { ACCOUNT_OWNER_LABELS, ACCOUNT_TYPE_LABELS } from "../constants";
@@ -20,7 +21,7 @@ export const getHouseholdSummaryTool = tool({
     if (!userId) return { error: "Not authenticated" };
 
     const db = getDb();
-    const [prefs, selfSS, spouseSS, allAccounts, holdings] =
+    const [prefs, selfSS, spouseSS, allAccounts, holdings, contribsList] =
       await Promise.all([
         db
           .select()
@@ -52,9 +53,40 @@ export const getHouseholdSummaryTool = tool({
           .from(accounts)
           .where(eq(accounts.clerkId, userId)),
         getHoldingsByClerkId(userId),
+        db
+          .select()
+          .from(contributions)
+          .where(eq(contributions.clerkId, userId)),
       ]);
 
     const pref = prefs[0];
+
+    // Calculate annual contributions from line items
+    const selfSalary = pref?.annualSalary ? Number(pref.annualSalary) : 0;
+    const spouseSalary = pref?.spouseAnnualSalary ? Number(pref.spouseAnnualSalary) : 0;
+    let selfAnnualContrib = 0;
+    let spouseAnnualContrib = 0;
+    for (const c of contribsList) {
+      const salary = c.owner === "self" ? selfSalary : spouseSalary;
+      let annual = 0;
+      if (c.contributionMethod === "percent_of_salary" && salary > 0) {
+        annual = (Number(c.contributionPercent || 0) / 100) * salary;
+      } else if (c.contributionMethod === "fixed_amount") {
+        const freq: Record<string, number> = {
+          per_paycheck_biweekly: 26, per_paycheck_semimonthly: 24,
+          monthly: 12, quarterly: 4, annually: 1,
+        };
+        annual = Number(c.contributionAmount || 0) * (freq[c.frequency] || 1);
+      }
+      if (c.hasEmployerMatch && salary > 0) {
+        const yourPct = c.contributionMethod === "percent_of_salary"
+          ? Number(c.contributionPercent || 0) : salary > 0 ? (annual / salary) * 100 : 0;
+        const matchablePct = Math.min(yourPct, Number(c.employerMatchMaxPercent || 0));
+        annual += (matchablePct / 100) * salary * Number(c.employerMatchRate || 0);
+      }
+      if (c.owner === "self") selfAnnualContrib += annual;
+      else spouseAnnualContrib += annual;
+    }
 
     // Per-owner totals
     let selfTotal = 0;
@@ -106,9 +138,7 @@ export const getHouseholdSummaryTool = tool({
           pref?.currentAge && pref?.retirementAge
             ? pref.retirementAge - pref.currentAge
             : null,
-        annualContribution: pref?.annualContribution
-          ? Number(pref.annualContribution)
-          : null,
+        annualContribution: Math.round(selfAnnualContrib),
         accounts: selfAccounts,
         socialSecurity: selfSSData
           ? {
@@ -139,9 +169,7 @@ export const getHouseholdSummaryTool = tool({
           pref?.spouseCurrentAge && pref?.spouseRetirementAge
             ? Math.max(0, pref.spouseRetirementAge - pref.spouseCurrentAge)
             : null,
-        annualContribution: pref?.spouseAnnualContribution
-          ? Number(pref.spouseAnnualContribution)
-          : null,
+        annualContribution: Math.round(spouseAnnualContrib),
         accounts: spouseAccounts,
         socialSecurity: spouseSSData
           ? {

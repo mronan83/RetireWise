@@ -1,5 +1,6 @@
 import { clerkMiddleware, createRouteMatcher } from "@clerk/nextjs/server";
 
+// Routes that require Clerk authentication (user-facing pages + user API routes)
 const isProtectedRoute = createRouteMatcher([
   "/dashboard(.*)",
   "/accounts(.*)",
@@ -13,11 +14,25 @@ const isProtectedRoute = createRouteMatcher([
   "/import(.*)",
   "/api/chat(.*)",
   "/api/analysis(.*)",
+  "/api/prices(.*)",
+  "/api/settings(.*)",
+  "/api/alerts(.*)",
+  "/api/export(.*)",
+  "/api/household(.*)",
+  "/api/irs-limits(.*)",
+]);
+
+// Machine-to-machine routes that use their own auth (bearer token, webhook signature)
+// These must NOT be Clerk-gated or cron/webhooks will be rejected
+const isMachineRoute = createRouteMatcher([
   "/api/cron(.*)",
-  "/api/plaid(.*)",
+  "/api/plaid/webhook(.*)",
 ]);
 
 export default clerkMiddleware(async (auth, req) => {
+  // Skip Clerk auth for machine-to-machine endpoints
+  if (isMachineRoute(req)) return;
+
   if (isProtectedRoute(req)) {
     await auth.protect();
   }

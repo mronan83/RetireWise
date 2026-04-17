@@ -1,5 +1,4 @@
-import { auth } from "@clerk/nextjs/server";
-import { redirect } from "next/navigation";
+import { getAuthContext } from "@/lib/auth-helpers";
 import { Link2, PenLine } from "lucide-react";
 import { getAccounts } from "@/lib/queries/accounts";
 import { getHoldingsByClerkId } from "@/lib/queries/holdings";
@@ -8,8 +7,7 @@ import { FidelityImport } from "@/components/forms/fidelity-import";
 import { AddAccountButton } from "./add-account-button";
 
 export default async function AccountsPage() {
-  const { userId } = await auth();
-  if (!userId) redirect("/sign-in");
+  const { dataClerkId: userId } = await getAuthContext();
 
   const [accountsList, allHoldings] = await Promise.all([
     getAccounts(userId),

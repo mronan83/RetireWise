@@ -1,5 +1,4 @@
-import { auth } from "@clerk/nextjs/server";
-import { redirect } from "next/navigation";
+import { getAuthContext } from "@/lib/auth-helpers";
 import { eq, desc } from "drizzle-orm";
 import { getDb } from "@/lib/db";
 import { transactions, accounts } from "@/lib/db/schema";
@@ -32,8 +31,7 @@ function TransactionIcon({ type }: { type: string }) {
 }
 
 export default async function TransactionsPage() {
-  const { userId } = await auth();
-  if (!userId) redirect("/sign-in");
+  const { dataClerkId: userId } = await getAuthContext();
 
   const db = getDb();
   const txns = await db
@@ -133,9 +131,13 @@ export default async function TransactionsPage() {
       )}
 
       {txns.length === 0 ? (
-        <div className="flex h-[300px] items-center justify-center rounded-lg border border-dashed text-center text-muted-foreground">
-          No transactions yet. Transactions will appear when you import data
-          or connect accounts via Plaid.
+        <div className="flex h-[300px] flex-col items-center justify-center rounded-lg border border-dashed text-center">
+          <p className="text-muted-foreground font-medium">Transaction tracking coming soon</p>
+          <p className="text-sm text-muted-foreground mt-2 max-w-md">
+            Transaction history will be available when Plaid transaction syncing
+            is fully implemented. For now, use the Holdings and Dashboard pages
+            to track your portfolio.
+          </p>
         </div>
       ) : (
         <div className="rounded-lg border">

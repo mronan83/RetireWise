@@ -139,7 +139,10 @@ export function InteractiveProjections({
         if (y < yearsToRetirement) {
           portfolio += growth + annualContributions;
         } else {
-          portfolio = portfolio + growth - Math.min(annualWithdrawal, portfolio + growth);
+          // Grow withdrawals with inflation each year of retirement
+          const retYear = y - yearsToRetirement;
+          const inflatedWithdrawal = annualWithdrawal * Math.pow(1 + scenario.inflationPct / 100, retYear);
+          portfolio = portfolio + growth - Math.min(inflatedWithdrawal, portfolio + growth);
         }
         portfolio = Math.max(0, portfolio);
         path.push(Math.round(portfolio));

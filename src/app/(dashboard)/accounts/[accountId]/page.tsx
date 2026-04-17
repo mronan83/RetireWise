@@ -1,5 +1,5 @@
-import { auth } from "@clerk/nextjs/server";
-import { redirect, notFound } from "next/navigation";
+import { getAuthContext } from "@/lib/auth-helpers";
+import { notFound } from "next/navigation";
 import { eq } from "drizzle-orm";
 import { getDb } from "@/lib/db";
 import { contributions } from "@/lib/db/schema";
@@ -25,8 +25,7 @@ export default async function AccountDetailPage({
   params: Promise<{ accountId: string }>;
 }) {
   const { accountId } = await params;
-  const { userId } = await auth();
-  if (!userId) redirect("/sign-in");
+  const { dataClerkId: userId } = await getAuthContext();
 
   const [account, holdingsList, allContributions] = await Promise.all([
     getAccountById(accountId, userId),

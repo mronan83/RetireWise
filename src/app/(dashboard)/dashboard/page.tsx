@@ -1,6 +1,5 @@
 import { Suspense } from "react";
-import { auth } from "@clerk/nextjs/server";
-import { redirect } from "next/navigation";
+import { getAuthContext } from "@/lib/auth-helpers";
 import { PortfolioSummaryCards } from "@/components/dashboard/portfolio-summary-card";
 import { AllocationChart } from "@/components/dashboard/allocation-chart";
 import { PerformanceChart } from "@/components/dashboard/performance-chart";
@@ -20,8 +19,7 @@ import { getDb } from "@/lib/db";
 import { alerts as alertsTable, goals as goalsTable } from "@/lib/db/schema";
 
 async function DashboardContent() {
-  const { userId } = await auth();
-  if (!userId) redirect("/sign-in");
+  const { dataClerkId: userId } = await getAuthContext();
 
   const db = getDb();
   const [accountsList, holdingsWithAccounts, snapshots, activeAlerts, userGoals] = await Promise.all([
