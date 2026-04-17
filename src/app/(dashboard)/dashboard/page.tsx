@@ -14,15 +14,16 @@ import { RefreshPricesButton } from "@/components/dashboard/refresh-prices-butto
 import { AlertsPanel } from "@/components/dashboard/alerts-panel";
 import { GoalsPanel } from "@/components/dashboard/goals-panel";
 import { ExportButtons } from "@/components/dashboard/export-buttons";
+import { NetWorthCard } from "@/components/dashboard/net-worth-card";
 import { eq, and, desc } from "drizzle-orm";
 import { getDb } from "@/lib/db";
-import { alerts as alertsTable, goals as goalsTable } from "@/lib/db/schema";
+import { alerts as alertsTable, goals as goalsTable, realEstate, cashReserves, debts } from "@/lib/db/schema";
 
 async function DashboardContent() {
   const { dataClerkId: userId } = await getAuthContext();
 
   const db = getDb();
-  const [accountsList, holdingsWithAccounts, snapshots, activeAlerts, userGoals] = await Promise.all([
+  const [accountsList, holdingsWithAccounts, snapshots, activeAlerts, userGoals, properties, cashAccounts, debtsList] = await Promise.all([
     getAccounts(userId),
     getHoldingsByClerkId(userId),
     getSnapshots(userId, 90),
@@ -30,6 +31,9 @@ async function DashboardContent() {
       and(eq(alertsTable.clerkId, userId), eq(alertsTable.isDismissed, false))
     ).orderBy(desc(alertsTable.createdAt)).limit(10),
     db.select().from(goalsTable).where(eq(goalsTable.clerkId, userId)),
+    db.select().from(realEstate).where(eq(realEstate.clerkId, userId)),
+    db.select().from(cashReserves).where(eq(cashReserves.clerkId, userId)),
+    db.select().from(debts).where(eq(debts.clerkId, userId)),
   ]);
 
   const holdingsForCalc = holdingsWithAccounts.map((h) => ({
@@ -101,6 +105,15 @@ async function DashboardContent() {
       </div>
 
       <AlertsPanel alerts={activeAlerts} />
+
+      <NetWorthCard
+        investmentTotal={summary.totalValue}
+        realEstateEquity={properties.reduce(
+          (s, p) => s + Number(p.estimatedValue) - Number(p.mortgageBalance || 0), 0
+        )}
+        cashTotal={cashAccounts.reduce((s, c) => s + Number(c.balance), 0)}
+        debtTotal={debtsList.reduce((s, d) => s + Number(d.currentBalance), 0)}
+      />
 
       <PortfolioSummaryCards
         totalValue={summary.totalValue}
