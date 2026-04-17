@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useActionState } from "react";
+import { useState, useEffect, useActionState } from "react";
 import { Plus, Trash2, Pencil, Wallet } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -88,6 +88,13 @@ type AccountInfo = {
   isActivelyContributing: boolean;
 };
 
+type IrsLimit = {
+  accountType: string;
+  limitUnder50: string;
+  limitOver50: string;
+  taxYear: number;
+};
+
 type Props = {
   contributions: Contribution[];
   selfSalary: number | null;
@@ -102,7 +109,25 @@ export function ContributionsSection({
   accounts = [],
 }: Props) {
   const [addOpen, setAddOpen] = useState(false);
-  const [showMatch, setShowMatch] = useState(false);
+  const [irsLimits, setIrsLimits] = useState<IrsLimit[]>([]);
+
+  // Fetch IRS limits on mount
+  useEffect(() => {
+    fetch("/api/irs-limits/refresh")
+      .then((r) => r.json())
+      .then((data) => setIrsLimits(data.limits || []))
+      .catch(() => {});
+  }, []);
+
+  // Get the current year's IRS limit for an account type
+  const getIrsLimit = (accountType: string): number | null => {
+    const currentYear = new Date().getFullYear();
+    // Try current year, then next year, then previous year
+    const limit = irsLimits.find((l) => l.accountType === accountType && l.taxYear === currentYear)
+      || irsLimits.find((l) => l.accountType === accountType && l.taxYear === currentYear + 1)
+      || irsLimits.find((l) => l.accountType === accountType);
+    return limit ? Number(limit.limitUnder50) : null;
+  };
 
   const selfItems = items.filter((c) => c.owner === "self");
   const spouseItems = items.filter((c) => c.owner === "spouse");
@@ -196,6 +221,7 @@ export function ContributionsSection({
                 matchAnnual={matchAnnual}
                 matchedAccountName={matchedAccount?.name || null}
                 accounts={accounts}
+                getIrsLimit={getIrsLimit}
               />
             );
           })}
@@ -214,7 +240,7 @@ export function ContributionsSection({
           <DialogHeader>
             <DialogTitle>Add Contribution</DialogTitle>
           </DialogHeader>
-          <AddContributionForm accounts={accounts} onSuccess={() => setAddOpen(false)} />
+          <AddContributionForm accounts={accounts} getIrsLimit={getIrsLimit} onSuccess={() => setAddOpen(false)} />
         </DialogContent>
       </Dialog>
     </div>
@@ -227,12 +253,14 @@ function ContributionRow({
   matchAnnual,
   matchedAccountName,
   accounts,
+  getIrsLimit,
 }: {
   contribution: Contribution;
   yourAnnual: number;
   matchAnnual: number;
   matchedAccountName: string | null;
   accounts: AccountInfo[];
+  getIrsLimit: (accountType: string) => number | null;
 }) {
   const [editOpen, setEditOpen] = useState(false);
 
@@ -316,6 +344,7 @@ function ContributionRow({
           <EditContributionForm
             contribution={c}
             accounts={accounts}
+            getIrsLimit={getIrsLimit}
             onSuccess={() => setEditOpen(false)}
           />
         </DialogContent>
@@ -324,7 +353,7 @@ function ContributionRow({
   );
 }
 
-function AddContributionForm({ accounts, onSuccess }: { accounts: AccountInfo[]; onSuccess: () => void }) {
+function AddContributionForm({ accounts, getIrsLimit, onSuccess }: { accounts: AccountInfo[]; getIrsLimit: (t: string) => number | null; onSuccess: () => void }) {
   const [method, setMethod] = useState<"percent_of_salary" | "fixed_amount">(
     "percent_of_salary"
   );
@@ -333,6 +362,7 @@ function AddContributionForm({ accounts, onSuccess }: { accounts: AccountInfo[];
   const [selectedAccountId, setSelectedAccountId] = useState(accounts[0]?.id || "");
 
   const selectedAccount = accounts.find((a) => a.id === selectedAccountId);
+  const irsMax = selectedAccount ? getIrsLimit(selectedAccount.accountType) : null;
 
   const [error, formAction, isPending] = useActionState(
     async (_prev: string | null, formData: FormData) => {
@@ -571,10 +601,14 @@ function AddContributionForm({ accounts, onSuccess }: { accounts: AccountInfo[];
                 type="number"
                 step="100"
                 min="0"
-                placeholder="23500"
+                key={irsMax || "default"}
+                defaultValue={irsMax || ""}
+                placeholder={irsMax ? String(irsMax) : "23500"}
               />
               <p className="text-xs text-muted-foreground">
-                IRS 2025 limits: 401k $23,500 (under 50) / $31,000 (50+), IRA $7,000 / $8,000
+                {irsMax
+                  ? `Auto-filled from IRS ${new Date().getFullYear()} limit: ${formatCurrency(irsMax)} (under 50). Updates when IRS limits are refreshed.`
+                  : "Set the IRS annual limit. Refresh IRS limits in Settings to auto-fill."}
               </p>
             </div>
           </div>
@@ -591,10 +625,12 @@ function AddContributionForm({ accounts, onSuccess }: { accounts: AccountInfo[];
 function EditContributionForm({
   contribution: c,
   accounts,
+  getIrsLimit,
   onSuccess,
 }: {
   contribution: Contribution;
   accounts: AccountInfo[];
+  getIrsLimit: (t: string) => number | null;
   onSuccess: () => void;
 }) {
   const [method, setMethod] = useState<"percent_of_salary" | "fixed_amount">(
@@ -605,6 +641,7 @@ function EditContributionForm({
   const [selectedAccountId, setSelectedAccountId] = useState(c.accountId || accounts[0]?.id || "");
 
   const selectedAccount = accounts.find((a) => a.id === selectedAccountId);
+  const irsMax = selectedAccount ? getIrsLimit(selectedAccount.accountType) : null;
 
   const [error, formAction, isPending] = useActionState(
     async (_prev: string | null, formData: FormData) => {
@@ -719,7 +756,13 @@ function EditContributionForm({
             </div>
             <div className="space-y-1">
               <Label className="text-xs">Max annual ($)</Label>
-              <Input name="maxAnnualContribution" type="number" step="100" defaultValue={c.maxAnnualContribution || ""} />
+              <Input name="maxAnnualContribution" type="number" step="100"
+                defaultValue={c.maxAnnualContribution || irsMax || ""} />
+              {irsMax && (
+                <p className="text-[10px] text-muted-foreground">
+                  IRS limit: {formatCurrency(irsMax)} (under 50)
+                </p>
+              )}
             </div>
           </div>
         )}
