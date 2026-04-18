@@ -788,7 +788,10 @@ export function InteractiveProjections({
                         </TableCell>
                         {projection.accountProjections.map((ap) => (
                           <TableCell key={ap.name} className="text-right font-mono text-xs">
-                            {formatCurrency(ap.projectedValues[i])}
+                            <div>{formatCurrency(ap.projectedValues[i])}</div>
+                            {projection.phases[i] === "accumulation" && ap.contributionPerYear?.[i] > 0 && (
+                              <div className="text-[9px] text-green-500">+{formatCurrency(ap.contributionPerYear[i])}</div>
+                            )}
                           </TableCell>
                         ))}
                         <TableCell className="text-right font-mono text-xs font-bold">

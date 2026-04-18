@@ -91,6 +91,7 @@ export type AccountProjection = {
   taxTreatment: string;
   currentValue: number;
   projectedValues: number[]; // value at each year
+  contributionPerYear: number[]; // contribution added each year (for debugging)
 };
 
 export type DetailedProjection = {
@@ -155,6 +156,7 @@ export function runDetailedProjection(params: {
     taxTreatment: a.taxTreatment,
     currentValue: a.value,
     projectedValues: [],
+    contributionPerYear: [],
   }));
 
   const totalPortfolio = accounts.reduce((s, a) => s + a.value, 0);
@@ -222,7 +224,12 @@ export function runDetailedProjection(params: {
           const actualContrib = Math.max(0, yearContrib);
           newVal += actualContrib;
           yearTotalContributions += actualContrib;
+          ap.contributionPerYear.push(Math.round(actualContrib));
+        } else {
+          ap.contributionPerYear.push(0);
         }
+      } else {
+        ap.contributionPerYear.push(0);
       }
 
       ap.projectedValues.push(Math.max(0, Math.round(newVal)));
