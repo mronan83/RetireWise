@@ -25,6 +25,7 @@ export async function POST(request: Request) {
   if (body.maxWithdrawalAmount !== undefined) data.projectionMaxWithdrawalAmount = body.maxWithdrawalAmount != null ? String(body.maxWithdrawalAmount) : null;
   if (body.retirementYears !== undefined) data.projectionRetirementYears = body.retirementYears;
   if (body.marketScenario !== undefined) data.projectionMarketScenario = body.marketScenario;
+  if (body.withdrawalMethod !== undefined) data.projectionWithdrawalMethod = body.withdrawalMethod;
 
   if (existing.length > 0) {
     await db.update(userPreferences).set(data).where(eq(userPreferences.clerkId, userId));
@@ -49,6 +50,7 @@ export async function GET() {
       maxWithdrawalAmount: userPreferences.projectionMaxWithdrawalAmount,
       retirementYears: userPreferences.projectionRetirementYears,
       marketScenario: userPreferences.projectionMarketScenario,
+      withdrawalMethod: userPreferences.projectionWithdrawalMethod,
     })
     .from(userPreferences)
     .where(eq(userPreferences.clerkId, userId))

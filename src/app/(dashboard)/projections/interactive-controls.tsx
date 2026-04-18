@@ -71,6 +71,7 @@ type Props = {
     maxWithdrawalAmount: number | null;
     retirementYears: number | null;
     marketScenario: string | null;
+    withdrawalMethod: string | null;
   };
 };
 
@@ -105,6 +106,9 @@ export function InteractiveProjections({
   const [spouseSSAge, setSpouseSSAge] = useState(savedControls?.ssClaimAgeSpouse || spouseFRA || 67);
   const [monthlySpending, setMonthlySpending] = useState(savedControls?.monthlySpending || monthlyExpenses);
   const [withdrawalRatePct, setWithdrawalRatePct] = useState(savedControls?.withdrawalRate || 4.0);
+  const [withdrawalMethod, setWithdrawalMethod] = useState<"expense" | "rate" | "higher">(
+    (savedControls?.withdrawalMethod as "expense" | "rate" | "higher") || "expense"
+  );
   const [maxWithdrawalAmount, setMaxWithdrawalAmount] = useState<number | null>(
     savedControls?.maxWithdrawalAmount ?? null
   );
@@ -118,6 +122,7 @@ export function InteractiveProjections({
   const updateSpouseSSAge = (v: number) => { setSpouseSSAge(v); saveControls({ ssClaimAgeSpouse: v }); };
   const updateSpending = (v: number) => { setMonthlySpending(v); saveControls({ monthlySpending: v }); };
   const updateWithdrawalRate = (v: number) => { setWithdrawalRatePct(v); saveControls({ withdrawalRate: v }); };
+  const updateWithdrawalMethod = (v: "expense" | "rate" | "higher") => { setWithdrawalMethod(v); saveControls({ withdrawalMethod: v }); };
   const updateMaxWithdrawal = (v: number | null) => { setMaxWithdrawalAmount(v); saveControls({ maxWithdrawalAmount: v }); };
   const updateRetirementYears = (v: number) => { setRetirementYears(v); saveControls({ retirementYears: v }); };
   const updateScenario = (v: string) => { setSelectedScenario(v); saveControls({ marketScenario: v }); };
@@ -149,11 +154,12 @@ export function InteractiveProjections({
         inflationPct: scenario.inflationPct,
         annualExpenses: monthlySpending * 12,
         withdrawalRatePct,
+        withdrawalMethod,
         maxAnnualWithdrawal: maxWithdrawalAmount || undefined,
         annualSSIncome: combinedSSAnnual,
         ssStartYear,
       }),
-    [accounts, annualContributions, yearsToRetirement, retirementYears, currentAge, scenario, monthlySpending, withdrawalRatePct, combinedSSAnnual, ssStartYear]
+    [accounts, annualContributions, yearsToRetirement, retirementYears, currentAge, scenario, monthlySpending, withdrawalRatePct, withdrawalMethod, maxWithdrawalAmount, combinedSSAnnual, ssStartYear]
   );
 
   // Run Monte Carlo (client-side, reactive to all controls)
@@ -181,14 +187,24 @@ export function InteractiveProjections({
         if (y < yearsToRetirement) {
           portfolio += growth + annualContributions;
         } else {
-          // Grow withdrawals with inflation each year of retirement
           const retYear = y - yearsToRetirement;
-          const rateBasedWithdrawal = portfolio * (withdrawalRatePct / 100);
-          const inflatedExpenseWithdrawal = expenseBasedWithdrawal * Math.pow(1 + scenario.inflationPct / 100, retYear);
-          let withdrawal = Math.max(inflatedExpenseWithdrawal, rateBasedWithdrawal);
-          // Apply absolute cap
+          const age = currentAge + y + 1;
+          const rateBased = portfolio * (withdrawalRatePct / 100);
+          const inflatedExpense = expenseBasedWithdrawal * Math.pow(1 + scenario.inflationPct / 100, retYear);
+          // Approximate RMD (assume ~60% of portfolio is tax-deferred)
+          const approxTaxDeferred = portfolio * 0.6;
+          const rmd = age >= 73 ? approxTaxDeferred / Math.max(5, 95 - age + 8.9) : 0;
+
+          let withdrawal: number;
+          if (withdrawalMethod === "expense") withdrawal = inflatedExpense;
+          else if (withdrawalMethod === "rate") withdrawal = rateBased;
+          else withdrawal = Math.max(inflatedExpense, rateBased);
+
+          // RMDs are mandatory
+          if (rmd > withdrawal) withdrawal = rmd;
+          // Apply cap (but not below RMD)
           if (maxWithdrawalAmount && maxWithdrawalAmount > 0) {
-            withdrawal = Math.min(withdrawal, maxWithdrawalAmount);
+            withdrawal = Math.max(rmd, Math.min(withdrawal, maxWithdrawalAmount));
           }
           portfolio = portfolio + growth - Math.min(withdrawal, portfolio + growth);
         }
@@ -223,7 +239,7 @@ export function InteractiveProjections({
       worstCase: percentiles.p10[yearsToRetirement - 1] || 0,
       bestCase: percentiles.p90[yearsToRetirement - 1] || 0,
     };
-  }, [accounts, annualContributions, yearsToRetirement, retirementYears, currentAge, scenario, monthlySpending, withdrawalRatePct, maxWithdrawalAmount, combinedSSAnnual]);
+  }, [accounts, annualContributions, yearsToRetirement, retirementYears, currentAge, scenario, monthlySpending, withdrawalRatePct, withdrawalMethod, maxWithdrawalAmount, combinedSSAnnual]);
 
   // Chart data
   const chartData = projection.ages.map((age, i) => ({
@@ -341,6 +357,33 @@ export function InteractiveProjections({
                 {formatCurrency(spouseSSMonthly)}/mo at age {spouseSSAge}
               </p>
             </div>
+          </div>
+
+          {/* Withdrawal Method */}
+          <div className="space-y-2">
+            <Label className="text-sm font-medium">Withdrawal Method</Label>
+            <div className="grid grid-cols-3 gap-2">
+              {([
+                { id: "expense" as const, name: "Expense-Based", desc: "Withdraw what you need for spending minus SS" },
+                { id: "rate" as const, name: "Rate-Based", desc: "Withdraw X% of portfolio each year (4% rule)" },
+                { id: "higher" as const, name: "Higher Of Both", desc: "Use the higher of expense or rate calculation" },
+              ]).map((m) => (
+                <button
+                  key={m.id}
+                  onClick={() => updateWithdrawalMethod(m.id)}
+                  className={cn(
+                    "rounded-lg border p-2 text-left transition-colors text-xs",
+                    withdrawalMethod === m.id ? "border-primary bg-primary/5" : "hover:bg-accent/50"
+                  )}
+                >
+                  <p className="font-medium">{m.name}</p>
+                  <p className="text-muted-foreground mt-0.5 text-[10px]">{m.desc}</p>
+                </button>
+              ))}
+            </div>
+            <p className="text-[10px] text-muted-foreground">
+              Note: After age 73, Required Minimum Distributions (RMDs) from tax-deferred accounts are mandatory regardless of method chosen. The withdrawal will never be less than the RMD.
+            </p>
           </div>
 
           {/* Monthly Retirement Spending + Withdrawal Rate */}

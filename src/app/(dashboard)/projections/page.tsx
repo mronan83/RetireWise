@@ -201,6 +201,7 @@ export default async function ProjectionsPage() {
           maxWithdrawalAmount: pref.projectionMaxWithdrawalAmount ? Number(pref.projectionMaxWithdrawalAmount) : null,
           retirementYears: pref.projectionRetirementYears || null,
           marketScenario: pref.projectionMarketScenario || null,
+          withdrawalMethod: pref.projectionWithdrawalMethod || null,
         }}
       />
 

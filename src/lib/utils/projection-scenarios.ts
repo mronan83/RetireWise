@@ -3,6 +3,7 @@
  */
 
 import { getSalaryAtYear, type SalaryGrowthConfig } from "./salary-growth";
+import { calculateRMD } from "./financial-analytics";
 
 export type MarketScenario = {
   id: string;
@@ -125,7 +126,8 @@ export function runDetailedProjection(params: {
   returnPct: number;
   inflationPct: number;
   annualExpenses: number;
-  withdrawalRatePct?: number; // if set, withdrawals = max(expenses, portfolio * rate)
+  withdrawalRatePct?: number;
+  withdrawalMethod?: "expense" | "rate" | "higher"; // how to determine withdrawal amount
   maxAnnualWithdrawal?: number; // cap on annual withdrawal (null/0 = unlimited)
   annualSSIncome: number;
   ssStartYear: number; // year when SS starts (0-indexed from now)
@@ -140,6 +142,7 @@ export function runDetailedProjection(params: {
     inflationPct,
     annualExpenses,
     withdrawalRatePct,
+    withdrawalMethod = "expense",
     maxAnnualWithdrawal,
     annualSSIncome,
     ssStartYear,
@@ -235,36 +238,55 @@ export function runDetailedProjection(params: {
       ap.projectedValues.push(Math.max(0, Math.round(newVal)));
     }
 
-    // Withdrawals in retirement — expenses grow with inflation
-    // If withdrawal rate is set, use the higher of (expenses - SS) or (portfolio * rate)
+    // Withdrawals in retirement
     let yearWithdrawal = 0;
     if (isRetirement) {
       const retirementYear = y - yearsToRetirement;
+      const age = startAge + y + 1;
       const inflatedExpenses = annualExpenses * Math.pow(1 + inflationPct / 100, retirementYear);
       const inflatedSS = yearSS * Math.pow(1 + inflationPct / 100, retirementYear);
-      const expenseBasedWithdrawal = Math.max(0, inflatedExpenses - inflatedSS);
 
-      // Calculate rate-based withdrawal if withdrawal rate is specified
+      // Calculate each withdrawal method
+      const expenseBased = Math.max(0, inflatedExpenses - inflatedSS);
       const totalCurrent = accountProjs.reduce(
-        (s, ap) => s + ap.projectedValues[ap.projectedValues.length - 1],
-        0
+        (s, ap) => s + ap.projectedValues[ap.projectedValues.length - 1], 0
       );
-      let rateBasedWithdrawal = withdrawalRatePct ? totalCurrent * (withdrawalRatePct / 100) : 0;
+      const rateBased = withdrawalRatePct ? totalCurrent * (withdrawalRatePct / 100) : 0;
 
-      // Apply max annual withdrawal cap if set
-      if (maxAnnualWithdrawal && maxAnnualWithdrawal > 0) {
-        rateBasedWithdrawal = Math.min(rateBasedWithdrawal, maxAnnualWithdrawal);
+      // Calculate RMD — mandatory minimum from tax-deferred accounts at age 73+
+      const taxDeferredBalance = accountProjs
+        .filter((_, idx) => {
+          const t = accounts[idx].type;
+          return t === "401k" || t === "403b" || t === "ira_traditional" || t === "pension";
+        })
+        .reduce((s, ap) => s + ap.projectedValues[ap.projectedValues.length - 1], 0);
+      const rmd = calculateRMD(taxDeferredBalance, age);
+
+      // Determine base withdrawal by method
+      let needed: number;
+      switch (withdrawalMethod) {
+        case "expense":
+          needed = expenseBased;
+          break;
+        case "rate":
+          needed = rateBased;
+          break;
+        case "higher":
+        default:
+          needed = Math.max(expenseBased, rateBased);
+          break;
       }
 
-      // Use the higher of expense-based or rate-based withdrawal
-      let needed = withdrawalRatePct
-        ? Math.max(expenseBasedWithdrawal, rateBasedWithdrawal)
-        : expenseBasedWithdrawal;
-
-      // Apply max cap to the final withdrawal amount (absolute cap)
-      if (maxAnnualWithdrawal && maxAnnualWithdrawal > 0) {
-        needed = Math.min(needed, maxAnnualWithdrawal);
+      // RMDs are mandatory — if RMD exceeds chosen withdrawal, must take at least the RMD
+      if (rmd > needed) {
+        needed = rmd;
       }
+
+      // Apply max annual cap (but RMDs can't be capped — they're mandatory)
+      if (maxAnnualWithdrawal && maxAnnualWithdrawal > 0) {
+        needed = Math.max(rmd, Math.min(needed, maxAnnualWithdrawal));
+      }
+
       let remaining = needed;
 
       if (totalCurrent > 0 && remaining > 0) {

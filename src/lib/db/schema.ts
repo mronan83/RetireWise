@@ -297,6 +297,7 @@ export const userPreferences = pgTable("user_preferences", {
   projectionMaxWithdrawalAmount: decimal("projection_max_withdrawal_amount", { precision: 20, scale: 2 }),
   projectionRetirementYears: integer("projection_retirement_years"),
   projectionMarketScenario: text("projection_market_scenario"),
+  projectionWithdrawalMethod: text("projection_withdrawal_method"),
 
   // Household
   filingStatus: filingStatusEnum("filing_status").default(
