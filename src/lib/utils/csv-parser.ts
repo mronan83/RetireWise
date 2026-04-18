@@ -112,94 +112,107 @@ export function parseGenericCSV(csvText: string): ParsedHolding[] {
 /**
  * Parse QFX/OFX files (used by ADP myKplan, Schwab, and other brokerages).
  * QFX is SGML-based, not proper XML — tags aren't self-closing.
- * We extract investment positions from <INVPOSLIST> or fall back to
- * stock positions from <POSSTOCK>/<POSMF>/<POSOTHER> blocks.
+ *
+ * ADP myKplan files use CUSIP numbers instead of ticker symbols.
+ * We build a lookup from the SECLIST section first (CUSIP → ticker + name),
+ * then match positions against it.
  */
 export function parseQFX(text: string): ParsedHolding[] {
   const holdings: ParsedHolding[] = [];
 
   // Helper to extract a tag value from OFX SGML
-  // OFX format: <TAGNAME>value (no closing tag for leaf nodes)
+  // OFX format: <TAGNAME>value\n (no closing tag for leaf nodes)
   function getTag(block: string, tag: string): string {
     const regex = new RegExp(`<${tag}>([^<\\r\\n]+)`, "i");
     const match = block.match(regex);
     return match ? match[1].trim() : "";
   }
 
-  // Split into position blocks — OFX uses POSSTOCK, POSMF, POSOTHER, POSOPT
-  const positionPattern = /<(POSSTOCK|POSMF|POSOTHER|POSOPT)>([\s\S]*?)(?=<\/(POSSTOCK|POSMF|POSOTHER|POSOPT)>|<(POSSTOCK|POSMF|POSOTHER|POSOPT)>|<\/INVPOSLIST>)/gi;
+  // Step 1: Build security lookup from SECLIST
+  // SECLIST contains SECINFO blocks with UNIQUEID (CUSIP), SECNAME, and sometimes TICKER
+  type SecInfo = { cusip: string; ticker: string; name: string };
+  const secLookup = new Map<string, SecInfo>();
+
+  // Match SECINFO blocks — they can be nested inside STOCKINFO, MFINFO, OTHERINFO, or standalone
+  const secInfoPattern = /<SECINFO>([\s\S]*?)(?=<\/SECINFO>|<SECINFO>|<(?:STOCK|MF|OTHER)INFO>|<\/SECLIST>)/gi;
   let match;
+  while ((match = secInfoPattern.exec(text)) !== null) {
+    const block = match[1];
+    const cusip = getTag(block, "UNIQUEID");
+    const ticker = getTag(block, "TICKER");
+    const name = getTag(block, "SECNAME");
+    if (cusip) {
+      secLookup.set(cusip.toUpperCase().trim(), {
+        cusip: cusip.toUpperCase().trim(),
+        ticker: ticker ? ticker.toUpperCase().trim() : "",
+        name: name ? name.trim() : "",
+      });
+    }
+  }
+
+  // Also try broader pattern: some QFX files put SECNAME/TICKER at same level as UNIQUEID
+  // without a wrapping SECINFO tag (e.g., directly inside STOCKINFO/MFINFO)
+  const infoBlockPattern = /<(STOCKINFO|MFINFO|OTHERINFO)>([\s\S]*?)(?=<\/(STOCKINFO|MFINFO|OTHERINFO)>|<(STOCKINFO|MFINFO|OTHERINFO)>|<\/SECLIST>)/gi;
+  while ((match = infoBlockPattern.exec(text)) !== null) {
+    const block = match[2];
+    const cusip = getTag(block, "UNIQUEID");
+    const ticker = getTag(block, "TICKER");
+    const name = getTag(block, "SECNAME");
+    if (cusip && !secLookup.has(cusip.toUpperCase().trim())) {
+      secLookup.set(cusip.toUpperCase().trim(), {
+        cusip: cusip.toUpperCase().trim(),
+        ticker: ticker ? ticker.toUpperCase().trim() : "",
+        name: name ? name.trim() : "",
+      });
+    }
+  }
+
+  // Step 2: Extract positions from INVPOSLIST
+  const positionPattern = /<(POSSTOCK|POSMF|POSOTHER|POSOPT)>([\s\S]*?)(?=<\/(POSSTOCK|POSMF|POSOTHER|POSOPT)>|<(POSSTOCK|POSMF|POSOTHER|POSOPT)>|<\/INVPOSLIST>)/gi;
 
   while ((match = positionPattern.exec(text)) !== null) {
     const block = match[2];
 
-    // SECID contains the ticker/unique ID
-    const ticker = getTag(block, "TICKER") || getTag(block, "UNIQUEID");
-    if (!ticker) continue;
+    const cusip = getTag(block, "UNIQUEID");
+    if (!cusip) continue;
 
     const units = parseFloat(getTag(block, "UNITS") || "0");
     const unitPrice = parseFloat(getTag(block, "UNITPRICE") || "0");
     const mktVal = parseFloat(getTag(block, "MKTVAL") || "0");
-
-    // Some QFX files use SECNAME inside the block or in a separate SECLIST
-    const name = getTag(block, "SECNAME") || getTag(block, "MEMO") || ticker;
 
     if (units === 0 && mktVal === 0) continue;
 
     const shares = isNaN(units) ? 0 : units;
     const price = isNaN(unitPrice) ? (shares > 0 && mktVal > 0 ? mktVal / shares : 0) : unitPrice;
 
+    // Look up security info from SECLIST
+    const secInfo = secLookup.get(cusip.toUpperCase().trim());
+    const ticker = secInfo?.ticker || getTag(block, "TICKER") || cusip.toUpperCase().trim();
+    const name = secInfo?.name || getTag(block, "SECNAME") || getTag(block, "MEMO") || "";
+
     holdings.push({
-      ticker: ticker.toUpperCase().trim(),
-      name: name.trim(),
+      ticker,
+      name: name || ticker,
       shares,
       costBasisPerShare: 0, // QFX typically doesn't include cost basis
       currentPrice: price,
       assetClass: guessAssetClass(ticker, name),
-    });
+      // Stash the CUSIP so the UI can show it for identification
+      _cusip: cusip.toUpperCase().trim(),
+    } as ParsedHolding & { _cusip?: string });
   }
 
-  // If no position blocks found, try to extract from SECLIST (security list)
-  // which some QFX files use as the only data source
+  // Step 3: If no positions found, build holdings from SECLIST alone (some files only have this)
   if (holdings.length === 0) {
-    const secPattern = /<(STOCKINFO|MFINFO|OTHERINFO)>([\s\S]*?)(?=<\/(STOCKINFO|MFINFO|OTHERINFO)>|<(STOCKINFO|MFINFO|OTHERINFO)>|<\/SECLIST>)/gi;
-    while ((match = secPattern.exec(text)) !== null) {
-      const block = match[2];
-      const ticker = getTag(block, "TICKER") || getTag(block, "UNIQUEID");
-      const name = getTag(block, "SECNAME") || ticker;
-      const unitPrice = parseFloat(getTag(block, "UNITPRICE") || "0");
-
-      if (!ticker) continue;
-
+    for (const [, sec] of secLookup) {
       holdings.push({
-        ticker: ticker.toUpperCase().trim(),
-        name: (name || ticker).trim(),
+        ticker: sec.ticker || sec.cusip,
+        name: sec.name || sec.ticker || sec.cusip,
         shares: 0,
         costBasisPerShare: 0,
-        currentPrice: isNaN(unitPrice) ? 0 : unitPrice,
-        assetClass: guessAssetClass(ticker, name),
+        currentPrice: 0,
+        assetClass: guessAssetClass(sec.ticker || sec.cusip, sec.name),
       });
-    }
-  }
-
-  // Also try to pull security names from the SECLIST to enrich position data
-  const secNames = new Map<string, string>();
-  const secNamePattern = /<SECINFO>([\s\S]*?)(?=<\/SECINFO>|<SECINFO>|<\/SECLIST>)/gi;
-  while ((match = secNamePattern.exec(text)) !== null) {
-    const block = match[1];
-    const ticker = getTag(block, "TICKER") || getTag(block, "UNIQUEID");
-    const name = getTag(block, "SECNAME");
-    if (ticker && name) {
-      secNames.set(ticker.toUpperCase().trim(), name.trim());
-    }
-  }
-
-  // Enrich holdings with security names from SECLIST
-  for (const h of holdings) {
-    const richName = secNames.get(h.ticker);
-    if (richName && (h.name === h.ticker || !h.name)) {
-      h.name = richName;
-      h.assetClass = guessAssetClass(h.ticker, richName);
     }
   }
 
