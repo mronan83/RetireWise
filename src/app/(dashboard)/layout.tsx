@@ -1,24 +1,32 @@
+import { cookies } from "next/headers";
 import { SidebarNav } from "@/components/dashboard/sidebar-nav";
 import { DashboardHeader } from "@/components/dashboard/header";
 import { ChatPanel } from "@/components/ai/chat-panel";
+import { DemoBanner } from "@/components/dashboard/demo-banner";
 
-export default function DashboardLayout({
+export default async function DashboardLayout({
   children,
 }: {
   children: React.ReactNode;
 }) {
+  const cookieStore = await cookies();
+  const isDemo = cookieStore.get("demo")?.value === "1";
+
   return (
-    <div className="flex min-h-screen">
-      <aside className="hidden w-64 shrink-0 border-r bg-card lg:block">
-        <div className="sticky top-0 overflow-y-auto h-screen">
-          <SidebarNav />
+    <div className="flex min-h-screen flex-col">
+      {isDemo && <DemoBanner />}
+      <div className="flex flex-1">
+        <aside className="hidden w-64 shrink-0 border-r bg-card lg:block">
+          <div className="sticky top-0 overflow-y-auto h-screen">
+            <SidebarNav />
+          </div>
+        </aside>
+        <div className="flex flex-1 flex-col">
+          <DashboardHeader isDemo={isDemo} />
+          <main className="flex-1 p-3 sm:p-4 lg:p-6 overflow-x-hidden">{children}</main>
         </div>
-      </aside>
-      <div className="flex flex-1 flex-col">
-        <DashboardHeader />
-        <main className="flex-1 p-3 sm:p-4 lg:p-6 overflow-x-hidden">{children}</main>
+        {!isDemo && <ChatPanel />}
       </div>
-      <ChatPanel />
     </div>
   );
 }

@@ -1,4 +1,5 @@
 import { clerkMiddleware, createRouteMatcher } from "@clerk/nextjs/server";
+import { NextResponse } from "next/server";
 
 // Routes that require Clerk authentication (user-facing pages + user API routes)
 const isProtectedRoute = createRouteMatcher([
@@ -19,6 +20,7 @@ const isProtectedRoute = createRouteMatcher([
   "/api/settings(.*)",
   "/api/alerts(.*)",
   "/api/export(.*)",
+  "/api/report(.*)",
   "/api/household(.*)",
   "/api/irs-limits(.*)",
 ]);
@@ -31,6 +33,32 @@ const isMachineRoute = createRouteMatcher([
 ]);
 
 export default clerkMiddleware(async (auth, req) => {
+  const url = req.nextUrl;
+
+  // Demo mode entry: /?demo=true → set cookie, redirect to /dashboard
+  if (url.searchParams.get("demo") === "true" && process.env.NEXT_PUBLIC_DEMO_ENABLED !== "false") {
+    const response = NextResponse.redirect(new URL("/dashboard", req.url));
+    response.cookies.set("demo", "1", {
+      path: "/",
+      maxAge: 3600, // 1 hour
+      sameSite: "lax",
+    });
+    return response;
+  }
+
+  // Demo mode exit: /?demo=false → clear cookie, redirect to /
+  if (url.searchParams.get("demo") === "false") {
+    const response = NextResponse.redirect(new URL("/", req.url));
+    response.cookies.delete("demo");
+    return response;
+  }
+
+  // If demo cookie is set, skip Clerk auth for protected routes
+  const isDemo = req.cookies.get("demo")?.value === "1";
+  if (isDemo && process.env.NEXT_PUBLIC_DEMO_ENABLED !== "false") {
+    return; // Allow through without auth
+  }
+
   // Skip Clerk auth for machine-to-machine endpoints
   if (isMachineRoute(req)) return;
 

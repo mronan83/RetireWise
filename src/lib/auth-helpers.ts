@@ -1,17 +1,28 @@
 import { auth } from "@clerk/nextjs/server";
+import { cookies } from "next/headers";
 import { eq } from "drizzle-orm";
 import { getDb } from "./db";
 import { households, householdMembers } from "./db/schema";
 
+export const DEMO_CLERK_ID = "demo_user_retirewise";
+
 /**
  * Get the authenticated user's ID and the household clerkId for data access.
- * If the user belongs to a household, dataClerkId is the primary member's ID.
- * If not, dataClerkId is the same as userId.
+ * In demo mode (cookie set by middleware), returns the demo clerkId
+ * so all reads show demo data. Writes still use auth() directly and will fail.
  */
 export async function getAuthContext(): Promise<{
   userId: string;
   dataClerkId: string;
+  isDemo: boolean;
 }> {
+  // Check for demo mode
+  const cookieStore = await cookies();
+  const demoEnabled = process.env.NEXT_PUBLIC_DEMO_ENABLED !== "false";
+  if (demoEnabled && cookieStore.get("demo")?.value === "1") {
+    return { userId: DEMO_CLERK_ID, dataClerkId: DEMO_CLERK_ID, isDemo: true };
+  }
+
   const { userId } = await auth();
   if (!userId) throw new Error("Unauthorized");
 
@@ -26,5 +37,5 @@ export async function getAuthContext(): Promise<{
   const dataClerkId =
     membership.length > 0 ? membership[0].primaryClerkId : userId;
 
-  return { userId, dataClerkId };
+  return { userId, dataClerkId, isDemo: false };
 }

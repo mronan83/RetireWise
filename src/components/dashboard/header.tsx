@@ -2,13 +2,13 @@
 
 import { useState } from "react";
 import { UserButton } from "@clerk/nextjs";
-import { Menu } from "lucide-react";
+import { Menu, Eye } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { ThemeToggle } from "@/components/theme-toggle";
 import { Sheet, SheetContent } from "@/components/ui/sheet";
 import { SidebarNav } from "./sidebar-nav";
 
-export function DashboardHeader() {
+export function DashboardHeader({ isDemo = false }: { isDemo?: boolean }) {
   const [menuOpen, setMenuOpen] = useState(false);
 
   return (
@@ -32,7 +32,14 @@ export function DashboardHeader() {
       <div className="flex-1" />
 
       <ThemeToggle />
-      <UserButton />
+      {isDemo ? (
+        <div className="flex items-center gap-1.5 rounded-full bg-amber-500/10 border border-amber-500/30 px-3 py-1">
+          <Eye className="h-3.5 w-3.5 text-amber-500" />
+          <span className="text-xs font-medium text-amber-500">Demo</span>
+        </div>
+      ) : (
+        <UserButton />
+      )}
     </header>
   );
 }

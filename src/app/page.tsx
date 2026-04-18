@@ -53,6 +53,11 @@ export default async function LandingPage() {
                 Start Tracking
               </Button>
             </Link>
+            <Link href="/?demo=true">
+              <Button variant="outline" size="lg" className="px-8">
+                Try Demo
+              </Button>
+            </Link>
           </div>
         </section>
 
