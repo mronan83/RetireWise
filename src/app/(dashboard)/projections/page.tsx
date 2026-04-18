@@ -47,7 +47,14 @@ export default async function ProjectionsPage() {
   }
 
   const totalValue = holdings.reduce((s, h) => s + Number(h.currentValue), 0);
-  const yearsToRetirement = Math.max(0, pref.retirementAge - pref.currentAge);
+
+  // Per-owner retirement years (0-indexed from now)
+  const selfYearsToRetirement = Math.max(0, pref.retirementAge - pref.currentAge);
+  const spouseYearsToRetirement = (pref.spouseRetirementAge && pref.spouseCurrentAge)
+    ? Math.max(0, pref.spouseRetirementAge - pref.spouseCurrentAge)
+    : selfYearsToRetirement;
+  // Withdrawals begin when the first person retires
+  const yearsToRetirement = Math.min(selfYearsToRetirement, spouseYearsToRetirement);
 
   // Calculate contributions
   const selfSalary = pref.annualSalary ? Number(pref.annualSalary) : 0;
@@ -164,6 +171,7 @@ export default async function ProjectionsPage() {
             employerMatchMaxPct: matchMaxPct,
             salary,
             salaryGrowth: salaryGrowthConfig,
+            ownerRetirementYear: a.owner === "spouse" ? spouseYearsToRetirement : selfYearsToRetirement,
           };
         }).filter((a) => a.value > 0 || a.annualContribution > 0)}
         currentAge={pref.currentAge}

@@ -120,9 +120,10 @@ export function runDetailedProjection(params: {
     employerMatchMaxPct: number; // e.g., 5 for up to 5%
     salary: number; // current salary for this account's owner
     salaryGrowth: import("./salary-growth").SalaryGrowthConfig | null;
+    ownerRetirementYear?: number; // year (0-indexed) this owner's contributions stop
   }[];
   totalAnnualContributions: number; // kept for backward compat / summary
-  yearsToRetirement: number;
+  yearsToRetirement: number; // when withdrawals begin (earliest retirement)
   yearsInRetirement: number;
   startAge: number;
   returnPct: number;
@@ -198,10 +199,12 @@ export function runDetailedProjection(params: {
       const growth = prev * rate;
       let newVal = prev + growth;
 
-      if (!isRetirement) {
-        // Calculate this year's contribution accounting for salary growth + escalation
-        const idx = accountProjs.indexOf(ap);
-        const acct = accounts[idx];
+      // Contributions: each account stops when its owner retires
+      const idx = accountProjs.indexOf(ap);
+      const acct = accounts[idx];
+      const ownerStillWorking = y < (acct.ownerRetirementYear ?? yearsToRetirement);
+
+      if (ownerStillWorking && acct.isActivelyContributing) {
         if (acct.annualContribution > 0 || acct.annualEscalation > 0 || (acct.contributionPct > 0 && acct.salary > 0)) {
           // Get this year's salary (accounts for salary growth config)
           const yearSalary = getSalaryAtYear(acct.salary, acct.salaryGrowth, y);

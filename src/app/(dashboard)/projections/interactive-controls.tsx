@@ -52,6 +52,7 @@ type AccountInput = {
   employerMatchMaxPct: number;
   salary: number;
   salaryGrowth: import("@/lib/utils/salary-growth").SalaryGrowthConfig | null;
+  ownerRetirementYear?: number;
 };
 
 type Props = {
