@@ -296,16 +296,15 @@ export function runDetailedProjection(params: {
         needed = Math.max(yearRmd, Math.min(needed, maxAnnualWithdrawal));
       }
 
-      let remaining = needed;
-
-      if (totalCurrent > 0 && remaining > 0) {
+      if (totalCurrent > 0 && needed > 0) {
+        // Withdraw proportionally from each account based on its share of total portfolio
         for (const ap of accountProjs) {
           const currentVal = ap.projectedValues[ap.projectedValues.length - 1];
           const share = currentVal / totalCurrent;
-          const withdrawal = Math.min(currentVal, remaining * share);
+          const targetWithdrawal = needed * share;
+          const withdrawal = Math.min(currentVal, targetWithdrawal);
           ap.projectedValues[ap.projectedValues.length - 1] -= Math.round(withdrawal);
           yearWithdrawal += withdrawal;
-          remaining -= withdrawal;
         }
       }
     }
