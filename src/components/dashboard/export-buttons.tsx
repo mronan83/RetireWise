@@ -1,6 +1,6 @@
 "use client";
 
-import { Download } from "lucide-react";
+import { Download, FileBarChart } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import {
   DropdownMenu,
@@ -17,6 +17,12 @@ export function ExportButtons() {
         Export
       </DropdownMenuTrigger>
       <DropdownMenuContent align="end">
+        <DropdownMenuItem
+          onClick={() => window.open("/api/report/infographic", "_blank")}
+        >
+          <FileBarChart className="mr-2 h-3.5 w-3.5" />
+          Infographic Report
+        </DropdownMenuItem>
         <DropdownMenuItem
           onClick={() => window.open("/api/export/report", "_blank")}
         >
