@@ -794,7 +794,10 @@ export function InteractiveProjections({
                         <TableRow key={i}>
                           <TableCell className="font-medium text-sm">{age}</TableCell>
                           <TableCell className="text-right font-mono text-xs text-red-500">
-                            -{formatCurrency(projection.withdrawals[i])}
+                            <span>-{formatCurrency(projection.withdrawals[i])}</span>
+                            {projection.rmdAmounts[i] > 0 && Math.abs(projection.withdrawals[i] - projection.rmdAmounts[i]) < 100 && (
+                              <Badge variant="outline" className="ml-1 text-[8px] px-1 py-0 border-amber-500/50 text-amber-500">RMD</Badge>
+                            )}
                           </TableCell>
                           <TableCell className="text-right font-mono text-xs">
                             {projection.rmdAmounts[i] > 0 ? (
@@ -854,14 +857,18 @@ export function InteractiveProjections({
                         )}>
                           {projection.phases[i] === "accumulation"
                             ? `+${formatCurrency(projection.contributions[i])}`
-                            : `-${formatCurrency(projection.withdrawals[i])}`}
+                            : (
+                              <div>
+                                <span>-{formatCurrency(projection.withdrawals[i])}</span>
+                                {projection.rmdAmounts[i] > 0 && Math.abs(projection.withdrawals[i] - projection.rmdAmounts[i]) < 100 && (
+                                  <Badge variant="outline" className="ml-1 text-[8px] px-1 py-0 border-amber-500/50 text-amber-500">RMD</Badge>
+                                )}
+                              </div>
+                            )}
                         </TableCell>
                         <TableCell className="text-right font-mono text-xs">
                           {projection.rmdAmounts[i] > 0 ? (
-                            <span className={cn(
-                              "text-amber-500",
-                              projection.rmdAmounts[i] > projection.withdrawals[i] * 0.9 ? "font-semibold" : ""
-                            )}>
+                            <span className="text-amber-500">
                               {formatCurrency(projection.rmdAmounts[i])}
                             </span>
                           ) : (
