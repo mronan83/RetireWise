@@ -31,8 +31,8 @@ export function HelpContent() {
   const [activeSection, setActiveSection] = useState<string>("overview");
 
   return (
-    <div className="flex gap-6">
-      {/* Sidebar nav */}
+    <div className="flex flex-col lg:flex-row gap-6">
+      {/* Sidebar nav — desktop only */}
       <nav className="hidden lg:block w-56 shrink-0">
         <div className="sticky top-20 space-y-0.5">
           {SECTIONS.map((s) => (
@@ -56,24 +56,23 @@ export function HelpContent() {
         </div>
       </nav>
 
-      {/* Mobile section selector */}
-      <div className="lg:hidden w-full">
-        <select
-          value={activeSection}
-          onChange={(e) => {
-            setActiveSection(e.target.value);
-            document.getElementById(`help-${e.target.value}`)?.scrollIntoView({ behavior: "smooth" });
-          }}
-          className="w-full rounded-md border bg-card px-3 py-2 text-sm mb-4"
-        >
-          {SECTIONS.map((s) => (
-            <option key={s.id} value={s.id}>{s.label}</option>
-          ))}
-        </select>
-      </div>
-
-      {/* Content */}
-      <div className="flex-1 min-w-0 space-y-8 lg:max-w-3xl">
+      {/* Content area (includes mobile selector at top) */}
+      <div className="flex-1 min-w-0 space-y-6 lg:space-y-8 lg:max-w-3xl">
+        {/* Mobile section selector */}
+        <div className="lg:hidden sticky top-14 z-10 bg-background pb-2">
+          <select
+            value={activeSection}
+            onChange={(e) => {
+              setActiveSection(e.target.value);
+              document.getElementById(`help-${e.target.value}`)?.scrollIntoView({ behavior: "smooth" });
+            }}
+            className="w-full rounded-md border bg-card px-3 py-2 text-sm"
+          >
+            {SECTIONS.map((s) => (
+              <option key={s.id} value={s.id}>{s.label}</option>
+            ))}
+          </select>
+        </div>
 
         {/* OVERVIEW */}
         <Section id="overview" title="What is RetireWise?">
