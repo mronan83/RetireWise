@@ -16,6 +16,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Slider } from "@/components/ui/slider";
+import { HelpTip } from "@/components/ui/help-tip";
 import { Badge } from "@/components/ui/badge";
 import {
   Table,
@@ -303,7 +304,7 @@ export function InteractiveProjections({
         <CardContent className="space-y-6">
           {/* Market Scenario */}
           <div className="space-y-2">
-            <Label className="text-sm font-medium">Market Scenario</Label>
+            <Label className="text-sm font-medium flex items-center gap-1.5">Market Scenario <HelpTip text="Each scenario sets different return, volatility, and inflation assumptions. The projection uses these to model portfolio growth and withdrawal sustainability." /></Label>
             <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
               {MARKET_SCENARIOS.map((s) => (
                 <button
@@ -329,7 +330,7 @@ export function InteractiveProjections({
           <div className="grid gap-6 sm:grid-cols-2">
             <div className="space-y-3">
               <div className="flex items-center justify-between">
-                <Label className="text-sm">Your SS Claiming Age</Label>
+                <Label className="text-sm flex items-center gap-1">SS Claiming Age <HelpTip text="Each year you delay past 62 increases your monthly benefit. Delaying to 70 gives ~76% more than claiming at 62. Your Full Retirement Age (FRA) is typically 67." /></Label>
                 <Badge variant="outline" className="font-mono">{selfSSAge}</Badge>
               </div>
               <Slider
@@ -372,7 +373,7 @@ export function InteractiveProjections({
 
           {/* Withdrawal Method */}
           <div className="space-y-2">
-            <Label className="text-sm font-medium">Withdrawal Method</Label>
+            <Label className="text-sm font-medium flex items-center gap-1.5">Withdrawal Method <HelpTip text="Controls how much you withdraw each year in retirement. Expense-based: withdraw what you need for spending minus SS. Rate-based: withdraw a % of your portfolio. Higher-of-both: use whichever amount is larger." /></Label>
             <div className="grid grid-cols-3 gap-2">
               {([
                 { id: "expense" as const, name: "Expense-Based", desc: "Withdraw what you need for spending minus SS" },
@@ -401,7 +402,7 @@ export function InteractiveProjections({
           <div className="grid gap-6 sm:grid-cols-2">
             <div className="space-y-3">
               <div className="flex items-center justify-between">
-                <Label className="text-sm">Monthly Retirement Spending</Label>
+                <Label className="text-sm flex items-center gap-1">Monthly Spending <HelpTip text="Your expected monthly household expenses in retirement. This amount grows with inflation each year. Used by the expense-based withdrawal method to determine how much to withdraw." /></Label>
                 <Badge variant="outline" className="font-mono">
                   {formatCurrency(monthlySpending)}/mo
                 </Badge>
@@ -424,7 +425,7 @@ export function InteractiveProjections({
 
             <div className="space-y-3">
               <div className="flex items-center justify-between">
-                <Label className="text-sm">Withdrawal Rate</Label>
+                <Label className="text-sm flex items-center gap-1">Withdrawal Rate <HelpTip text="The percentage of your portfolio withdrawn annually. The '4% rule' is a common guideline — withdraw 4% of your portfolio each year, and it should last 30 years in most market conditions." /></Label>
                 <Badge variant="outline" className="font-mono">
                   {withdrawalRatePct}%{maxWithdrawalAmount ? ` (max ${formatCurrency(maxWithdrawalAmount)}/yr)` : ""}
                 </Badge>
@@ -490,7 +491,7 @@ export function InteractiveProjections({
       <div className="grid gap-3 sm:gap-4 grid-cols-2 lg:grid-cols-3 xl:grid-cols-5">
         <Card>
           <CardHeader className="pb-2">
-            <CardTitle className="text-xs text-muted-foreground">Portfolio at Retirement ({retirementAge})</CardTitle>
+            <CardTitle className="text-xs text-muted-foreground flex items-center gap-1">Portfolio at Retirement ({retirementAge}) <HelpTip text="The projected total value of all your investment accounts at the year you retire. Accounts for contributions, employer match, salary growth, and market returns." /></CardTitle>
           </CardHeader>
           <CardContent>
             <p className="text-xl font-bold font-mono">{formatCurrency(portfolioAtRetirement)}</p>
@@ -618,7 +619,7 @@ export function InteractiveProjections({
       {/* Monte Carlo Fan Chart */}
       <Card>
         <CardHeader className="pb-2">
-          <CardTitle>Monte Carlo Simulation</CardTitle>
+          <CardTitle className="flex items-center gap-1.5">Monte Carlo Simulation <HelpTip text="Runs 500 random market scenarios to estimate how often your money lasts through retirement. Each scenario uses random annual returns based on the selected market scenario's average and volatility." /></CardTitle>
           <p className="text-sm text-muted-foreground">
             500 random scenarios — {monteCarloData.successRate}% success rate (money lasts {retirementYears}+ years)
           </p>

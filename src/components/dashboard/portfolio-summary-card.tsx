@@ -1,4 +1,5 @@
 import { TrendingUp, TrendingDown, DollarSign, BarChart3 } from "lucide-react";
+import { HelpTip } from "@/components/ui/help-tip";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import {
   formatCurrency,
@@ -58,8 +59,8 @@ export function PortfolioSummaryCards({
 
       <Card>
         <CardHeader className="flex flex-row items-center justify-between pb-2">
-          <CardTitle className="text-sm font-medium text-muted-foreground">
-            Total Gain/Loss
+          <CardTitle className="text-sm font-medium text-muted-foreground flex items-center gap-1">
+            Total Gain/Loss <HelpTip text="Unrealized gain or loss across all holdings. Calculated as (current value - cost basis). You only realize this gain/loss when you sell." />
           </CardTitle>
           {totalGainLoss >= 0 ? (
             <TrendingUp className="h-4 w-4 text-green-500" />

@@ -15,6 +15,7 @@ import {
   Landmark,
   UserCircle,
   Calculator,
+  HelpCircle,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 
@@ -29,6 +30,7 @@ const navItems = [
   { href: "/analytics", label: "Analytics", icon: Calculator },
   { href: "/import", label: "Import Data", icon: Upload },
   { href: "/settings", label: "Settings", icon: Settings },
+  { href: "/help", label: "Help", icon: HelpCircle },
   { href: "/account", label: "Account", icon: UserCircle },
 ];
 

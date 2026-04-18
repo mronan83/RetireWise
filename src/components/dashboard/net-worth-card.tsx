@@ -1,5 +1,6 @@
 import Link from "next/link";
 import { Landmark, TrendingUp, Home, PiggyBank, CreditCard, Car } from "lucide-react";
+import { HelpTip } from "@/components/ui/help-tip";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { formatCurrency } from "@/lib/utils/format";
 import { cn } from "@/lib/utils";
@@ -26,8 +27,8 @@ export function NetWorthCard({
     <Link href="/net-worth">
       <Card className="transition-colors hover:bg-accent/50">
         <CardHeader className="flex flex-row items-center justify-between pb-2">
-          <CardTitle className="text-sm font-medium text-muted-foreground">
-            Household Net Worth
+          <CardTitle className="text-sm font-medium text-muted-foreground flex items-center gap-1">
+            Household Net Worth <HelpTip text="Total assets (investments + real estate equity + cash + vehicle equity) minus debts. Click for the full breakdown." />
           </CardTitle>
           <Landmark className="h-4 w-4 text-muted-foreground" />
         </CardHeader>
