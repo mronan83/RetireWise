@@ -90,7 +90,7 @@ async function DashboardContent() {
   }
 
   return (
-    <div className="space-y-6">
+    <div className="flex flex-col gap-4">
       <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
         <div>
           <h1 className="text-2xl font-bold tracking-tight">Dashboard</h1>
@@ -104,7 +104,9 @@ async function DashboardContent() {
         </div>
       </div>
 
-      <AlertsPanel alerts={activeAlerts} />
+      {activeAlerts.length > 0 && (
+        <AlertsPanel alerts={activeAlerts} />
+      )}
 
       <NetWorthCard
         investmentTotal={summary.totalValue}
