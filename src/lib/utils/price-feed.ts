@@ -1,7 +1,8 @@
 import { getCachedPrices, setCachedPrices } from "../redis";
 
 // eslint-disable-next-line @typescript-eslint/no-require-imports
-const yahooFinance = require("yahoo-finance2").default;
+const YahooFinance = require("yahoo-finance2").default;
+const yahooFinance = typeof YahooFinance === "function" ? new YahooFinance() : YahooFinance;
 import { eq } from "drizzle-orm";
 import { getDb } from "../db";
 import { holdings, accounts } from "../db/schema";
