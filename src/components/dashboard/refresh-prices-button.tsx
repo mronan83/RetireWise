@@ -17,11 +17,9 @@ export function RefreshPricesButton() {
       const res = await fetch("/api/prices/refresh", { method: "POST" });
       const data = await res.json();
       if (data.success) {
-        const diag = data.diagnostic;
         const detail = data.updated > 0
-          ? `${data.updated} prices updated (${data.tickers?.length || 0} tickers)`
-          : `0 updated — ${diag?.holdingsFound?.length || 0} holdings, ${diag?.fetchErrors?.length || 0} errors. ${diag?.fetchErrors?.[0]?.error || 'unknown'}`;
-        if (data.updated === 0) console.log("Price refresh diagnostic:", JSON.stringify(data, null, 2));
+          ? `${data.updated} prices updated`
+          : `0 updated (${data.failed || 0} failed)`;
         setResult(detail);
         if (data.updated > 0) router.refresh();
       } else {

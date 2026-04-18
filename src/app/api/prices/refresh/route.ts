@@ -2,8 +2,8 @@ import { auth } from "@clerk/nextjs/server";
 import { eq } from "drizzle-orm";
 import { revalidatePath } from "next/cache";
 import { getDb } from "@/lib/db";
-import { holdings, accounts, households, householdMembers } from "@/lib/db/schema";
-import { updateAllPrices, _lastFetchErrors } from "@/lib/utils/price-feed";
+import { households, householdMembers } from "@/lib/db/schema";
+import { updateAllPrices } from "@/lib/utils/price-feed";
 
 export async function POST() {
   const { userId } = await auth();
@@ -23,22 +23,6 @@ export async function POST() {
 
   const dataClerkId = membership.length > 0 ? membership[0].primaryClerkId : userId;
 
-  // Diagnostic: check what accounts and holdings exist under each clerkId
-  const accountsUnderSelf = await db
-    .select({ id: accounts.id, name: accounts.name })
-    .from(accounts)
-    .where(eq(accounts.clerkId, userId));
-
-  const accountsUnderHousehold = dataClerkId !== userId
-    ? await db.select({ id: accounts.id, name: accounts.name }).from(accounts).where(eq(accounts.clerkId, dataClerkId))
-    : [];
-
-  const holdingsCount = await db
-    .select({ id: holdings.id, ticker: holdings.ticker })
-    .from(holdings)
-    .innerJoin(accounts, eq(holdings.accountId, accounts.id))
-    .where(eq(accounts.clerkId, dataClerkId));
-
   try {
     const result = await updateAllPrices(dataClerkId);
 
@@ -54,15 +38,6 @@ export async function POST() {
       updated: result.updated,
       failed: result.failed,
       tickers: result.tickers,
-      diagnostic: {
-        rawUserId: userId,
-        resolvedClerkId: dataClerkId,
-        isHouseholdMember: membership.length > 0,
-        accountsUnderRawId: accountsUnderSelf.map((a) => a.name),
-        accountsUnderResolvedId: accountsUnderHousehold.map((a) => a.name),
-        holdingsFound: holdingsCount.map((h) => h.ticker),
-        fetchErrors: _lastFetchErrors.slice(0, 5),
-      },
     });
   } catch (e) {
     const message = e instanceof Error ? e.message : "Price update failed";

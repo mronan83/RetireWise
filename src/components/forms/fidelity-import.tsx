@@ -19,7 +19,7 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { Badge } from "@/components/ui/badge";
-import { parseFidelityCSV, parseGenericCSV } from "@/lib/utils/csv-parser";
+import { parseFidelityCSV, parseGenericCSV, parseQFX, isQFXFormat } from "@/lib/utils/csv-parser";
 import { importHoldings, refreshHoldings } from "@/lib/actions/import";
 import { ACCOUNT_OWNER_LABELS } from "@/lib/constants";
 import type { Account } from "@/lib/types";
@@ -53,24 +53,32 @@ export function FidelityImport({ accounts }: Props) {
 
       try {
         const text = await file.text();
+        const ext = file.name.toLowerCase().split(".").pop() || "";
 
-        // Auto-detect format: Fidelity CSVs typically have "Account Name/Number" or "Symbol" headers
-        const firstLine = text.split("\n")[0] || "";
-        const isFidelity =
-          firstLine.includes("Symbol") ||
-          firstLine.includes("Description") ||
-          firstLine.includes("Quantity") ||
-          firstLine.includes("Last Price");
+        // Auto-detect format: QFX/OFX, Fidelity CSV, or generic CSV
+        let parsed;
+        let formatLabel: string;
 
-        const parsed = isFidelity
-          ? parseFidelityCSV(text)
-          : parseGenericCSV(text);
+        if (ext === "qfx" || ext === "ofx" || isQFXFormat(text)) {
+          parsed = parseQFX(text);
+          formatLabel = "QFX/OFX";
+        } else {
+          const firstLine = text.split("\n")[0] || "";
+          const isFidelity =
+            firstLine.includes("Symbol") ||
+            firstLine.includes("Description") ||
+            firstLine.includes("Quantity") ||
+            firstLine.includes("Last Price");
+          parsed = isFidelity ? parseFidelityCSV(text) : parseGenericCSV(text);
+          formatLabel = isFidelity ? "Fidelity CSV" : "CSV";
+        }
 
         if (parsed.length === 0) {
           setResult({
             type: "error",
-            message:
-              "No holdings found in the file. Make sure it's a CSV with position data.",
+            message: ext === "qfx" || ext === "ofx"
+              ? "No holdings found in the QFX file. Make sure it's an investment account export with position data (not just transactions)."
+              : "No holdings found in the file. Make sure it's a CSV with position data.",
           });
           setImporting(false);
           return;
@@ -87,8 +95,8 @@ export function FidelityImport({ accounts }: Props) {
         setResult({
           type: "success",
           message: parts.length > 0
-            ? `${parsed.length} holdings synced: ${parts.join(", ")}.`
-            : `${parsed.length} holdings — no changes needed.`,
+            ? `${parsed.length} holdings synced from ${formatLabel}: ${parts.join(", ")}.`
+            : `${parsed.length} holdings from ${formatLabel} — no changes needed.`,
         });
       } catch (e) {
         setResult({
@@ -129,7 +137,7 @@ export function FidelityImport({ accounts }: Props) {
       <CardHeader>
         <CardTitle className="flex items-center gap-2 text-base">
           <RefreshCw className="h-5 w-5 text-primary" />
-          Quick Import from CSV
+          Quick Import
         </CardTitle>
       </CardHeader>
       <CardContent className="space-y-4">
@@ -158,28 +166,43 @@ export function FidelityImport({ accounts }: Props) {
           </Select>
         </div>
 
-        {/* Step 2: Download from Fidelity */}
+        {/* Step 2: Download from brokerage */}
         <div className="space-y-2">
           <p className="text-sm font-medium">
-            2. Download your positions CSV
+            2. Download your positions file
           </p>
-          <Button
-            variant="outline"
-            size="sm"
-            onClick={() =>
-              window.open(
-                "https://digital.fidelity.com/ftgw/digital/portfolio/positions",
-                "_blank"
-              )
-            }
-          >
-            <ExternalLink className="mr-2 h-4 w-4" />
-            Open Fidelity Positions
-          </Button>
+          <div className="flex flex-wrap gap-2">
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() =>
+                window.open(
+                  "https://digital.fidelity.com/ftgw/digital/portfolio/positions",
+                  "_blank"
+                )
+              }
+            >
+              <ExternalLink className="mr-2 h-4 w-4" />
+              Fidelity Positions
+            </Button>
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() =>
+                window.open(
+                  "https://mykplan.adp.com",
+                  "_blank"
+                )
+              }
+            >
+              <ExternalLink className="mr-2 h-4 w-4" />
+              ADP myKplan
+            </Button>
+          </div>
           <p className="text-xs text-muted-foreground">
-            On Fidelity&apos;s page, click the <strong>Download</strong> icon
-            (top right of the positions table) and save as CSV. Works for
-            any brokerage that exports CSV — not just Fidelity.
+            <strong>Fidelity:</strong> Click the Download icon on the positions page and save as CSV.{" "}
+            <strong>ADP myKplan:</strong> Go to Investments → Account Details, then look for Export/Download and save as .qfx.{" "}
+            Works with any brokerage that exports CSV or QFX/OFX files.
           </p>
         </div>
 
@@ -210,12 +233,12 @@ export function FidelityImport({ accounts }: Props) {
             <span className="mt-2 text-sm text-muted-foreground">
               {importing
                 ? "Importing..."
-                : "Drag & drop CSV file, or click to browse"}
+                : "Drag & drop CSV or QFX file, or click to browse"}
             </span>
             <input
               ref={fileInputRef}
               type="file"
-              accept=".csv"
+              accept=".csv,.qfx,.ofx"
               onChange={handleFileChange}
               className="hidden"
             />
@@ -242,8 +265,8 @@ export function FidelityImport({ accounts }: Props) {
 
         <p className="text-xs text-muted-foreground">
           Smart sync: existing holdings are updated, new ones are added, and
-          positions no longer in the CSV are removed. Safe to re-import
-          anytime.
+          positions no longer in the file are removed. Supports CSV and QFX/OFX
+          formats. Safe to re-import anytime.
         </p>
       </CardContent>
     </Card>

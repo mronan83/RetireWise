@@ -109,6 +109,110 @@ export function parseGenericCSV(csvText: string): ParsedHolding[] {
   return holdings;
 }
 
+/**
+ * Parse QFX/OFX files (used by ADP myKplan, Schwab, and other brokerages).
+ * QFX is SGML-based, not proper XML — tags aren't self-closing.
+ * We extract investment positions from <INVPOSLIST> or fall back to
+ * stock positions from <POSSTOCK>/<POSMF>/<POSOTHER> blocks.
+ */
+export function parseQFX(text: string): ParsedHolding[] {
+  const holdings: ParsedHolding[] = [];
+
+  // Helper to extract a tag value from OFX SGML
+  // OFX format: <TAGNAME>value (no closing tag for leaf nodes)
+  function getTag(block: string, tag: string): string {
+    const regex = new RegExp(`<${tag}>([^<\\r\\n]+)`, "i");
+    const match = block.match(regex);
+    return match ? match[1].trim() : "";
+  }
+
+  // Split into position blocks — OFX uses POSSTOCK, POSMF, POSOTHER, POSOPT
+  const positionPattern = /<(POSSTOCK|POSMF|POSOTHER|POSOPT)>([\s\S]*?)(?=<\/(POSSTOCK|POSMF|POSOTHER|POSOPT)>|<(POSSTOCK|POSMF|POSOTHER|POSOPT)>|<\/INVPOSLIST>)/gi;
+  let match;
+
+  while ((match = positionPattern.exec(text)) !== null) {
+    const block = match[2];
+
+    // SECID contains the ticker/unique ID
+    const ticker = getTag(block, "TICKER") || getTag(block, "UNIQUEID");
+    if (!ticker) continue;
+
+    const units = parseFloat(getTag(block, "UNITS") || "0");
+    const unitPrice = parseFloat(getTag(block, "UNITPRICE") || "0");
+    const mktVal = parseFloat(getTag(block, "MKTVAL") || "0");
+
+    // Some QFX files use SECNAME inside the block or in a separate SECLIST
+    const name = getTag(block, "SECNAME") || getTag(block, "MEMO") || ticker;
+
+    if (units === 0 && mktVal === 0) continue;
+
+    const shares = isNaN(units) ? 0 : units;
+    const price = isNaN(unitPrice) ? (shares > 0 && mktVal > 0 ? mktVal / shares : 0) : unitPrice;
+
+    holdings.push({
+      ticker: ticker.toUpperCase().trim(),
+      name: name.trim(),
+      shares,
+      costBasisPerShare: 0, // QFX typically doesn't include cost basis
+      currentPrice: price,
+      assetClass: guessAssetClass(ticker, name),
+    });
+  }
+
+  // If no position blocks found, try to extract from SECLIST (security list)
+  // which some QFX files use as the only data source
+  if (holdings.length === 0) {
+    const secPattern = /<(STOCKINFO|MFINFO|OTHERINFO)>([\s\S]*?)(?=<\/(STOCKINFO|MFINFO|OTHERINFO)>|<(STOCKINFO|MFINFO|OTHERINFO)>|<\/SECLIST>)/gi;
+    while ((match = secPattern.exec(text)) !== null) {
+      const block = match[2];
+      const ticker = getTag(block, "TICKER") || getTag(block, "UNIQUEID");
+      const name = getTag(block, "SECNAME") || ticker;
+      const unitPrice = parseFloat(getTag(block, "UNITPRICE") || "0");
+
+      if (!ticker) continue;
+
+      holdings.push({
+        ticker: ticker.toUpperCase().trim(),
+        name: (name || ticker).trim(),
+        shares: 0,
+        costBasisPerShare: 0,
+        currentPrice: isNaN(unitPrice) ? 0 : unitPrice,
+        assetClass: guessAssetClass(ticker, name),
+      });
+    }
+  }
+
+  // Also try to pull security names from the SECLIST to enrich position data
+  const secNames = new Map<string, string>();
+  const secNamePattern = /<SECINFO>([\s\S]*?)(?=<\/SECINFO>|<SECINFO>|<\/SECLIST>)/gi;
+  while ((match = secNamePattern.exec(text)) !== null) {
+    const block = match[1];
+    const ticker = getTag(block, "TICKER") || getTag(block, "UNIQUEID");
+    const name = getTag(block, "SECNAME");
+    if (ticker && name) {
+      secNames.set(ticker.toUpperCase().trim(), name.trim());
+    }
+  }
+
+  // Enrich holdings with security names from SECLIST
+  for (const h of holdings) {
+    const richName = secNames.get(h.ticker);
+    if (richName && (h.name === h.ticker || !h.name)) {
+      h.name = richName;
+      h.assetClass = guessAssetClass(h.ticker, richName);
+    }
+  }
+
+  return holdings;
+}
+
+/**
+ * Detect whether a text blob is QFX/OFX format.
+ */
+export function isQFXFormat(text: string): boolean {
+  return /(<OFX>|<OFXHEADER|OFXHEADER:)/i.test(text);
+}
+
 function guessAssetClass(ticker: string, name?: string): string {
   const t = ticker.toUpperCase();
   const n = (name || "").toLowerCase();

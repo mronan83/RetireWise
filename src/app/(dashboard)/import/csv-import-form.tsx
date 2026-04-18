@@ -21,7 +21,7 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import { Badge } from "@/components/ui/badge";
-import { parseFidelityCSV, parseGenericCSV } from "@/lib/utils/csv-parser";
+import { parseFidelityCSV, parseGenericCSV, parseQFX, isQFXFormat } from "@/lib/utils/csv-parser";
 import type { ParsedHolding } from "@/lib/utils/csv-parser";
 import { importHoldings } from "@/lib/actions/import";
 import { ASSET_CLASS_LABELS } from "@/lib/constants";
@@ -34,7 +34,7 @@ type Props = {
 
 export function CsvImportForm({ accounts }: Props) {
   const [accountId, setAccountId] = useState(accounts[0]?.id || "");
-  const [format, setFormat] = useState<"fidelity" | "generic">("fidelity");
+  const [format, setFormat] = useState<"fidelity" | "generic" | "qfx">("fidelity");
   const [parsed, setParsed] = useState<ParsedHolding[] | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState<string | null>(null);
@@ -51,18 +51,23 @@ export function CsvImportForm({ accounts }: Props) {
       reader.onload = (event) => {
         const text = event.target?.result as string;
         try {
-          const result =
-            format === "fidelity"
+          // Auto-detect QFX if format is set to qfx, or if the file content looks like OFX
+          let result: ParsedHolding[];
+          if (format === "qfx" || isQFXFormat(text)) {
+            result = parseQFX(text);
+          } else {
+            result = format === "fidelity"
               ? parseFidelityCSV(text)
               : parseGenericCSV(text);
+          }
           if (result.length === 0) {
-            setError("No holdings found in the CSV file. Check the format.");
+            setError("No holdings found in the file. Check the format.");
             setParsed(null);
           } else {
             setParsed(result);
           }
         } catch {
-          setError("Failed to parse CSV file. Check the format.");
+          setError("Failed to parse file. Check the format.");
           setParsed(null);
         }
       };
@@ -102,7 +107,7 @@ export function CsvImportForm({ accounts }: Props) {
     <div className="space-y-6">
       <Card>
         <CardHeader>
-          <CardTitle>Upload CSV</CardTitle>
+          <CardTitle>Upload Holdings File</CardTitle>
         </CardHeader>
         <CardContent className="space-y-4">
           <div className="grid gap-4 sm:grid-cols-2">
@@ -122,20 +127,23 @@ export function CsvImportForm({ accounts }: Props) {
               </Select>
             </div>
             <div className="space-y-2">
-              <Label>CSV Format</Label>
+              <Label>File Format</Label>
               <Select
                 value={format}
-                onValueChange={(v) => v && setFormat(v as "fidelity" | "generic")}
+                onValueChange={(v) => v && setFormat(v as "fidelity" | "generic" | "qfx")}
               >
                 <SelectTrigger>
                   <SelectValue />
                 </SelectTrigger>
                 <SelectContent>
                   <SelectItem value="fidelity">
-                    Fidelity Positions Export
+                    Fidelity Positions Export (CSV)
                   </SelectItem>
                   <SelectItem value="generic">
                     Generic CSV (ticker, shares, price, cost basis)
+                  </SelectItem>
+                  <SelectItem value="qfx">
+                    QFX/OFX (ADP myKplan, Schwab, etc.)
                   </SelectItem>
                 </SelectContent>
               </Select>
@@ -146,11 +154,11 @@ export function CsvImportForm({ accounts }: Props) {
             <label className="flex cursor-pointer flex-col items-center gap-2">
               <Upload className="h-8 w-8 text-muted-foreground" />
               <span className="text-sm text-muted-foreground">
-                Click to upload CSV file
+                Click to upload CSV or QFX file
               </span>
               <input
                 type="file"
-                accept=".csv"
+                accept=".csv,.qfx,.ofx"
                 onChange={handleFileChange}
                 className="hidden"
               />

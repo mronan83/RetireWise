@@ -251,12 +251,22 @@ export function InteractiveProjections({
   const portfolioAtRetirement = projection.totalValues[yearsToRetirement - 1] || 0;
   const portfolioAt80 = projection.totalValues[80 - currentAge - 1] || 0;
   const portfolioAt90 = projection.totalValues[90 - currentAge - 1] || 0;
-  let annualFromPortfolio = portfolioAtRetirement * (withdrawalRatePct / 100);
+  // Calculate year-1 withdrawal using the same method as the projection engine
+  const year1Expenses = monthlySpending * 12;
+  const year1SS = combinedSSAnnual;
+  const expenseBased = Math.max(0, year1Expenses - year1SS);
+  const rateBased = portfolioAtRetirement * (withdrawalRatePct / 100);
+  let annualFromPortfolio: number;
+  if (withdrawalMethod === "expense") annualFromPortfolio = expenseBased;
+  else if (withdrawalMethod === "rate") annualFromPortfolio = rateBased;
+  else annualFromPortfolio = Math.max(expenseBased, rateBased);
   if (maxWithdrawalAmount && maxWithdrawalAmount > 0) {
     annualFromPortfolio = Math.min(annualFromPortfolio, maxWithdrawalAmount);
   }
   const monthlyFromPortfolio = Math.round(annualFromPortfolio / 12);
   const totalMonthlyRetirementIncome = monthlyFromPortfolio + selfSSMonthly + spouseSSMonthly;
+  const withdrawalLabel = withdrawalMethod === "expense" ? "expense-based"
+    : withdrawalMethod === "rate" ? `${withdrawalRatePct}% rate` : "higher-of-both";
 
   // Sustainability analysis: does the portfolio last the full retirement period?
   const endOfRetirementIdx = yearsToRetirement + retirementYears - 1;
@@ -497,7 +507,7 @@ export function InteractiveProjections({
               Income: <span className="font-mono text-foreground">{formatCurrency(monthlyFromPortfolio + selfSSMonthly + spouseSSMonthly)}</span>/mo
             </p>
             <p className="text-xs mt-1">
-              ({formatCurrency(monthlyFromPortfolio)} 4% rule + {formatCurrency(selfSSMonthly + spouseSSMonthly)} SS)
+              ({formatCurrency(monthlyFromPortfolio)} {withdrawalLabel} + {formatCurrency(selfSSMonthly + spouseSSMonthly)} SS)
             </p>
             {monthlyFromPortfolio + selfSSMonthly + spouseSSMonthly >= monthlySpending ? (
               <p className="text-xs text-green-500 font-medium mt-1">
@@ -567,7 +577,7 @@ export function InteractiveProjections({
               </>
             )}
             <p className="text-xs text-muted-foreground mt-2">
-              Based on {scenario.name} ({scenario.returnPct}% return), {formatCurrency(monthlySpending)}/mo spending, {withdrawalRatePct}% withdrawal rate
+              Based on {scenario.name} ({scenario.returnPct}% return), {formatCurrency(monthlySpending)}/mo spending, {withdrawalLabel} withdrawal
             </p>
           </CardContent>
         </Card>
@@ -625,11 +635,11 @@ export function InteractiveProjections({
                   contentStyle={{ backgroundColor: "hsl(var(--card))", border: "1px solid hsl(var(--border))", borderRadius: "8px", boxShadow: "0 4px 12px rgba(0,0,0,0.15)", fontSize: "13px", padding: "8px 12px" }}
                 />
                 <ReferenceLine x={retirementAge} stroke="hsl(var(--muted-foreground))" strokeDasharray="5 5" />
-                <Area type="monotone" dataKey="p90" stackId="1" stroke="none" fill="#22c55e" fillOpacity={0.08} name="90th %" />
-                <Area type="monotone" dataKey="p75" stackId="2" stroke="none" fill="#22c55e" fillOpacity={0.12} name="75th %" />
-                <Area type="monotone" dataKey="p50" stackId="3" stroke="#22c55e" fill="#22c55e" fillOpacity={0.2} strokeWidth={2.5} name="Median" dot={false} />
-                <Area type="monotone" dataKey="p25" stackId="4" stroke="none" fill="#22c55e" fillOpacity={0.12} name="25th %" />
-                <Area type="monotone" dataKey="p10" stackId="5" stroke="none" fill="#22c55e" fillOpacity={0.08} name="10th %" />
+                <Area type="monotone" dataKey="p90" stroke="none" fill="#22c55e" fillOpacity={0.08} name="90th %" />
+                <Area type="monotone" dataKey="p75" stroke="none" fill="#22c55e" fillOpacity={0.12} name="75th %" />
+                <Area type="monotone" dataKey="p25" stroke="none" fill="#22c55e" fillOpacity={0.12} name="25th %" />
+                <Area type="monotone" dataKey="p10" stroke="none" fill="#22c55e" fillOpacity={0.08} name="10th %" />
+                <Area type="monotone" dataKey="p50" stroke="#22c55e" fill="#22c55e" fillOpacity={0.2} strokeWidth={2.5} name="Median" dot={false} />
               </AreaChart>
             </ResponsiveContainer>
           </div>
@@ -763,9 +773,15 @@ export function InteractiveProjections({
                     <TableRow>
                       <TableHead>Age</TableHead>
                       <TableHead className="text-right">Withdrawal</TableHead>
+                      <TableHead className="text-right">RMD</TableHead>
                       <TableHead className="text-right">SS Income</TableHead>
                       {projection.accountProjections.map((ap) => (
-                        <TableHead key={ap.name} className="text-right font-mono text-xs">{ap.name}</TableHead>
+                        <TableHead key={ap.name} className="text-right font-mono text-xs">
+                          {ap.name}
+                          {(ap.accountType === "401k" || ap.accountType === "403b" || ap.accountType === "ira_traditional" || ap.accountType === "pension") && (
+                            <span className="block text-[9px] text-amber-500">RMD</span>
+                          )}
+                        </TableHead>
                       ))}
                       <TableHead className="text-right font-mono font-bold">Total</TableHead>
                     </TableRow>
@@ -779,6 +795,13 @@ export function InteractiveProjections({
                           <TableCell className="font-medium text-sm">{age}</TableCell>
                           <TableCell className="text-right font-mono text-xs text-red-500">
                             -{formatCurrency(projection.withdrawals[i])}
+                          </TableCell>
+                          <TableCell className="text-right font-mono text-xs">
+                            {projection.rmdAmounts[i] > 0 ? (
+                              <span className="text-amber-500">{formatCurrency(projection.rmdAmounts[i])}</span>
+                            ) : (
+                              <span className="text-muted-foreground">—</span>
+                            )}
                           </TableCell>
                           <TableCell className="text-right font-mono text-xs text-green-500">
                             +{formatCurrency(projection.ssIncome[i])}
@@ -807,6 +830,7 @@ export function InteractiveProjections({
                       <TableHead>Age</TableHead>
                       <TableHead>Phase</TableHead>
                       <TableHead className="text-right">In/Out</TableHead>
+                      <TableHead className="text-right">RMD</TableHead>
                       {projection.accountProjections.map((ap) => (
                         <TableHead key={ap.name} className="text-right font-mono text-xs">{ap.name}</TableHead>
                       ))}
@@ -815,7 +839,10 @@ export function InteractiveProjections({
                   </TableHeader>
                   <TableBody>
                     {projection.ages.map((age, i) => (
-                      <TableRow key={i} className={i === yearsToRetirement ? "border-t-2 border-primary" : ""}>
+                      <TableRow key={i} className={cn(
+                        i === yearsToRetirement ? "border-t-2 border-primary" : "",
+                        projection.rmdAmounts[i] > 0 && projection.rmdAmounts[i] > projection.withdrawals[i] * 0.9 ? "bg-amber-500/5" : ""
+                      )}>
                         <TableCell className="font-medium text-xs">{age}</TableCell>
                         <TableCell>
                           <Badge variant={projection.phases[i] === "accumulation" ? "secondary" : "default"} className="text-[10px]">
@@ -828,6 +855,18 @@ export function InteractiveProjections({
                           {projection.phases[i] === "accumulation"
                             ? `+${formatCurrency(projection.contributions[i])}`
                             : `-${formatCurrency(projection.withdrawals[i])}`}
+                        </TableCell>
+                        <TableCell className="text-right font-mono text-xs">
+                          {projection.rmdAmounts[i] > 0 ? (
+                            <span className={cn(
+                              "text-amber-500",
+                              projection.rmdAmounts[i] > projection.withdrawals[i] * 0.9 ? "font-semibold" : ""
+                            )}>
+                              {formatCurrency(projection.rmdAmounts[i])}
+                            </span>
+                          ) : (
+                            <span className="text-muted-foreground">—</span>
+                          )}
                         </TableCell>
                         {projection.accountProjections.map((ap) => (
                           <TableCell key={ap.name} className="text-right font-mono text-xs">
@@ -845,6 +884,9 @@ export function InteractiveProjections({
                   </TableBody>
                 </Table>
               </div>
+              <p className="text-[10px] text-muted-foreground mt-2">
+                <span className="text-amber-500 font-medium">RMD</span> = Required Minimum Distribution from tax-deferred accounts (401k, 403b, Traditional IRA) starting at age 73. Highlighted rows indicate the RMD is driving the withdrawal amount.
+              </p>
             </TabsContent>
           </Tabs>
         </CardContent>

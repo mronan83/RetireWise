@@ -104,6 +104,8 @@ export type DetailedProjection = {
   ssIncome: number[]; // combined annual SS
   withdrawals: number[];
   contributions: number[];
+  rmdAmounts: number[]; // mandatory minimum distribution per year (0 during accumulation)
+  taxDeferredBalance: number[]; // total tax-deferred balance per year (for RMD context)
 };
 
 export function runDetailedProjection(params: {
@@ -173,6 +175,8 @@ export function runDetailedProjection(params: {
   const ssIncomeArr: number[] = [];
   const withdrawalsArr: number[] = [];
   const contributionsArr: number[] = [];
+  const rmdArr: number[] = [];
+  const taxDeferredArr: number[] = [];
 
   for (let y = 0; y < totalYears; y++) {
     const isRetirement = y >= yearsToRetirement;
@@ -240,6 +244,17 @@ export function runDetailedProjection(params: {
 
     // Withdrawals in retirement
     let yearWithdrawal = 0;
+    let yearRmd = 0;
+    let yearTaxDeferredBal = 0;
+
+    // Always track tax-deferred balance (useful context even during accumulation)
+    yearTaxDeferredBal = accountProjs
+      .filter((_, idx) => {
+        const t = accounts[idx].type;
+        return t === "401k" || t === "403b" || t === "ira_traditional" || t === "pension";
+      })
+      .reduce((s, ap) => s + ap.projectedValues[ap.projectedValues.length - 1], 0);
+
     if (isRetirement) {
       const retirementYear = y - yearsToRetirement;
       const age = startAge + y + 1;
@@ -254,13 +269,7 @@ export function runDetailedProjection(params: {
       const rateBased = withdrawalRatePct ? totalCurrent * (withdrawalRatePct / 100) : 0;
 
       // Calculate RMD — mandatory minimum from tax-deferred accounts at age 73+
-      const taxDeferredBalance = accountProjs
-        .filter((_, idx) => {
-          const t = accounts[idx].type;
-          return t === "401k" || t === "403b" || t === "ira_traditional" || t === "pension";
-        })
-        .reduce((s, ap) => s + ap.projectedValues[ap.projectedValues.length - 1], 0);
-      const rmd = calculateRMD(taxDeferredBalance, age);
+      yearRmd = calculateRMD(yearTaxDeferredBal, age);
 
       // Determine base withdrawal by method
       let needed: number;
@@ -278,13 +287,13 @@ export function runDetailedProjection(params: {
       }
 
       // RMDs are mandatory — if RMD exceeds chosen withdrawal, must take at least the RMD
-      if (rmd > needed) {
-        needed = rmd;
+      if (yearRmd > needed) {
+        needed = yearRmd;
       }
 
       // Apply max annual cap (but RMDs can't be capped — they're mandatory)
       if (maxAnnualWithdrawal && maxAnnualWithdrawal > 0) {
-        needed = Math.max(rmd, Math.min(needed, maxAnnualWithdrawal));
+        needed = Math.max(yearRmd, Math.min(needed, maxAnnualWithdrawal));
       }
 
       let remaining = needed;
@@ -303,6 +312,8 @@ export function runDetailedProjection(params: {
 
     withdrawalsArr.push(Math.round(yearWithdrawal));
     contributionsArr.push(Math.round(yearTotalContributions));
+    rmdArr.push(Math.round(yearRmd));
+    taxDeferredArr.push(Math.round(yearTaxDeferredBal));
 
     const yearTotal = accountProjs.reduce(
       (s, ap) => s + ap.projectedValues[ap.projectedValues.length - 1],
@@ -320,5 +331,7 @@ export function runDetailedProjection(params: {
     ssIncome: ssIncomeArr,
     withdrawals: withdrawalsArr,
     contributions: contributionsArr,
+    rmdAmounts: rmdArr,
+    taxDeferredBalance: taxDeferredArr,
   };
 }
