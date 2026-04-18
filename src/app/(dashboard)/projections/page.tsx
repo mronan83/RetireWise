@@ -3,8 +3,6 @@ import { eq, and } from "drizzle-orm";
 import { getDb } from "@/lib/db";
 import { userPreferences, socialSecurityBenefits, contributions } from "@/lib/db/schema";
 import { getHoldingsByClerkId } from "@/lib/queries/holdings";
-import type { ProjectionInput } from "@/lib/utils/projections";
-import { ScenarioRunner } from "./scenario-runner";
 import { InteractiveProjections } from "./interactive-controls";
 import { getAccounts } from "@/lib/queries/accounts";
 
@@ -81,24 +79,8 @@ export default async function ProjectionsPage() {
   const spouseSSMonthly = spouseSS[0]?.benefitAtFRA ? Number(spouseSS[0].benefitAtFRA) : 0;
   const combinedSSMonthly = selfSSMonthly + spouseSSMonthly;
 
-  const returnByRisk: Record<string, number> = {
-    conservative: 5, moderate: 7, aggressive: 9,
-  };
-  const expectedReturn = returnByRisk[pref.riskTolerance || "moderate"] ?? 7;
   const monthlyExpenses = pref.monthlyExpensesRetirement
     ? Number(pref.monthlyExpensesRetirement) : 7000;
-
-  // Input passed to ScenarioRunner (uses base assumptions)
-  const input: ProjectionInput = {
-    currentPortfolioValue: totalValue,
-    annualContributions: totalAnnualContributions,
-    yearsToRetirement,
-    expectedReturnPct: expectedReturn,
-    inflationPct: 3,
-    monthlyExpensesRetirement: monthlyExpenses,
-    socialSecurityMonthlyIncome: combinedSSMonthly,
-    yearsInRetirement: 30,
-  };
 
   return (
     <div className="space-y-6">
@@ -205,11 +187,6 @@ export default async function ProjectionsPage() {
         }}
       />
 
-      <ScenarioRunner
-        baseInput={input}
-        currentAge={pref.currentAge}
-        retirementAge={pref.retirementAge}
-      />
     </div>
   );
 }

@@ -12,6 +12,7 @@ import {
   ReferenceLine,
 } from "recharts";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Slider } from "@/components/ui/slider";
@@ -898,6 +899,330 @@ export function InteractiveProjections({
           </Tabs>
         </CardContent>
       </Card>
+      {/* Scenario Analysis — uses the same engine and settings as above */}
+      <ScenarioAnalysis
+        accounts={accounts}
+        annualContributions={annualContributions}
+        yearsToRetirement={yearsToRetirement}
+        retirementYears={retirementYears}
+        currentAge={currentAge}
+        scenario={scenario}
+        monthlySpending={monthlySpending}
+        withdrawalRatePct={withdrawalRatePct}
+        withdrawalMethod={withdrawalMethod}
+        maxWithdrawalAmount={maxWithdrawalAmount}
+        combinedSSAnnual={combinedSSAnnual}
+        ssStartYear={ssStartYear}
+        basePortfolioAtRetirement={portfolioAtRetirement}
+        baseSuccessRate={monteCarloData.successRate}
+      />
     </div>
+  );
+}
+
+// ─── Scenario Analysis ──────────────────────────────────────────
+
+type ScenarioAnalysisProps = {
+  accounts: AccountInput[];
+  annualContributions: number;
+  yearsToRetirement: number;
+  retirementYears: number;
+  currentAge: number;
+  scenario: MarketScenario;
+  monthlySpending: number;
+  withdrawalRatePct: number;
+  withdrawalMethod: "expense" | "rate" | "higher";
+  maxWithdrawalAmount: number | null;
+  combinedSSAnnual: number;
+  ssStartYear: number;
+  basePortfolioAtRetirement: number;
+  baseSuccessRate: number;
+};
+
+type ScenarioResult = {
+  portfolioAtRetirement: number;
+  successRate: number;
+  paramValue: number;
+};
+
+const SCENARIO_DEFS = [
+  {
+    id: "market_crash",
+    name: "Market Crash",
+    description: "What if the market drops suddenly?",
+    paramLabel: "Drop",
+    defaultValue: 30,
+    unit: "%",
+  },
+  {
+    id: "early_retire",
+    name: "Retire Earlier",
+    description: "What if you retire sooner?",
+    paramLabel: "Years earlier",
+    defaultValue: 5,
+    unit: "yrs",
+  },
+  {
+    id: "boost_savings",
+    name: "Boost Savings",
+    description: "What if you increase contributions?",
+    paramLabel: "Increase",
+    defaultValue: 50,
+    unit: "%",
+  },
+  {
+    id: "lower_returns",
+    name: "Lower Returns",
+    description: "What if the market underperforms?",
+    paramLabel: "Return",
+    defaultValue: 4,
+    unit: "%",
+  },
+  {
+    id: "high_inflation",
+    name: "High Inflation",
+    description: "What if inflation stays elevated?",
+    paramLabel: "Inflation",
+    defaultValue: 5,
+    unit: "%",
+  },
+  {
+    id: "reduced_ss",
+    name: "Reduced Social Security",
+    description: "What if SS benefits are cut?",
+    paramLabel: "Cut by",
+    defaultValue: 25,
+    unit: "%",
+  },
+] as const;
+
+function ScenarioAnalysis(props: ScenarioAnalysisProps) {
+  const [results, setResults] = useState<Map<string, ScenarioResult>>(new Map());
+  const [paramValues, setParamValues] = useState<Record<string, number>>(
+    Object.fromEntries(SCENARIO_DEFS.map((s) => [s.id, s.defaultValue]))
+  );
+
+  function runProjection(overrides: {
+    accountsOverride?: AccountInput[];
+    yearsToRetirementOverride?: number;
+    retirementYearsOverride?: number;
+    returnPctOverride?: number;
+    inflationPctOverride?: number;
+    ssIncomeOverride?: number;
+    contributionsMultiplier?: number;
+  }) {
+    const accts = overrides.accountsOverride || props.accounts;
+    const contribMult = overrides.contributionsMultiplier || 1;
+
+    const proj = runDetailedProjection({
+      accounts: accts.map((a) => ({
+        ...a,
+        annualContribution: Math.round(a.annualContribution * contribMult),
+      })),
+      totalAnnualContributions: props.annualContributions * contribMult,
+      yearsToRetirement: overrides.yearsToRetirementOverride ?? props.yearsToRetirement,
+      yearsInRetirement: overrides.retirementYearsOverride ?? props.retirementYears,
+      startAge: props.currentAge,
+      returnPct: overrides.returnPctOverride ?? props.scenario.returnPct,
+      inflationPct: overrides.inflationPctOverride ?? props.scenario.inflationPct,
+      annualExpenses: props.monthlySpending * 12,
+      withdrawalRatePct: props.withdrawalRatePct,
+      withdrawalMethod: props.withdrawalMethod,
+      maxAnnualWithdrawal: props.maxWithdrawalAmount || undefined,
+      annualSSIncome: overrides.ssIncomeOverride ?? props.combinedSSAnnual,
+      ssStartYear: props.ssStartYear,
+    });
+
+    // Quick Monte Carlo for success rate
+    const ytr = overrides.yearsToRetirementOverride ?? props.yearsToRetirement;
+    const yir = overrides.retirementYearsOverride ?? props.retirementYears;
+    const totalYears = ytr + yir;
+    const meanReturn = (overrides.returnPctOverride ?? props.scenario.returnPct) / 100;
+    const stdDev = props.scenario.volatility / 100;
+    const inflPct = overrides.inflationPctOverride ?? props.scenario.inflationPct;
+    const ssIncome = overrides.ssIncomeOverride ?? props.combinedSSAnnual;
+    const expenses = props.monthlySpending * 12;
+    const startVal = accts.reduce((s, a) => s + a.value, 0) *
+      (overrides.accountsOverride ? 1 : 1); // accounts already adjusted if crash
+    const annContrib = props.annualContributions * contribMult;
+
+    let successes = 0;
+    const numSims = 300;
+    for (let sim = 0; sim < numSims; sim++) {
+      let portfolio = overrides.accountsOverride
+        ? overrides.accountsOverride.reduce((s, a) => s + a.value, 0)
+        : accts.reduce((s, a) => s + a.value, 0);
+      let survived = true;
+      for (let y = 0; y < totalYears; y++) {
+        const u1 = Math.random(), u2 = Math.random();
+        const z = Math.sqrt(-2 * Math.log(u1)) * Math.cos(2 * Math.PI * u2);
+        const yearReturn = meanReturn + stdDev * z;
+        const growth = portfolio * yearReturn;
+        if (y < ytr) {
+          portfolio += growth + annContrib;
+        } else {
+          const retYear = y - ytr;
+          const inflatedExp = expenses * Math.pow(1 + inflPct / 100, retYear);
+          const inflatedSS = (y >= props.ssStartYear ? ssIncome : 0) * Math.pow(1 + inflPct / 100, retYear);
+          const need = Math.max(0, inflatedExp - inflatedSS);
+          const withdrawal = props.maxWithdrawalAmount && props.maxWithdrawalAmount > 0
+            ? Math.min(need, props.maxWithdrawalAmount) : need;
+          portfolio = portfolio + growth - Math.min(withdrawal, portfolio + growth);
+        }
+        portfolio = Math.max(0, portfolio);
+      }
+      if (portfolio > 0) successes++;
+    }
+
+    const ytrIdx = (overrides.yearsToRetirementOverride ?? props.yearsToRetirement) - 1;
+    return {
+      portfolioAtRetirement: proj.totalValues[ytrIdx] || 0,
+      successRate: Math.round((successes / numSims) * 100),
+    };
+  }
+
+  function runScenario(scenarioId: string) {
+    const value = paramValues[scenarioId];
+    let result: { portfolioAtRetirement: number; successRate: number };
+
+    switch (scenarioId) {
+      case "market_crash":
+        result = runProjection({
+          accountsOverride: props.accounts.map((a) => ({ ...a, value: a.value * (1 - value / 100) })),
+        });
+        break;
+      case "early_retire":
+        result = runProjection({
+          yearsToRetirementOverride: Math.max(0, props.yearsToRetirement - value),
+          retirementYearsOverride: props.retirementYears + value,
+        });
+        break;
+      case "boost_savings":
+        result = runProjection({ contributionsMultiplier: 1 + value / 100 });
+        break;
+      case "lower_returns":
+        result = runProjection({ returnPctOverride: value });
+        break;
+      case "high_inflation":
+        result = runProjection({ inflationPctOverride: value });
+        break;
+      case "reduced_ss":
+        result = runProjection({ ssIncomeOverride: props.combinedSSAnnual * (1 - value / 100) });
+        break;
+      default:
+        return;
+    }
+
+    setResults((prev) => {
+      const next = new Map(prev);
+      next.set(scenarioId, { ...result, paramValue: value });
+      return next;
+    });
+  }
+
+  function runAll() {
+    for (const s of SCENARIO_DEFS) runScenario(s.id);
+  }
+
+  return (
+    <Card>
+      <CardHeader>
+        <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+          <div>
+            <CardTitle>Scenario Analysis</CardTitle>
+            <p className="text-sm text-muted-foreground mt-1">
+              Uses your current settings ({props.scenario.name}, {props.withdrawalMethod} withdrawal, {props.retirementYears}yr retirement)
+            </p>
+          </div>
+          <div className="flex gap-2 shrink-0">
+            {results.size > 0 && (
+              <Button variant="outline" size="sm" onClick={() => setResults(new Map())}>
+                Reset
+              </Button>
+            )}
+            <Button size="sm" onClick={runAll}>
+              Run All
+            </Button>
+          </div>
+        </div>
+      </CardHeader>
+      <CardContent>
+        {/* Base case from interactive controls */}
+        <div className="mb-4 rounded-lg border bg-muted/30 border-primary/30 p-3 flex flex-col gap-1 sm:flex-row sm:items-center sm:justify-between">
+          <span className="font-medium text-sm">Base Case ({props.scenario.name})</span>
+          <div className="flex items-center gap-6 text-sm">
+            <div className="text-right">
+              <p className="text-xs text-muted-foreground">At Retirement</p>
+              <p className="font-mono font-medium">{formatCurrency(props.basePortfolioAtRetirement)}</p>
+            </div>
+            <div className="text-right">
+              <p className="text-xs text-muted-foreground">Success</p>
+              <p className={cn("font-mono font-medium",
+                props.baseSuccessRate >= 80 ? "text-green-500" : props.baseSuccessRate >= 60 ? "text-yellow-500" : "text-red-500"
+              )}>
+                {props.baseSuccessRate}%
+              </p>
+            </div>
+          </div>
+        </div>
+
+        <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
+          {SCENARIO_DEFS.map((s) => {
+            const result = results.get(s.id);
+            const diff = result ? result.portfolioAtRetirement - props.basePortfolioAtRetirement : null;
+            const diffPct = diff !== null && props.basePortfolioAtRetirement > 0
+              ? (diff / props.basePortfolioAtRetirement) * 100 : null;
+
+            return (
+              <div key={s.id} className="rounded-lg border p-4 space-y-3">
+                <span className="font-medium text-sm">{s.name}</span>
+                <p className="text-xs text-muted-foreground">{s.description}</p>
+                <div className="flex items-center gap-2">
+                  <Label className="text-xs whitespace-nowrap">{s.paramLabel}</Label>
+                  <Input
+                    type="number"
+                    value={paramValues[s.id]}
+                    onChange={(e) => setParamValues((prev) => ({ ...prev, [s.id]: Number(e.target.value) }))}
+                    className="h-7 w-20 text-xs font-mono"
+                    step={s.unit === "yrs" ? 1 : 0.5}
+                  />
+                  <span className="text-xs text-muted-foreground">{s.unit}</span>
+                </div>
+                {result ? (
+                  <div className="space-y-2">
+                    <div className="grid grid-cols-2 gap-1 text-center">
+                      <div>
+                        <p className="text-[10px] text-muted-foreground">Portfolio</p>
+                        <p className="font-mono text-xs font-medium">{formatCurrency(result.portfolioAtRetirement)}</p>
+                      </div>
+                      <div>
+                        <p className="text-[10px] text-muted-foreground">Success</p>
+                        <p className={cn("font-mono text-xs font-medium",
+                          result.successRate >= 80 ? "text-green-500" : result.successRate >= 60 ? "text-yellow-500" : "text-red-500"
+                        )}>
+                          {result.successRate}%
+                        </p>
+                      </div>
+                    </div>
+                    {diffPct !== null && (
+                      <p className={cn("text-center text-xs font-mono", diff! >= 0 ? "text-green-500" : "text-red-500")}>
+                        {diff! >= 0 ? "+" : ""}{formatCurrency(diff!)} ({diffPct >= 0 ? "+" : ""}{Math.round(diffPct)}%)
+                      </p>
+                    )}
+                    <Button variant="ghost" size="sm" className="w-full h-7 text-xs" onClick={() => runScenario(s.id)}>
+                      Re-run
+                    </Button>
+                  </div>
+                ) : (
+                  <Button size="sm" variant="outline" className="w-full" onClick={() => runScenario(s.id)}>
+                    Run Scenario
+                  </Button>
+                )}
+              </div>
+            );
+          })}
+        </div>
+      </CardContent>
+    </Card>
   );
 }
