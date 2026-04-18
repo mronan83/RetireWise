@@ -60,6 +60,7 @@ type Props = {
   currentAge: number;
   retirementAge: number;
   spouseAge: number | null;
+  spouseRetirementAge: number | null;
   selfSSAtFRA: number;
   spouseSSAtFRA: number;
   selfFRA: number;
@@ -96,6 +97,7 @@ export function InteractiveProjections({
   currentAge,
   retirementAge,
   spouseAge,
+  spouseRetirementAge,
   selfSSAtFRA,
   spouseSSAtFRA,
   selfFRA,
@@ -143,6 +145,13 @@ export function InteractiveProjections({
   const ssStartYear = Math.min(selfSSStartYear, spouseSSStartYear);
 
   const yearsToRetirement = Math.max(0, retirementAge - currentAge);
+
+  // Spouse retires at a different age — calculate what your age is when they retire
+  const spouseRetireAtYourAge = (spouseAge && spouseRetirementAge)
+    ? currentAge + Math.max(0, spouseRetirementAge - spouseAge)
+    : null;
+  // Are retirements staggered?
+  const hasStaggeredRetirement = spouseRetireAtYourAge !== null && spouseRetireAtYourAge !== retirementAge;
 
   // Run deterministic projection
   const projection = useMemo(
@@ -609,7 +618,14 @@ export function InteractiveProjections({
                   labelFormatter={(age) => `Age ${age}`}
                   contentStyle={{ backgroundColor: "hsl(var(--card))", border: "1px solid hsl(var(--border))", borderRadius: "8px", boxShadow: "0 4px 12px rgba(0,0,0,0.15)", fontSize: "13px", padding: "8px 12px" }}
                 />
-                <ReferenceLine x={retirementAge} stroke="hsl(var(--muted-foreground))" strokeDasharray="5 5" label={{ value: "Retire", fill: "hsl(var(--muted-foreground))", fontSize: 10 }} />
+                {hasStaggeredRetirement ? (
+                  <>
+                    <ReferenceLine x={Math.min(retirementAge, spouseRetireAtYourAge!)} stroke="hsl(var(--muted-foreground))" strokeDasharray="5 5" label={{ value: spouseRetireAtYourAge! < retirementAge ? "Spouse Retires" : "You Retire", fill: "hsl(var(--muted-foreground))", fontSize: 9 }} />
+                    <ReferenceLine x={Math.max(retirementAge, spouseRetireAtYourAge!)} stroke="hsl(var(--muted-foreground))" strokeDasharray="3 3" strokeOpacity={0.5} label={{ value: spouseRetireAtYourAge! < retirementAge ? "You Retire" : "Spouse Retires", fill: "hsl(var(--muted-foreground))", fontSize: 9 }} />
+                  </>
+                ) : (
+                  <ReferenceLine x={retirementAge} stroke="hsl(var(--muted-foreground))" strokeDasharray="5 5" label={{ value: "Retire", fill: "hsl(var(--muted-foreground))", fontSize: 10 }} />
+                )}
                 <Area type="monotone" dataKey="total" stroke="#6366f1" fill="url(#interactiveGrad)" strokeWidth={2.5} dot={false} />
               </AreaChart>
             </ResponsiveContainer>
@@ -637,7 +653,14 @@ export function InteractiveProjections({
                   labelFormatter={(age) => `Age ${age}`}
                   contentStyle={{ backgroundColor: "hsl(var(--card))", border: "1px solid hsl(var(--border))", borderRadius: "8px", boxShadow: "0 4px 12px rgba(0,0,0,0.15)", fontSize: "13px", padding: "8px 12px" }}
                 />
-                <ReferenceLine x={retirementAge} stroke="hsl(var(--muted-foreground))" strokeDasharray="5 5" />
+                {hasStaggeredRetirement ? (
+                  <>
+                    <ReferenceLine x={Math.min(retirementAge, spouseRetireAtYourAge!)} stroke="hsl(var(--muted-foreground))" strokeDasharray="5 5" />
+                    <ReferenceLine x={Math.max(retirementAge, spouseRetireAtYourAge!)} stroke="hsl(var(--muted-foreground))" strokeDasharray="3 3" strokeOpacity={0.5} />
+                  </>
+                ) : (
+                  <ReferenceLine x={retirementAge} stroke="hsl(var(--muted-foreground))" strokeDasharray="5 5" />
+                )}
                 <Area type="monotone" dataKey="p90" stroke="none" fill="#22c55e" fillOpacity={0.08} name="90th %" />
                 <Area type="monotone" dataKey="p75" stroke="none" fill="#22c55e" fillOpacity={0.12} name="75th %" />
                 <Area type="monotone" dataKey="p25" stroke="none" fill="#22c55e" fillOpacity={0.12} name="25th %" />

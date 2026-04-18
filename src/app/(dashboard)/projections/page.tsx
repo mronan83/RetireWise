@@ -177,6 +177,7 @@ export default async function ProjectionsPage() {
         currentAge={pref.currentAge}
         retirementAge={pref.retirementAge}
         spouseAge={pref.spouseCurrentAge}
+        spouseRetirementAge={pref.spouseRetirementAge}
         selfSSAtFRA={selfSSMonthly}
         spouseSSAtFRA={spouseSSMonthly}
         selfFRA={selfSS[0]?.fullRetirementAge || 67}
