@@ -17,13 +17,13 @@ import { ExportButtons } from "@/components/dashboard/export-buttons";
 import { NetWorthCard } from "@/components/dashboard/net-worth-card";
 import { eq, and, desc } from "drizzle-orm";
 import { getDb } from "@/lib/db";
-import { alerts as alertsTable, goals as goalsTable, realEstate, cashReserves, debts } from "@/lib/db/schema";
+import { alerts as alertsTable, goals as goalsTable, realEstate, cashReserves, debts, vehicles } from "@/lib/db/schema";
 
 async function DashboardContent() {
   const { dataClerkId: userId } = await getAuthContext();
 
   const db = getDb();
-  const [accountsList, holdingsWithAccounts, snapshots, activeAlerts, userGoals, properties, cashAccounts, debtsList] = await Promise.all([
+  const [accountsList, holdingsWithAccounts, snapshots, activeAlerts, userGoals, properties, cashAccounts, debtsList, vehiclesList] = await Promise.all([
     getAccounts(userId),
     getHoldingsByClerkId(userId),
     getSnapshots(userId, 90),
@@ -34,6 +34,7 @@ async function DashboardContent() {
     db.select().from(realEstate).where(eq(realEstate.clerkId, userId)),
     db.select().from(cashReserves).where(eq(cashReserves.clerkId, userId)),
     db.select().from(debts).where(eq(debts.clerkId, userId)),
+    db.select().from(vehicles).where(eq(vehicles.clerkId, userId)),
   ]);
 
   const holdingsForCalc = holdingsWithAccounts.map((h) => ({
@@ -114,6 +115,9 @@ async function DashboardContent() {
           (s, p) => s + Number(p.estimatedValue) - Number(p.mortgageBalance || 0), 0
         )}
         cashTotal={cashAccounts.reduce((s, c) => s + Number(c.balance), 0)}
+        vehicleEquity={vehiclesList.reduce(
+          (s, v) => s + Number(v.estimatedValue) - (v.hasLoan ? Number(v.loanBalance || 0) : 0), 0
+        )}
         debtTotal={debtsList.reduce((s, d) => s + Number(d.currentBalance), 0)}
       />
 

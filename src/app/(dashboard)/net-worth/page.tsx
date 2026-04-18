@@ -1,7 +1,7 @@
 import { getAuthContext } from "@/lib/auth-helpers";
 import { eq } from "drizzle-orm";
 import { getDb } from "@/lib/db";
-import { realEstate, cashReserves, debts } from "@/lib/db/schema";
+import { realEstate, cashReserves, debts, vehicles } from "@/lib/db/schema";
 import { getHoldingsByClerkId } from "@/lib/queries/holdings";
 import { formatCurrency } from "@/lib/utils/format";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -12,9 +12,10 @@ import {
   Landmark,
   CreditCard,
   PiggyBank,
+  Car,
 } from "lucide-react";
 import { ACCOUNT_OWNER_LABELS } from "@/lib/constants";
-import { DEBT_TYPE_LABELS, CASH_TYPE_LABELS } from "@/lib/constants-net-worth";
+import { DEBT_TYPE_LABELS, CASH_TYPE_LABELS, VEHICLE_TYPE_LABELS, getValuationUrl } from "@/lib/constants-net-worth";
 import { NetWorthForms } from "./net-worth-forms";
 import { cn } from "@/lib/utils";
 
@@ -22,11 +23,12 @@ export default async function NetWorthPage() {
   const { dataClerkId: userId } = await getAuthContext();
 
   const db = getDb();
-  const [holdings, properties, cash, debtsList] = await Promise.all([
+  const [holdings, properties, cash, debtsList, vehiclesList] = await Promise.all([
     getHoldingsByClerkId(userId),
     db.select().from(realEstate).where(eq(realEstate.clerkId, userId)),
     db.select().from(cashReserves).where(eq(cashReserves.clerkId, userId)),
     db.select().from(debts).where(eq(debts.clerkId, userId)),
+    db.select().from(vehicles).where(eq(vehicles.clerkId, userId)),
   ]);
 
   // Calculate totals
@@ -51,9 +53,18 @@ export default async function NetWorthPage() {
     (s, d) => s + Number(d.monthlyPayment),
     0
   );
+  const vehicleValue = vehiclesList.reduce(
+    (s, v) => s + Number(v.estimatedValue),
+    0
+  );
+  const vehicleLoanTotal = vehiclesList.reduce(
+    (s, v) => s + (v.hasLoan ? Number(v.loanBalance || 0) : 0),
+    0
+  );
+  const vehicleEquity = vehicleValue - vehicleLoanTotal;
 
   // Use equity for real estate (value minus embedded mortgages) to avoid double-counting
-  const totalAssets = investmentTotal + realEstateEquity + cashTotal;
+  const totalAssets = investmentTotal + realEstateEquity + cashTotal + vehicleEquity;
   const netWorth = totalAssets - debtTotal;
 
   return (
@@ -66,7 +77,7 @@ export default async function NetWorthPage() {
       </div>
 
       {/* Summary */}
-      <div className="grid gap-3 sm:gap-4 grid-cols-2 sm:grid-cols-3 lg:grid-cols-5">
+      <div className="grid gap-3 sm:gap-4 grid-cols-2 sm:grid-cols-3 lg:grid-cols-6">
         <Card className="sm:col-span-2 lg:col-span-1 border-primary/30">
           <CardHeader className="pb-2">
             <CardTitle className="text-xs text-muted-foreground font-medium">
@@ -131,6 +142,22 @@ export default async function NetWorthPage() {
         <Card>
           <CardHeader className="pb-2 flex flex-row items-center justify-between">
             <CardTitle className="text-xs text-muted-foreground font-medium">
+              Vehicles
+            </CardTitle>
+            <Car className="h-4 w-4 text-muted-foreground" />
+          </CardHeader>
+          <CardContent>
+            <p className="text-lg font-bold font-mono">
+              {formatCurrency(vehicleEquity)}
+            </p>
+            <p className="text-xs text-muted-foreground">
+              {formatCurrency(vehicleValue)} value{vehicleLoanTotal > 0 ? ` - ${formatCurrency(vehicleLoanTotal)} owed` : ""}
+            </p>
+          </CardContent>
+        </Card>
+        <Card>
+          <CardHeader className="pb-2 flex flex-row items-center justify-between">
+            <CardTitle className="text-xs text-muted-foreground font-medium">
               Total Debts
             </CardTitle>
             <CreditCard className="h-4 w-4 text-muted-foreground" />
@@ -172,20 +199,33 @@ export default async function NetWorthPage() {
                   title={`Cash: ${formatCurrency(cashTotal)}`}
                 />
               )}
+              {vehicleEquity > 0 && (
+                <div
+                  className="bg-purple-500 transition-all"
+                  style={{ width: `${(vehicleEquity / totalAssets) * 100}%` }}
+                  title={`Vehicles: ${formatCurrency(vehicleEquity)}`}
+                />
+              )}
             </div>
-            <div className="flex gap-4 mt-2 text-xs text-muted-foreground">
+            <div className="flex flex-wrap gap-x-4 gap-y-1 mt-2 text-xs text-muted-foreground">
               <span className="flex items-center gap-1.5">
                 <span className="h-2.5 w-2.5 rounded-full bg-blue-500" />
                 Investments ({((investmentTotal / totalAssets) * 100).toFixed(0)}%)
               </span>
               <span className="flex items-center gap-1.5">
                 <span className="h-2.5 w-2.5 rounded-full bg-green-500" />
-                Real Estate ({((realEstateTotal / totalAssets) * 100).toFixed(0)}%)
+                Real Estate ({((realEstateEquity / totalAssets) * 100).toFixed(0)}%)
               </span>
               <span className="flex items-center gap-1.5">
                 <span className="h-2.5 w-2.5 rounded-full bg-yellow-500" />
                 Cash ({((cashTotal / totalAssets) * 100).toFixed(0)}%)
               </span>
+              {vehicleEquity > 0 && (
+                <span className="flex items-center gap-1.5">
+                  <span className="h-2.5 w-2.5 rounded-full bg-purple-500" />
+                  Vehicles ({((vehicleEquity / totalAssets) * 100).toFixed(0)}%)
+                </span>
+              )}
             </div>
           </CardContent>
         </Card>
@@ -285,6 +325,69 @@ export default async function NetWorthPage() {
                   </p>
                 </div>
               ))}
+            </div>
+          )}
+        </CardContent>
+      </Card>
+
+      {/* Vehicles */}
+      <Card>
+        <CardHeader>
+          <CardTitle className="flex items-center gap-2">
+            <Car className="h-5 w-5 text-purple-500" />
+            Vehicles &amp; Recreation
+          </CardTitle>
+        </CardHeader>
+        <CardContent>
+          {vehiclesList.length > 0 && (
+            <div className="space-y-2 mb-4">
+              {vehiclesList.map((v) => {
+                const equity = Number(v.estimatedValue) - (v.hasLoan ? Number(v.loanBalance || 0) : 0);
+                const val = getValuationUrl(v);
+                return (
+                  <div key={v.id} className="flex items-center justify-between rounded-lg border p-3">
+                    <div className="min-w-0 flex-1">
+                      <div className="flex items-center gap-2 flex-wrap">
+                        <span className="font-medium text-sm">{v.name}</span>
+                        <Badge variant={v.owner === "spouse" ? "default" : "secondary"} className="text-xs">
+                          {ACCOUNT_OWNER_LABELS[v.owner]}
+                        </Badge>
+                        <Badge variant="outline" className="text-xs">
+                          {VEHICLE_TYPE_LABELS[v.vehicleType] || v.vehicleType}
+                        </Badge>
+                        <a
+                          href={val.url}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="text-[10px] text-primary hover:underline"
+                        >
+                          {val.label}
+                        </a>
+                      </div>
+                      <p className="text-xs text-muted-foreground mt-0.5">
+                        {[v.year, v.make, v.model, v.trim].filter(Boolean).join(" ")}
+                        {v.mileage && <> · {v.mileage.toLocaleString()} mi</>}
+                        {v.condition && <> · {v.condition}</>}
+                      </p>
+                      <p className="text-xs text-muted-foreground">
+                        Value: {formatCurrency(Number(v.estimatedValue))}
+                        {v.hasLoan && Number(v.loanBalance) > 0 && (
+                          <> | Loan: {formatCurrency(Number(v.loanBalance))}
+                          {v.loanRate && <> @ {Number(v.loanRate)}%</>}
+                          {v.loanMonthlyPayment && <> | {formatCurrency(Number(v.loanMonthlyPayment))}/mo</>}
+                          </>
+                        )}
+                      </p>
+                    </div>
+                    <div className="text-right shrink-0 ml-3">
+                      <p className={cn("font-mono font-medium text-sm", equity >= 0 ? "text-purple-400" : "text-red-500")}>
+                        {formatCurrency(equity)}
+                      </p>
+                      <p className="text-xs text-muted-foreground">equity</p>
+                    </div>
+                  </div>
+                );
+              })}
             </div>
           )}
         </CardContent>

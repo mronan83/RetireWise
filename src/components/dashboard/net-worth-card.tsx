@@ -1,5 +1,5 @@
 import Link from "next/link";
-import { Landmark, TrendingUp, Home, PiggyBank, CreditCard } from "lucide-react";
+import { Landmark, TrendingUp, Home, PiggyBank, CreditCard, Car } from "lucide-react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { formatCurrency } from "@/lib/utils/format";
 import { cn } from "@/lib/utils";
@@ -8,6 +8,7 @@ type Props = {
   investmentTotal: number;
   realEstateEquity: number;
   cashTotal: number;
+  vehicleEquity?: number;
   debtTotal: number;
 };
 
@@ -15,9 +16,10 @@ export function NetWorthCard({
   investmentTotal,
   realEstateEquity,
   cashTotal,
+  vehicleEquity = 0,
   debtTotal,
 }: Props) {
-  const totalAssets = investmentTotal + realEstateEquity + cashTotal;
+  const totalAssets = investmentTotal + realEstateEquity + cashTotal + vehicleEquity;
   const netWorth = totalAssets - debtTotal;
 
   return (
@@ -51,6 +53,12 @@ export function NetWorthCard({
               <PiggyBank className="h-3 w-3 shrink-0 text-yellow-500" />
               <span className="text-muted-foreground whitespace-nowrap">{formatCurrency(cashTotal)}</span>
             </div>
+            {vehicleEquity > 0 && (
+              <div className="flex items-center gap-1">
+                <Car className="h-3 w-3 shrink-0 text-purple-500" />
+                <span className="text-muted-foreground whitespace-nowrap">{formatCurrency(vehicleEquity)}</span>
+              </div>
+            )}
             <div className="flex items-center gap-1">
               <CreditCard className="h-3 w-3 shrink-0 text-red-500" />
               <span className="text-muted-foreground whitespace-nowrap">-{formatCurrency(debtTotal)}</span>

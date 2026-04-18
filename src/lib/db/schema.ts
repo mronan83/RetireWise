@@ -107,6 +107,18 @@ export const debtTypeEnum = pgEnum("debt_type", [
   "other_debt",
 ]);
 
+export const vehicleTypeEnum = pgEnum("vehicle_type", [
+  "car",
+  "truck",
+  "suv",
+  "motorcycle",
+  "boat",
+  "rv",
+  "camper",
+  "atv",
+  "other_vehicle",
+]);
+
 export const cashAccountTypeEnum = pgEnum("cash_account_type", [
   "checking",
   "savings",
@@ -528,6 +540,35 @@ export const debts = pgTable("debts", {
   interestRate: decimal("interest_rate", { precision: 5, scale: 2 }).notNull(),
   monthlyPayment: decimal("monthly_payment", { precision: 10, scale: 2 }).notNull(),
   payoffDate: date("payoff_date"),
+  notes: text("notes"),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+  updatedAt: timestamp("updated_at").defaultNow().notNull(),
+});
+
+// Net Worth: Vehicles (cars, trucks, boats, RVs, motorcycles, etc.)
+export const vehicles = pgTable("vehicles", {
+  id: uuid("id").defaultRandom().primaryKey(),
+  clerkId: text("clerk_id").notNull(),
+  owner: accountOwnerEnum("owner").notNull().default("self"),
+  name: text("name").notNull(), // e.g., "2022 Toyota Tacoma"
+  vehicleType: vehicleTypeEnum("vehicle_type").notNull(),
+  year: integer("year"),
+  make: text("make"),
+  model: text("model"),
+  trim: text("trim"),
+  vin: text("vin"),
+  mileage: integer("mileage"),
+  condition: text("condition"), // excellent, good, fair, poor
+  estimatedValue: decimal("estimated_value", { precision: 20, scale: 2 }).notNull(),
+  lastValuationDate: date("last_valuation_date"),
+  // Loan fields (null = no loan / paid off)
+  hasLoan: boolean("has_loan").default(false),
+  loanBalance: decimal("loan_balance", { precision: 20, scale: 2 }).default("0"),
+  loanRate: decimal("loan_rate", { precision: 5, scale: 3 }),
+  loanMonthlyPayment: decimal("loan_monthly_payment", { precision: 10, scale: 2 }),
+  loanRemainingMonths: integer("loan_remaining_months"),
+  purchasePrice: decimal("purchase_price", { precision: 20, scale: 2 }),
+  purchaseDate: date("purchase_date"),
   notes: text("notes"),
   createdAt: timestamp("created_at").defaultNow().notNull(),
   updatedAt: timestamp("updated_at").defaultNow().notNull(),
