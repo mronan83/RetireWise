@@ -104,7 +104,11 @@ async function DashboardContent() {
         </div>
       </div>
 
-      <AlertsPanel alerts={activeAlerts} />
+      {activeAlerts.length > 0 && (
+        <div className="-mb-2">
+          <AlertsPanel alerts={activeAlerts} />
+        </div>
+      )}
 
       <NetWorthCard
         investmentTotal={summary.totalValue}

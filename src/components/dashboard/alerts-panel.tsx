@@ -30,12 +30,12 @@ export function AlertsPanel({ alerts }: { alerts: Alert[] }) {
         <div
           key={alert.id}
           className={cn(
-            "flex items-start gap-3 rounded-lg border p-3 text-sm",
+            "flex items-start gap-3 rounded-md border p-2.5 text-sm",
             alert.severity === "critical"
-              ? "border-red-500/50 bg-red-500/5"
+              ? "border-red-500/30 bg-red-500/5"
               : alert.severity === "warning"
-                ? "border-yellow-500/50 bg-yellow-500/5"
-                : "border-blue-500/50 bg-blue-500/5"
+                ? "border-yellow-500/30 bg-yellow-500/5"
+                : "border-blue-500/30 bg-blue-500/5"
           )}
         >
           {alert.severity === "critical" ? (
@@ -46,16 +46,16 @@ export function AlertsPanel({ alerts }: { alerts: Alert[] }) {
             <Info className="mt-0.5 h-4 w-4 shrink-0 text-blue-500" />
           )}
           <div className="flex-1 min-w-0">
-            <p className="font-medium">{alert.title}</p>
-            <p className="text-xs text-muted-foreground mt-0.5">
+            <p className="font-medium text-sm">{alert.title}</p>
+            <p className="text-xs text-muted-foreground mt-0.5 break-words">
               {alert.message}
             </p>
           </div>
           <button
             onClick={() => handleDismiss(alert.id)}
-            className="shrink-0 text-muted-foreground hover:text-foreground"
+            className="shrink-0 text-muted-foreground hover:text-foreground p-1"
           >
-            <X className="h-4 w-4" />
+            <X className="h-3.5 w-3.5" />
           </button>
         </div>
       ))}
