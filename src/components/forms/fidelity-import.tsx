@@ -296,12 +296,12 @@ export function FidelityImport({ accounts }: Props) {
               <Table>
                 <TableHeader className="sticky top-0 bg-card z-10">
                   <TableRow>
-                    <TableHead className="w-[120px]">Ticker</TableHead>
+                    <TableHead>Ticker</TableHead>
                     <TableHead>Name</TableHead>
-                    <TableHead className="text-right w-[90px]">Shares</TableHead>
-                    <TableHead className="text-right w-[90px]">Price</TableHead>
-                    <TableHead className="text-right w-[100px]">Value</TableHead>
-                    <TableHead className="w-[80px]">Class</TableHead>
+                    <TableHead className="text-right hidden sm:table-cell">Shares</TableHead>
+                    <TableHead className="text-right hidden sm:table-cell">Price</TableHead>
+                    <TableHead className="text-right">Value</TableHead>
+                    <TableHead className="hidden md:table-cell">Class</TableHead>
                   </TableRow>
                 </TableHeader>
                 <TableBody>
@@ -326,16 +326,16 @@ export function FidelityImport({ accounts }: Props) {
                             className="h-7 text-xs"
                           />
                         </TableCell>
-                        <TableCell className="text-right font-mono text-xs">
+                        <TableCell className="text-right font-mono text-xs hidden sm:table-cell">
                           {formatNumber(h.shares, 4)}
                         </TableCell>
-                        <TableCell className="text-right font-mono text-xs">
+                        <TableCell className="text-right font-mono text-xs hidden sm:table-cell">
                           {formatCurrency(h.currentPrice)}
                         </TableCell>
                         <TableCell className="text-right font-mono text-xs font-medium">
                           {formatCurrency(h.shares * h.currentPrice)}
                         </TableCell>
-                        <TableCell>
+                        <TableCell className="hidden md:table-cell">
                           <Badge variant="secondary" className="text-[10px]">
                             {ASSET_CLASS_LABELS[h.assetClass] || h.assetClass}
                           </Badge>

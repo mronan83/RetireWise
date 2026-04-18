@@ -38,22 +38,22 @@ export function NetWorthCard({
           >
             {formatCurrency(netWorth)}
           </div>
-          <div className="mt-2 grid grid-cols-4 gap-2 text-xs">
+          <div className="mt-2 flex flex-wrap gap-x-4 gap-y-1 text-xs">
             <div className="flex items-center gap-1">
-              <TrendingUp className="h-3 w-3 text-blue-500" />
-              <span className="text-muted-foreground">{formatCurrency(investmentTotal)}</span>
+              <TrendingUp className="h-3 w-3 shrink-0 text-blue-500" />
+              <span className="text-muted-foreground whitespace-nowrap">{formatCurrency(investmentTotal)}</span>
             </div>
             <div className="flex items-center gap-1">
-              <Home className="h-3 w-3 text-green-500" />
-              <span className="text-muted-foreground">{formatCurrency(realEstateEquity)}</span>
+              <Home className="h-3 w-3 shrink-0 text-green-500" />
+              <span className="text-muted-foreground whitespace-nowrap">{formatCurrency(realEstateEquity)}</span>
             </div>
             <div className="flex items-center gap-1">
-              <PiggyBank className="h-3 w-3 text-yellow-500" />
-              <span className="text-muted-foreground">{formatCurrency(cashTotal)}</span>
+              <PiggyBank className="h-3 w-3 shrink-0 text-yellow-500" />
+              <span className="text-muted-foreground whitespace-nowrap">{formatCurrency(cashTotal)}</span>
             </div>
             <div className="flex items-center gap-1">
-              <CreditCard className="h-3 w-3 text-red-500" />
-              <span className="text-muted-foreground">-{formatCurrency(debtTotal)}</span>
+              <CreditCard className="h-3 w-3 shrink-0 text-red-500" />
+              <span className="text-muted-foreground whitespace-nowrap">-{formatCurrency(debtTotal)}</span>
             </div>
           </div>
         </CardContent>

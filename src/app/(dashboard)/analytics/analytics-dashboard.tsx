@@ -126,15 +126,15 @@ export function AnalyticsDashboard(props: Props) {
 
   return (
     <Tabs defaultValue="rmd">
-      <TabsList className="flex-wrap h-auto gap-1 mb-4">
+      <TabsList className="grid grid-cols-3 sm:flex sm:flex-wrap h-auto gap-1 mb-4">
         <TabsTrigger value="rmd" className="text-xs">RMDs</TabsTrigger>
-        <TabsTrigger value="tax" className="text-xs">Tax Projections</TabsTrigger>
-        <TabsTrigger value="roth" className="text-xs">Roth Conversion</TabsTrigger>
+        <TabsTrigger value="tax" className="text-xs">Tax</TabsTrigger>
+        <TabsTrigger value="roth" className="text-xs">Roth</TabsTrigger>
         <TabsTrigger value="ss" className="text-xs">SS Break-Even</TabsTrigger>
         <TabsTrigger value="catchup" className="text-xs">Catch-Up</TabsTrigger>
-        <TabsTrigger value="income" className="text-xs">Income Ratio</TabsTrigger>
-        <TabsTrigger value="fees" className="text-xs">Fee Impact</TabsTrigger>
-        <TabsTrigger value="sequence" className="text-xs">Sequence Risk</TabsTrigger>
+        <TabsTrigger value="income" className="text-xs">Income</TabsTrigger>
+        <TabsTrigger value="fees" className="text-xs">Fees</TabsTrigger>
+        <TabsTrigger value="sequence" className="text-xs">Sequence</TabsTrigger>
         <TabsTrigger value="healthcare" className="text-xs">Healthcare</TabsTrigger>
       </TabsList>
 
@@ -166,7 +166,7 @@ export function AnalyticsDashboard(props: Props) {
             <p className="text-xs text-muted-foreground">
               Tip: Roth conversions before age 73 can reduce your future RMDs and lifetime tax burden. See the Roth Conversion tab.
             </p>
-            <div className="h-[250px] -ml-2">
+            <div className="h-[200px] sm:h-[250px] -ml-2">
               <ResponsiveContainer width="100%" height="100%">
                 <BarChart data={rmds.filter((r) => r.rmdAmount > 0).slice(0, 22)}>
                   <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" strokeOpacity={0.5} vertical={false} />
@@ -374,7 +374,7 @@ export function AnalyticsDashboard(props: Props) {
                 <p className="text-[10px] text-muted-foreground">New SECURE 2.0 provision (vs $7,500 for ages 50-59)</p>
               </div>
             </div>
-            <div className="h-[250px] -ml-2">
+            <div className="h-[200px] sm:h-[250px] -ml-2">
               <ResponsiveContainer width="100%" height="100%">
                 <BarChart data={catchUp401k.filter((c) => c.catchUpAmount > 0)}>
                   <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" strokeOpacity={0.5} vertical={false} />
@@ -564,7 +564,7 @@ export function AnalyticsDashboard(props: Props) {
                 <p className="font-mono font-bold text-lg text-red-500">{formatCurrency(totalLifetimeHealthcare)}</p>
               </div>
             </div>
-            <div className="h-[250px] -ml-2">
+            <div className="h-[200px] sm:h-[250px] -ml-2">
               <ResponsiveContainer width="100%" height="100%">
                 <AreaChart data={healthcareCosts}>
                   <defs>

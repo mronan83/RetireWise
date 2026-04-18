@@ -66,7 +66,7 @@ export default async function NetWorthPage() {
       </div>
 
       {/* Summary */}
-      <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-5">
+      <div className="grid gap-3 sm:gap-4 grid-cols-2 sm:grid-cols-3 lg:grid-cols-5">
         <Card className="sm:col-span-2 lg:col-span-1 border-primary/30">
           <CardHeader className="pb-2">
             <CardTitle className="text-xs text-muted-foreground font-medium">

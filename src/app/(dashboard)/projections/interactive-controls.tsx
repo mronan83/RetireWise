@@ -486,7 +486,7 @@ export function InteractiveProjections({
       </Card>
 
       {/* Summary Cards — all reactive to slider controls */}
-      <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-5">
+      <div className="grid gap-3 sm:gap-4 grid-cols-2 lg:grid-cols-3 xl:grid-cols-5">
         <Card>
           <CardHeader className="pb-2">
             <CardTitle className="text-xs text-muted-foreground">Portfolio at Retirement ({retirementAge})</CardTitle>
@@ -589,7 +589,7 @@ export function InteractiveProjections({
           <CardTitle>Portfolio Projection — {scenario.name}</CardTitle>
         </CardHeader>
         <CardContent>
-          <div className="h-[280px] sm:h-[320px] -ml-2">
+          <div className="h-[220px] sm:h-[300px] -ml-2">
             <ResponsiveContainer width="100%" height="100%">
               <AreaChart data={chartData} margin={{ top: 5, right: 5, left: 0, bottom: 0 }}>
                 <defs>
@@ -623,7 +623,7 @@ export function InteractiveProjections({
           </p>
         </CardHeader>
         <CardContent>
-          <div className="h-[280px] sm:h-[320px] -ml-2">
+          <div className="h-[220px] sm:h-[300px] -ml-2">
             <ResponsiveContainer width="100%" height="100%">
               <AreaChart data={monteCarloData.chartData} margin={{ top: 5, right: 5, left: 0, bottom: 0 }}>
                 <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" strokeOpacity={0.5} vertical={false} />

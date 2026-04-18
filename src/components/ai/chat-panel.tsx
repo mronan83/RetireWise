@@ -93,7 +93,7 @@ export function ChatPanel() {
     return (
       <Button
         size="icon"
-        className="fixed bottom-6 right-6 z-50 h-14 w-14 rounded-full shadow-lg"
+        className="fixed bottom-3 right-3 sm:bottom-6 sm:right-6 z-50 h-12 w-12 sm:h-14 sm:w-14 rounded-full shadow-lg"
         onClick={() => setOpen(true)}
       >
         <MessageSquare className="h-6 w-6" />
@@ -105,7 +105,7 @@ export function ChatPanel() {
   // Minimized bar
   if (minimized) {
     return (
-      <div className="fixed bottom-6 right-6 z-50 flex items-center gap-2 rounded-full border bg-card px-4 py-2 shadow-lg">
+      <div className="fixed bottom-3 right-3 sm:bottom-6 sm:right-6 z-50 flex items-center gap-2 rounded-full border bg-card px-3 py-1.5 sm:px-4 sm:py-2 shadow-lg">
         <Bot className="h-4 w-4 text-primary" />
         <span className="text-sm font-medium">RetireWise AI</span>
         {isActive && <Loader2 className="h-3 w-3 animate-spin text-primary" />}
@@ -124,10 +124,10 @@ export function ChatPanel() {
       className={cn(
         "fixed z-50 flex flex-col rounded-xl border bg-card shadow-2xl transition-all",
         isFullScreen
-          ? "inset-4 sm:inset-8"
-          : "bottom-6 right-6 w-[95vw] sm:w-[440px] h-[70vh] sm:h-[600px] max-h-[80vh]"
+          ? "inset-2 sm:inset-4 lg:inset-8"
+          : "bottom-3 right-3 sm:bottom-6 sm:right-6 w-[calc(100vw-24px)] sm:w-[440px] h-[70vh] sm:h-[600px] max-h-[80vh]"
       )}
-      style={!isFullScreen ? { resize: "both", overflow: "hidden", minWidth: 320, minHeight: 400 } : undefined}
+      style={!isFullScreen ? { resize: "both", overflow: "hidden", minWidth: 280, minHeight: 350 } : undefined}
     >
       {/* Header */}
       <div className="flex items-center justify-between border-b px-4 py-2.5 shrink-0 cursor-default">
