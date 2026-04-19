@@ -19,9 +19,14 @@ export default async function LandingPage() {
     <div className="flex min-h-screen flex-col">
       <header className="border-b border-border/40 backdrop-blur-sm">
         <div className="mx-auto flex h-16 max-w-6xl items-center justify-between px-6">
-          <div className="flex items-center gap-2">
-            <TrendingUp className="h-6 w-6 text-primary" />
-            <span className="text-lg font-bold">RetireWise</span>
+          <div className="flex items-center gap-2.5">
+            <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-gradient-to-br from-indigo-500 to-violet-600">
+              <svg width="18" height="18" viewBox="0 0 24 24" fill="none">
+                <path d="M3 20L8 13L12 16L21 4" stroke="white" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" />
+                <path d="M17 4L21 4L21 8" stroke="white" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" />
+              </svg>
+            </div>
+            <span className="text-lg font-bold tracking-tight">RetireWise</span>
           </div>
           <div className="flex items-center gap-3">
             <Link href="/sign-in">

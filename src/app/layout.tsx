@@ -19,6 +19,14 @@ export const metadata: Metadata = {
   title: "RetireWise — AI-Powered Retirement Investment Modeling",
   description:
     "Track, analyze, and model your retirement investments with AI-powered insights and recommendations.",
+  appleWebApp: {
+    capable: true,
+    statusBarStyle: "black-translucent",
+    title: "RetireWise",
+  },
+  other: {
+    "mobile-web-app-capable": "yes",
+  },
 };
 
 export default function RootLayout({
