@@ -92,6 +92,7 @@ type IrsLimit = {
   accountType: string;
   limitUnder50: string;
   limitOver50: string;
+  limitAge60to63?: string;
   taxYear: number;
 };
 
@@ -100,6 +101,8 @@ type Props = {
   selfSalary: number | null;
   spouseSalary: number | null;
   accounts?: AccountInfo[];
+  selfAge?: number | null;
+  spouseAge?: number | null;
 };
 
 export function ContributionsSection({
@@ -107,6 +110,8 @@ export function ContributionsSection({
   selfSalary,
   spouseSalary,
   accounts = [],
+  selfAge,
+  spouseAge,
 }: Props) {
   const [addOpen, setAddOpen] = useState(false);
   const [irsLimits, setIrsLimits] = useState<IrsLimit[]>([]);
@@ -119,14 +124,30 @@ export function ContributionsSection({
       .catch(() => {});
   }, []);
 
-  // Get the current year's IRS limit for an account type
-  const getIrsLimit = (accountType: string): number | null => {
+  // Get the current year's IRS limit for an account type + owner age tier
+  const getIrsLimit = (accountType: string, ownerAge?: number | null): number | null => {
     const currentYear = new Date().getFullYear();
-    // Try current year, then next year, then previous year
     const limit = irsLimits.find((l) => l.accountType === accountType && l.taxYear === currentYear)
       || irsLimits.find((l) => l.accountType === accountType && l.taxYear === currentYear + 1)
       || irsLimits.find((l) => l.accountType === accountType);
-    return limit ? Number(limit.limitUnder50) : null;
+    if (!limit) return null;
+    const age = ownerAge ?? 0;
+    if (age >= 60 && age <= 63 && limit.limitAge60to63) return Number(limit.limitAge60to63);
+    if (age >= 50) return Number(limit.limitOver50);
+    return Number(limit.limitUnder50);
+  };
+
+  const getIrsLimitLabel = (ownerAge?: number | null): string => {
+    const age = ownerAge ?? 0;
+    if (age >= 60 && age <= 63) return "60-63 enhanced catch-up";
+    if (age >= 50) return "50+ catch-up";
+    return "under 50";
+  };
+
+  // Wrapper that resolves owner to age automatically
+  const getIrsLimitForOwner = (accountType: string, owner: string): { limit: number | null; label: string } => {
+    const age = owner === "spouse" ? spouseAge : selfAge;
+    return { limit: getIrsLimit(accountType, age), label: getIrsLimitLabel(age) };
   };
 
   const selfItems = items.filter((c) => c.owner === "self");
@@ -221,7 +242,7 @@ export function ContributionsSection({
                 matchAnnual={matchAnnual}
                 matchedAccountName={matchedAccount?.name || null}
                 accounts={accounts}
-                getIrsLimit={getIrsLimit}
+                getIrsLimitForOwner={getIrsLimitForOwner}
               />
             );
           })}
@@ -240,7 +261,7 @@ export function ContributionsSection({
           <DialogHeader>
             <DialogTitle>Add Contribution</DialogTitle>
           </DialogHeader>
-          <AddContributionForm accounts={accounts} getIrsLimit={getIrsLimit} onSuccess={() => setAddOpen(false)} />
+          <AddContributionForm accounts={accounts} getIrsLimitForOwner={getIrsLimitForOwner} onSuccess={() => setAddOpen(false)} />
         </DialogContent>
       </Dialog>
     </div>
@@ -253,14 +274,14 @@ function ContributionRow({
   matchAnnual,
   matchedAccountName,
   accounts,
-  getIrsLimit,
+  getIrsLimitForOwner,
 }: {
   contribution: Contribution;
   yourAnnual: number;
   matchAnnual: number;
   matchedAccountName: string | null;
   accounts: AccountInfo[];
-  getIrsLimit: (accountType: string) => number | null;
+  getIrsLimitForOwner: (t: string, owner: string) => { limit: number | null; label: string };
 }) {
   const [editOpen, setEditOpen] = useState(false);
 
@@ -344,7 +365,7 @@ function ContributionRow({
           <EditContributionForm
             contribution={c}
             accounts={accounts}
-            getIrsLimit={getIrsLimit}
+            getIrsLimitForOwner={getIrsLimitForOwner}
             onSuccess={() => setEditOpen(false)}
           />
         </DialogContent>
@@ -353,7 +374,7 @@ function ContributionRow({
   );
 }
 
-function AddContributionForm({ accounts, getIrsLimit, onSuccess }: { accounts: AccountInfo[]; getIrsLimit: (t: string) => number | null; onSuccess: () => void }) {
+function AddContributionForm({ accounts, getIrsLimitForOwner, onSuccess }: { accounts: AccountInfo[]; getIrsLimitForOwner: (t: string, owner: string) => { limit: number | null; label: string }; onSuccess: () => void }) {
   const [method, setMethod] = useState<"percent_of_salary" | "fixed_amount">(
     "percent_of_salary"
   );
@@ -362,7 +383,9 @@ function AddContributionForm({ accounts, getIrsLimit, onSuccess }: { accounts: A
   const [selectedAccountId, setSelectedAccountId] = useState(accounts[0]?.id || "");
 
   const selectedAccount = accounts.find((a) => a.id === selectedAccountId);
-  const irsMax = selectedAccount ? getIrsLimit(selectedAccount.accountType) : null;
+  const { limit: irsMax, label: irsLabel } = selectedAccount
+    ? getIrsLimitForOwner(selectedAccount.accountType, selectedAccount.owner)
+    : { limit: null, label: "under 50" };
 
   const [error, formAction, isPending] = useActionState(
     async (_prev: string | null, formData: FormData) => {
@@ -607,7 +630,7 @@ function AddContributionForm({ accounts, getIrsLimit, onSuccess }: { accounts: A
               />
               <p className="text-xs text-muted-foreground">
                 {irsMax
-                  ? `Auto-filled from IRS ${new Date().getFullYear()} limit: ${formatCurrency(irsMax)} (under 50). Updates when IRS limits are refreshed.`
+                  ? `Auto-filled from IRS ${new Date().getFullYear()} limit: ${formatCurrency(irsMax)} (${irsLabel}). Updates when IRS limits are refreshed.`
                   : "Set the IRS annual limit. Refresh IRS limits in Settings to auto-fill."}
               </p>
             </div>
@@ -625,12 +648,12 @@ function AddContributionForm({ accounts, getIrsLimit, onSuccess }: { accounts: A
 function EditContributionForm({
   contribution: c,
   accounts,
-  getIrsLimit,
+  getIrsLimitForOwner,
   onSuccess,
 }: {
   contribution: Contribution;
   accounts: AccountInfo[];
-  getIrsLimit: (t: string) => number | null;
+  getIrsLimitForOwner: (t: string, owner: string) => { limit: number | null; label: string };
   onSuccess: () => void;
 }) {
   const [method, setMethod] = useState<"percent_of_salary" | "fixed_amount">(
@@ -641,7 +664,9 @@ function EditContributionForm({
   const [selectedAccountId, setSelectedAccountId] = useState(c.accountId || accounts[0]?.id || "");
 
   const selectedAccount = accounts.find((a) => a.id === selectedAccountId);
-  const irsMax = selectedAccount ? getIrsLimit(selectedAccount.accountType) : null;
+  const { limit: irsMax, label: irsLabel } = selectedAccount
+    ? getIrsLimitForOwner(selectedAccount.accountType, selectedAccount.owner)
+    : { limit: null, label: "under 50" };
 
   const [error, formAction, isPending] = useActionState(
     async (_prev: string | null, formData: FormData) => {
@@ -760,7 +785,7 @@ function EditContributionForm({
                 defaultValue={c.maxAnnualContribution || irsMax || ""} />
               {irsMax && (
                 <p className="text-[10px] text-muted-foreground">
-                  IRS limit: {formatCurrency(irsMax)} (under 50)
+                  IRS limit: {formatCurrency(irsMax)} ({irsLabel})
                 </p>
               )}
             </div>

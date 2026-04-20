@@ -206,12 +206,22 @@ export function HelpContent() {
               more without feeling the pinch — the increase usually aligns with your annual raise.
             </P>
           </SubSection>
-          <SubSection title="IRS Limits">
+          <SubSection title="IRS Limits & Catch-Up Contributions">
             <P>
               The IRS caps how much you can contribute to retirement accounts each year.
-              For 2025: 401(k)/403(b) limit is $23,500. Roth/Traditional IRA limit is $7,000.
-              HSA family limit is $8,550. People 50+ get &quot;catch-up&quot; allowances on top.
-              RetireWise can auto-populate these limits and enforces them in projections.
+              RetireWise automatically applies the correct cap based on each account owner&apos;s age in each projection year:
+            </P>
+            <UL>
+              <li><B>Under 50</B> — Standard limits. 401(k)/403(b): $23,500. IRA: $7,000. HSA (family): $4,300.</li>
+              <li><B>Age 50-59</B> — Standard + catch-up. 401(k)/403(b): $31,000 (+$7,500). IRA: $8,000 (+$1,000). HSA: $5,550 (+$1,000).</li>
+              <li><B>Age 60-63 (SECURE 2.0)</B> — Enhanced catch-up. 401(k)/403(b): $34,750 (+$11,250 instead of $7,500). IRA and HSA stay at the 50+ level.</li>
+              <li><B>Age 64+</B> — Reverts to the standard 50+ catch-up ($31,000 for 401k).</li>
+            </UL>
+            <P>
+              The projection engine tracks each owner&apos;s age year by year and automatically increases contribution
+              caps when they cross 50 or enter the 60-63 window. You&apos;ll see contribution amounts jump in the
+              detailed tables at those milestones. The contribution settings page also shows the correct limit tier
+              based on the account owner&apos;s current age.
             </P>
           </SubSection>
           <SubSection title="How Contributions Flow Into Projections">
@@ -243,8 +253,9 @@ export function HelpContent() {
               For each year from now until the end of retirement, the engine:
             </P>
             <OL>
+              <li><B>Determines the return rate</B> — Uses the market scenario&apos;s return, or if the Risk Glide Path is enabled, calculates the blended return based on where you are in the transition from aggressive to conservative.</li>
               <li><B>Grows each account</B> — Multiplies the balance by (1 + return rate). A 7% return on a $100,000 account adds $7,000.</li>
-              <li><B>Adds contributions</B> (before retirement) — Each account gets its calculated contribution for that year, including salary growth, escalation, and employer match.</li>
+              <li><B>Adds contributions</B> (before retirement) — Each account gets its calculated contribution for that year, including salary growth, escalation, employer match, and age-based IRS limits (50+ and 60-63 catch-up amounts are applied automatically based on each owner&apos;s age).</li>
               <li><B>Calculates withdrawals</B> (during retirement) — Determines how much you need to take out based on your chosen withdrawal method, then distributes that proportionally across all accounts.</li>
               <li><B>Checks RMDs</B> (age 73+) — If the Required Minimum Distribution exceeds the withdrawal, the RMD becomes the floor.</li>
             </OL>
@@ -260,9 +271,35 @@ export function HelpContent() {
               <li><B>Withdrawal Rate</B> — The percentage of your portfolio to withdraw each year (the &quot;4% rule&quot; is a common guideline). Only used in rate-based and higher-of-both methods.</li>
               <li><B>Max Withdrawal Cap</B> — An absolute dollar limit on annual withdrawals. Even if your rate says withdraw $150k, the cap holds it at your limit. Exception: RMDs can push past this cap because they&apos;re mandatory.</li>
               <li><B>Years in Retirement</B> — How long your money needs to last. Average life expectancy is ~85, but planning to 95-100 gives a safety margin.</li>
+              <li><B>Risk Glide Path</B> — Gradually shifts your portfolio from aggressive to conservative as you approach retirement, like a target-date fund. See below for details.</li>
             </UL>
             <P>
               Your control settings are saved automatically and persist between sessions.
+            </P>
+          </SubSection>
+          <SubSection title="Risk Glide Path">
+            <P>
+              The Risk Glide Path models how your portfolio allocation shifts over time from higher-risk/higher-return
+              investments (stocks) to lower-risk/lower-return investments (bonds) as you approach and enter retirement.
+              This protects against <B>sequence-of-returns risk</B> — the danger of a major market drop right when
+              your portfolio is at its largest.
+            </P>
+            <P>
+              When enabled, the projection engine uses a different return rate and volatility for each year based on
+              where you are in the transition. The controls are:
+            </P>
+            <UL>
+              <li><B>Starting Risk Level</B> — Your current allocation profile. Six levels from Very Aggressive (90/10 stocks/bonds, 10% return, 17% volatility) to Conservative (20/80, 4% return, 5% volatility).</li>
+              <li><B>Target Risk Level</B> — Where you want to end up. Typically Moderately Conservative or Conservative.</li>
+              <li><B>Transition Start Age</B> — When to begin shifting. Default is 15 years before retirement.</li>
+              <li><B>Transition End Age</B> — When the shift completes. Can be at retirement or extend into retirement (&quot;through&quot; glide path). Extending past retirement continues reducing risk during early drawdown years.</li>
+              <li><B>Transition Curve</B> — <B>Linear</B> shifts evenly over time. <B>Accelerated</B> shifts slowly at first then faster near the end, mimicking real target-date funds.</li>
+            </UL>
+            <P>
+              The stacked area chart below the controls shows the stock/bond allocation over time. The dashed line
+              marks your retirement age. When the glide path is active, a &quot;Glide Path&quot; badge appears on the
+              projection chart title, and the Monte Carlo simulation uses decreasing volatility as you age — which
+              typically narrows the fan chart near retirement and improves success rates.
             </P>
           </SubSection>
           <SubSection title="Summary Cards">
@@ -409,8 +446,8 @@ export function HelpContent() {
           <SubSection title="How It Works">
             <OL>
               <li>Takes your current settings (portfolio, contributions, spending, etc.)</li>
-              <li>For each of 500 simulations, generates a random market return for every year using the selected scenario&apos;s average return and volatility</li>
-              <li>Applies contributions during the accumulation phase and withdrawals during retirement</li>
+              <li>For each of 500 simulations, generates a random market return for every year using the expected return and volatility. If the Risk Glide Path is enabled, both the expected return and volatility change each year as the allocation shifts — earlier years are more volatile, later years less so.</li>
+              <li>Applies contributions during the accumulation phase (including catch-up bumps at 50 and 60-63) and withdrawals during retirement</li>
               <li>Checks if the portfolio survived to the end of retirement</li>
               <li>Reports the percentage of simulations where money lasted (the &quot;success rate&quot;)</li>
             </OL>
@@ -484,7 +521,7 @@ export function HelpContent() {
             <P>Calculates when claiming Social Security early (lower payments starting sooner) vs. late (higher payments starting later) breaks even. If you live past the break-even age, delaying was the better choice.</P>
           </SubSection>
           <SubSection title="Catch-Up Contributions">
-            <P>Shows how much extra you can contribute once you turn 50 (catch-up contributions) and the projected impact on your portfolio at retirement.</P>
+            <P>Shows how much extra you can contribute once you turn 50 (catch-up contributions) and the SECURE 2.0 enhanced catch-up at ages 60-63, along with the projected impact on your portfolio at retirement. Note: catch-up contributions are also automatically included in the main projection engine — you don&apos;t need to run this calculator separately to see them in your projections.</P>
           </SubSection>
           <SubSection title="Income Replacement Ratio">
             <P>What percentage of your current income will your retirement sources replace? Financial planners typically recommend 70-80%. Shows the breakdown: portfolio withdrawals, Social Security, and any pension income.</P>
@@ -633,12 +670,14 @@ export function HelpContent() {
             <Term term="403(b)">Similar to a 401(k) but for employees of nonprofits, schools, and government organizations.</Term>
             <Term term="Asset Allocation">How your portfolio is divided between different types of investments (US stocks, international stocks, bonds, REITs, etc.).</Term>
             <Term term="Basis / Cost Basis">What you originally paid for an investment. Used to calculate gain or loss.</Term>
+            <Term term="Catch-Up Contributions">Extra contributions allowed by the IRS once you turn 50. For 401(k)/403(b): $7,500/year extra (ages 50-59 and 64+) or $11,250/year (ages 60-63 under SECURE 2.0). For IRAs: $1,000/year extra. The projection engine applies these automatically based on each owner&apos;s age.</Term>
             <Term term="COLA">Cost of Living Adjustment. The annual increase to Social Security benefits to keep up with inflation.</Term>
             <Term term="Compound Growth">Growth on top of growth. If you earn 7% on $100,000, you have $107,000. Next year you earn 7% on $107,000 = $114,490. The &quot;extra&quot; $490 is compound growth.</Term>
             <Term term="CUSIP">A 9-character ID that identifies a security. Used in QFX files instead of ticker symbols.</Term>
             <Term term="Diversification">Spreading investments across different asset classes to reduce risk. If stocks drop, bonds might hold steady.</Term>
             <Term term="Expense Ratio">The annual fee charged by a fund (ETF or mutual fund), expressed as a percentage. 0.03% is very low (index funds). 1%+ is high (actively managed).</Term>
             <Term term="FRA (Full Retirement Age)">The age at which you receive your full Social Security benefit. For most people today, it&apos;s 67.</Term>
+            <Term term="Glide Path">A strategy that gradually shifts portfolio allocation from aggressive (high stocks) to conservative (high bonds) as you approach retirement. Like a target-date fund, it reduces volatility near retirement to protect against large downswings. RetireWise&apos;s Risk Glide Path lets you control the start/end risk levels, transition ages, and curve shape.</Term>
             <Term term="HSA">Health Savings Account. Triple tax advantage: contributions are tax-deductible, growth is tax-free, and withdrawals for medical expenses are tax-free.</Term>
             <Term term="Inflation">The rate at which prices increase over time. At 3% inflation, something costing $100 today costs $103 next year. Over 20 years, it costs $181.</Term>
             <Term term="IRA (Traditional)">Individual Retirement Account. Like a 401(k) but you open it yourself. Contributions may be tax-deductible. Withdrawals in retirement are taxed.</Term>
@@ -648,6 +687,7 @@ export function HelpContent() {
             <Term term="Rebalancing">Buying and selling investments to get your allocation back to your target. If stocks grew and are now 65% of your portfolio instead of 55%, you&apos;d sell some stocks and buy bonds.</Term>
             <Term term="RMD (Required Minimum Distribution)">Starting at age 73, the IRS requires you to withdraw a minimum amount from tax-deferred accounts each year.</Term>
             <Term term="Roth IRA / Roth 401(k)">Retirement accounts funded with after-tax money. Contributions aren&apos;t tax-deductible, but growth and withdrawals are completely tax-free. No RMDs required.</Term>
+            <Term term="SECURE 2.0 Act">Federal legislation (2022) that expanded retirement savings incentives. Key provision: enhanced catch-up contributions of $11,250/year (instead of $7,500) for 401(k)/403(b) participants aged 60-63, effective 2025.</Term>
             <Term term="Sequence of Returns Risk">The danger of experiencing bad market returns early in retirement. Even if returns average out over time, losing money when your portfolio is at its peak is harder to recover from.</Term>
             <Term term="Social Security">Federal retirement benefits funded by payroll taxes. You earn credits by working, and benefits are based on your highest 35 years of earnings.</Term>
             <Term term="Tax-Deferred">Accounts where you don&apos;t pay taxes on contributions or growth until you withdraw the money (401k, Traditional IRA).</Term>

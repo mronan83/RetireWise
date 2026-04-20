@@ -10,12 +10,14 @@ import {
   runMonteCarlo,
   calculateWithdrawalStrategies,
   type ProjectionInput,
+  type CatchUpSchedule,
 } from "../utils/projections";
 import {
   type GlidePathConfig,
   type RiskProfileId,
   RISK_PROFILES,
 } from "../utils/glide-path";
+import { IRS_LIMITS } from "../constants";
 
 export const runRetirementProjectionTool = tool({
   description:
@@ -122,6 +124,29 @@ export const runRetirementProjectionTool = tool({
       };
     }
 
+    // Compute catch-up schedule from contribution account types
+    let selfCatchUp50 = 0, selfCatchUp60 = 0;
+    let spouseCatchUp50 = 0, spouseCatchUp60 = 0;
+    for (const c of contribs) {
+      if (!c.isActive) continue;
+      const acctType = c.accountType;
+      const limits = IRS_LIMITS[acctType];
+      if (!limits) continue;
+      const cu50 = limits.over50 - limits.under50;
+      const cu60 = limits.age60to63 - limits.under50;
+      if (c.owner === "self") { selfCatchUp50 += cu50; selfCatchUp60 += cu60; }
+      else { spouseCatchUp50 += cu50; spouseCatchUp60 += cu60; }
+    }
+
+    const catchUp: CatchUpSchedule = {
+      selfAge: pref.currentAge,
+      spouseAge: pref.spouseCurrentAge ?? undefined,
+      selfCatchUp50,
+      selfCatchUp60,
+      spouseCatchUp50,
+      spouseCatchUp60,
+    };
+
     const input: ProjectionInput = {
       currentPortfolioValue: totalValue,
       annualContributions: totalAnnualContributions,
@@ -132,6 +157,7 @@ export const runRetirementProjectionTool = tool({
       socialSecurityMonthlyIncome: combinedSSMonthly,
       yearsInRetirement: 30,
       glidePath,
+      catchUp,
     };
 
     // Run deterministic projection

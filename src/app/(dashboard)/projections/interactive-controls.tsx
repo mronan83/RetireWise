@@ -43,6 +43,7 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { cn } from "@/lib/utils";
+import { getIrsLimitForAge, IRS_LIMITS } from "@/lib/constants";
 import {
   RISK_PROFILES,
   RISK_PROFILE_ORDER,
@@ -70,6 +71,7 @@ type AccountInput = {
   salary: number;
   salaryGrowth: import("@/lib/utils/salary-growth").SalaryGrowthConfig | null;
   ownerRetirementYear?: number;
+  ownerCurrentAge?: number;
 };
 
 type Props = {
@@ -209,6 +211,37 @@ export function InteractiveProjections({
 
   const yearsToRetirement = Math.max(0, retirementAge - currentAge);
 
+  // Compute catch-up contribution amounts from account types
+  // Sum catch-up eligible amounts per owner across all their contributing accounts
+  const catchUpSchedule = useMemo(() => {
+    let selfCatchUp50 = 0, selfCatchUp60 = 0;
+    let spouseCatchUp50 = 0, spouseCatchUp60 = 0;
+
+    for (const a of accounts) {
+      if (!a.isActivelyContributing) continue;
+      const limits = IRS_LIMITS[a.type];
+      if (!limits) continue;
+      const catchUp50 = limits.over50 - limits.under50;
+      const catchUp60 = limits.age60to63 - limits.under50;
+      if (a.owner === "self") {
+        selfCatchUp50 += catchUp50;
+        selfCatchUp60 += catchUp60;
+      } else {
+        spouseCatchUp50 += catchUp50;
+        spouseCatchUp60 += catchUp60;
+      }
+    }
+
+    return {
+      selfAge: currentAge,
+      spouseAge: spouseAge ?? undefined,
+      selfCatchUp50,
+      selfCatchUp60,
+      spouseCatchUp50,
+      spouseCatchUp60,
+    };
+  }, [accounts, currentAge, spouseAge]);
+
   // Spouse retires at a different age — calculate what your age is when they retire
   const spouseRetireAtYourAge = (spouseAge && spouseRetirementAge)
     ? currentAge + Math.max(0, spouseRetirementAge - spouseAge)
@@ -248,9 +281,10 @@ export function InteractiveProjections({
     const startValue = accounts.reduce((s, a) => s + a.value, 0);
     const numSims = 500;
 
-    // Pre-compute per-year return and volatility for glide path
+    // Pre-compute per-year return, volatility, and contributions (with catch-up)
     const yearMeanReturn: number[] = [];
     const yearStdDev: number[] = [];
+    const yearContribs: number[] = [];
     for (let y = 0; y < totalYears; y++) {
       const age = currentAge + y + 1;
       if (glidePathConfig) {
@@ -261,6 +295,19 @@ export function InteractiveProjections({
         yearMeanReturn.push(baseMeanReturn);
         yearStdDev.push(baseStdDev);
       }
+      // Compute catch-up bonus for this year
+      let catchUpBonus = 0;
+      if (y < yearsToRetirement) {
+        const selfAge = catchUpSchedule.selfAge + y + 1;
+        if (selfAge >= 60 && selfAge <= 63) catchUpBonus += catchUpSchedule.selfCatchUp60;
+        else if (selfAge >= 50) catchUpBonus += catchUpSchedule.selfCatchUp50;
+        if (catchUpSchedule.spouseAge) {
+          const spAge = catchUpSchedule.spouseAge + y + 1;
+          if (spAge >= 60 && spAge <= 63) catchUpBonus += catchUpSchedule.spouseCatchUp60;
+          else if (spAge >= 50) catchUpBonus += catchUpSchedule.spouseCatchUp50;
+        }
+      }
+      yearContribs.push(y < yearsToRetirement ? annualContributions + catchUpBonus : 0);
     }
 
     const allPaths: number[][] = [];
@@ -276,7 +323,7 @@ export function InteractiveProjections({
         const yearReturn = yearMeanReturn[y] + yearStdDev[y] * z;
         const growth = portfolio * yearReturn;
         if (y < yearsToRetirement) {
-          portfolio += growth + annualContributions;
+          portfolio += growth + yearContribs[y];
         } else {
           const retYear = y - yearsToRetirement;
           const age = currentAge + y + 1;
@@ -330,7 +377,7 @@ export function InteractiveProjections({
       worstCase: percentiles.p10[yearsToRetirement - 1] || 0,
       bestCase: percentiles.p90[yearsToRetirement - 1] || 0,
     };
-  }, [accounts, annualContributions, yearsToRetirement, retirementYears, currentAge, scenario, monthlySpending, withdrawalRatePct, withdrawalMethod, maxWithdrawalAmount, combinedSSAnnual, gpEnabled, gpStartProfile, gpEndProfile, gpTransitionStartAge, gpTransitionEndAge, gpCurve]);
+  }, [accounts, annualContributions, yearsToRetirement, retirementYears, currentAge, scenario, monthlySpending, withdrawalRatePct, withdrawalMethod, maxWithdrawalAmount, combinedSSAnnual, gpEnabled, gpStartProfile, gpEndProfile, gpTransitionStartAge, gpTransitionEndAge, gpCurve, catchUpSchedule]);
 
   // Chart data
   const chartData = projection.ages.map((age, i) => ({
@@ -1166,6 +1213,7 @@ export function InteractiveProjections({
         basePortfolioAtRetirement={portfolioAtRetirement}
         baseSuccessRate={monteCarloData.successRate}
         glidePath={glidePathConfig}
+        catchUpSchedule={catchUpSchedule}
       />
     </div>
   );
@@ -1189,6 +1237,14 @@ type ScenarioAnalysisProps = {
   basePortfolioAtRetirement: number;
   baseSuccessRate: number;
   glidePath?: GlidePathConfig;
+  catchUpSchedule?: {
+    selfAge: number;
+    spouseAge?: number;
+    selfCatchUp50: number;
+    selfCatchUp60: number;
+    spouseCatchUp50: number;
+    spouseCatchUp60: number;
+  };
 };
 
 type ScenarioResult = {
@@ -1297,9 +1353,10 @@ function ScenarioAnalysis(props: ScenarioAnalysisProps) {
     const expenses = props.monthlySpending * 12;
     const annContrib = props.annualContributions * contribMult;
 
-    // Pre-compute per-year return/volatility for glide path
+    // Pre-compute per-year return/volatility and contributions (with catch-up)
     const ymr: number[] = [];
     const ysd: number[] = [];
+    const ycon: number[] = [];
     for (let y = 0; y < totalYears; y++) {
       const age = props.currentAge + y + 1;
       if (props.glidePath) {
@@ -1310,6 +1367,19 @@ function ScenarioAnalysis(props: ScenarioAnalysisProps) {
         ymr.push(baseMeanReturn);
         ysd.push(baseStdDev);
       }
+      // Catch-up for scenario Monte Carlo
+      let cb = 0;
+      if (y < ytr && props.catchUpSchedule) {
+        const sa = props.catchUpSchedule.selfAge + y + 1;
+        if (sa >= 60 && sa <= 63) cb += props.catchUpSchedule.selfCatchUp60;
+        else if (sa >= 50) cb += props.catchUpSchedule.selfCatchUp50;
+        if (props.catchUpSchedule.spouseAge) {
+          const spa = props.catchUpSchedule.spouseAge + y + 1;
+          if (spa >= 60 && spa <= 63) cb += props.catchUpSchedule.spouseCatchUp60;
+          else if (spa >= 50) cb += props.catchUpSchedule.spouseCatchUp50;
+        }
+      }
+      ycon.push(y < ytr ? annContrib + cb : 0);
     }
 
     let successes = 0;
@@ -1324,7 +1394,7 @@ function ScenarioAnalysis(props: ScenarioAnalysisProps) {
         const yearReturn = ymr[y] + ysd[y] * z;
         const growth = portfolio * yearReturn;
         if (y < ytr) {
-          portfolio += growth + annContrib;
+          portfolio += growth + ycon[y];
         } else {
           const retYear = y - ytr;
           const inflatedExp = expenses * Math.pow(1 + inflPct / 100, retYear);

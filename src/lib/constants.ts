@@ -86,13 +86,26 @@ export const DEFAULT_TARGET_ALLOCATION = {
 };
 
 // 2025 IRS contribution limits (employee portion only)
-export const IRS_LIMITS: Record<string, { under50: number; over50: number; label: string }> = {
-  "401k": { under50: 23500, over50: 31000, label: "401(k) limit" },
-  "403b": { under50: 23500, over50: 31000, label: "403(b) limit" },
-  ira_traditional: { under50: 7000, over50: 8000, label: "Traditional IRA limit" },
-  ira_roth: { under50: 7000, over50: 8000, label: "Roth IRA limit" },
-  hsa: { under50: 4300, over50: 5550, label: "HSA limit (family)" },
+// under50: standard limit; over50: standard + catch-up ($7,500 for 401k/403b, $1,000 for IRA/HSA)
+// age60to63: SECURE 2.0 enhanced catch-up ($11,250 for 401k/403b instead of $7,500)
+export const IRS_LIMITS: Record<string, { under50: number; over50: number; age60to63: number; label: string }> = {
+  "401k": { under50: 23500, over50: 31000, age60to63: 34750, label: "401(k) limit" },
+  "403b": { under50: 23500, over50: 31000, age60to63: 34750, label: "403(b) limit" },
+  ira_traditional: { under50: 7000, over50: 8000, age60to63: 8000, label: "Traditional IRA limit" },
+  ira_roth: { under50: 7000, over50: 8000, age60to63: 8000, label: "Roth IRA limit" },
+  hsa: { under50: 4300, over50: 5550, age60to63: 5550, label: "HSA limit (family)" },
 };
+
+/**
+ * Get the IRS contribution limit for a given account type and owner age.
+ */
+export function getIrsLimitForAge(accountType: string, age: number): number {
+  const limits = IRS_LIMITS[accountType];
+  if (!limits) return 0;
+  if (age >= 60 && age <= 63) return limits.age60to63;
+  if (age >= 50) return limits.over50;
+  return limits.under50;
+}
 
 export const AI_MODEL = "anthropic/claude-sonnet-4.6";
 

@@ -10,9 +10,18 @@ import {
   getGlidePathParams,
 } from "./glide-path";
 
+export type CatchUpSchedule = {
+  selfAge: number; // current age of primary
+  spouseAge?: number; // current age of spouse (if applicable)
+  selfCatchUp50: number; // additional annual $ when self turns 50
+  selfCatchUp60: number; // additional annual $ when self is 60-63 (replaces 50+ amount)
+  spouseCatchUp50: number;
+  spouseCatchUp60: number;
+};
+
 export type ProjectionInput = {
   currentPortfolioValue: number;
-  annualContributions: number; // combined household
+  annualContributions: number; // combined household (base, before catch-up)
   yearsToRetirement: number;
   expectedReturnPct: number; // nominal (e.g., 7)
   inflationPct: number; // e.g., 3
@@ -20,6 +29,7 @@ export type ProjectionInput = {
   socialSecurityMonthlyIncome: number; // combined household SS at claiming
   yearsInRetirement: number; // e.g., 30
   glidePath?: GlidePathConfig; // optional glide path rebalancing
+  catchUp?: CatchUpSchedule; // age-based catch-up contribution increases
 };
 
 export type ProjectionResult = {
@@ -46,6 +56,36 @@ export type YearProjection = {
   phase: "accumulation" | "retirement";
 };
 
+/**
+ * Calculate the total catch-up bonus for a given projection year.
+ * Returns the combined extra contributions from both self and spouse
+ * based on their ages in that year.
+ */
+function getCatchUpBonus(catchUp: CatchUpSchedule | undefined, yearIndex: number): number {
+  if (!catchUp) return 0;
+  let bonus = 0;
+
+  // Self catch-up
+  const selfAge = catchUp.selfAge + yearIndex + 1;
+  if (selfAge >= 60 && selfAge <= 63) {
+    bonus += catchUp.selfCatchUp60;
+  } else if (selfAge >= 50) {
+    bonus += catchUp.selfCatchUp50;
+  }
+
+  // Spouse catch-up
+  if (catchUp.spouseAge) {
+    const spAge = catchUp.spouseAge + yearIndex + 1;
+    if (spAge >= 60 && spAge <= 63) {
+      bonus += catchUp.spouseCatchUp60;
+    } else if (spAge >= 50) {
+      bonus += catchUp.spouseCatchUp50;
+    }
+  }
+
+  return bonus;
+}
+
 export function calculateProjection(
   input: ProjectionInput,
   startAge: number
@@ -60,6 +100,7 @@ export function calculateProjection(
     socialSecurityMonthlyIncome,
     yearsInRetirement,
     glidePath,
+    catchUp,
   } = input;
 
   const nominalReturnRate = expectedReturnPct / 100;
@@ -79,15 +120,16 @@ export function calculateProjection(
   for (let y = 0; y < yearsToRetirement; y++) {
     const age = startAge + y + 1;
     const rate = getReturnRate(age);
+    const yearContributions = annualContributions + getCatchUpBonus(catchUp, y);
     const growth = portfolio * rate;
-    portfolio += growth + annualContributions;
-    totalContributed += annualContributions;
+    portfolio += growth + yearContributions;
+    totalContributed += yearContributions;
 
     yearByYear.push({
       year: y + 1,
       age,
       portfolioValue: Math.round(portfolio),
-      contributions: Math.round(annualContributions),
+      contributions: Math.round(yearContributions),
       growth: Math.round(growth),
       withdrawals: 0,
       ssIncome: 0,
@@ -189,6 +231,7 @@ export function runMonteCarlo(
     socialSecurityMonthlyIncome,
     yearsInRetirement,
     glidePath,
+    catchUp,
   } = input;
 
   const totalYears = yearsToRetirement + yearsInRetirement;
@@ -198,9 +241,10 @@ export function runMonteCarlo(
   const annualSSIncome = socialSecurityMonthlyIncome * 12;
   const annualWithdrawal = Math.max(0, annualExpenses - annualSSIncome);
 
-  // Pre-compute per-year return and volatility (avoids recalculating per simulation)
+  // Pre-compute per-year return, volatility, and contributions (avoids recalculating per simulation)
   const yearMeanReturn: number[] = [];
   const yearStdDev: number[] = [];
+  const yearContributions: number[] = [];
   for (let y = 0; y < totalYears; y++) {
     const age = startAge + y + 1;
     if (glidePath?.enabled) {
@@ -211,6 +255,10 @@ export function runMonteCarlo(
       yearMeanReturn.push(baseMeanReturn);
       yearStdDev.push(baseStdDev);
     }
+    // Contributions with catch-up (only during accumulation)
+    yearContributions.push(
+      y < yearsToRetirement ? annualContributions + getCatchUpBonus(catchUp, y) : 0
+    );
   }
 
   // Run simulations
@@ -231,7 +279,7 @@ export function runMonteCarlo(
       const growth = portfolio * yearReturn;
 
       if (y < yearsToRetirement) {
-        portfolio += growth + annualContributions;
+        portfolio += growth + yearContributions[y];
       } else {
         const withdrawal = Math.min(annualWithdrawal, portfolio + growth);
         portfolio = portfolio + growth - withdrawal;

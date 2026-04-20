@@ -5,6 +5,7 @@
 import { getSalaryAtYear, type SalaryGrowthConfig } from "./salary-growth";
 import { calculateRMD } from "./financial-analytics";
 import { type GlidePathConfig, getGlidePathParams } from "./glide-path";
+import { getIrsLimitForAge } from "../constants";
 
 export type MarketScenario = {
   id: string;
@@ -122,6 +123,7 @@ export function runDetailedProjection(params: {
     salary: number; // current salary for this account's owner
     salaryGrowth: import("./salary-growth").SalaryGrowthConfig | null;
     ownerRetirementYear?: number; // year (0-indexed) this owner's contributions stop
+    ownerCurrentAge?: number; // owner's current age (for age-based IRS limits)
   }[];
   totalAnnualContributions: number; // kept for backward compat / summary
   yearsToRetirement: number; // when withdrawals begin (earliest retirement)
@@ -238,11 +240,12 @@ export function runDetailedProjection(params: {
             yearContrib = acct.annualContribution + (acct.annualEscalation > 0 ? acct.annualEscalation * y : 0);
           }
 
-          // Apply IRS cap
-          if (acct.maxAnnualContribution > 0) {
-            // Cap applies to employee portion only, not employer match
-            // But for simplicity, cap the total for now
-            yearContrib = Math.min(yearContrib, acct.maxAnnualContribution);
+          // Apply IRS cap — age-aware for 50+ catch-up and 60-63 enhanced catch-up
+          const ownerAge = acct.ownerCurrentAge ? acct.ownerCurrentAge + y + 1 : age;
+          const ageBasedLimit = getIrsLimitForAge(acct.type, ownerAge);
+          const effectiveCap = ageBasedLimit > 0 ? ageBasedLimit : acct.maxAnnualContribution;
+          if (effectiveCap > 0) {
+            yearContrib = Math.min(yearContrib, effectiveCap);
           }
           const actualContrib = Math.max(0, yearContrib);
           newVal += actualContrib;

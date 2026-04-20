@@ -67,8 +67,9 @@ Interactive retirement modeling:
 
 - **Summary Cards** — portfolio at retirement, monthly income, Monte Carlo success rate
 - **Projection Chart** — portfolio growth through accumulation and drawdown
-- **Monte Carlo Fan Chart** — 1,000 simulated scenarios showing probability range (10th–90th percentile)
-- **Withdrawal Strategy Comparison** — 4 strategies showing lifetime taxes and remaining portfolio
+- **Monte Carlo Fan Chart** — 500 simulated scenarios showing probability range (10th–90th percentile)
+- **Risk Glide Path** — gradually shift allocation from aggressive to conservative as you approach retirement (like a target-date fund). Configure start/end risk profiles, transition age range, and curve shape (linear or accelerated). When enabled, the projection engine uses year-varying return rates and volatility instead of flat values, narrowing the Monte Carlo fan chart near retirement.
+- **Catch-Up Contributions** — the engine automatically increases contribution caps when owners turn 50 ($31,000 for 401k) and applies SECURE 2.0 enhanced catch-up at ages 60-63 ($34,750 for 401k). These appear as contribution jumps in the detailed tables.
 - **Scenario Analysis** — click "Run All Scenarios" to compare 6 what-ifs (market crash, early retirement, boost savings, lower returns, high inflation, no SS)
 
 ### Net Worth

@@ -143,6 +143,8 @@ export default async function SettingsPage() {
               accountType: a.accountType,
               isActivelyContributing: a.isActivelyContributing,
             }))}
+            selfAge={currentPrefs?.currentAge}
+            spouseAge={currentPrefs?.spouseCurrentAge}
           />
         </CardContent>
       </Card>

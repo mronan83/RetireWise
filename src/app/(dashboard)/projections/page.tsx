@@ -172,6 +172,7 @@ export default async function ProjectionsPage() {
             salary,
             salaryGrowth: salaryGrowthConfig,
             ownerRetirementYear: a.owner === "spouse" ? spouseYearsToRetirement : selfYearsToRetirement,
+            ownerCurrentAge: (a.owner === "spouse" ? (pref.spouseCurrentAge ?? pref.currentAge) : pref.currentAge) ?? undefined,
           };
         }).filter((a) => a.value > 0 || a.annualContribution > 0)}
         currentAge={pref.currentAge}
