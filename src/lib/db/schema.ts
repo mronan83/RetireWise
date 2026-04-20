@@ -494,6 +494,22 @@ export const contributions = pgTable("contributions", {
   updatedAt: timestamp("updated_at").defaultNow().notNull(),
 });
 
+// Per-account daily snapshots (for time-period performance tracking)
+export const accountSnapshots = pgTable("account_snapshots", {
+  id: uuid("id").defaultRandom().primaryKey(),
+  clerkId: text("clerk_id").notNull(),
+  accountId: uuid("account_id").notNull(),
+  snapshotDate: date("snapshot_date").notNull(),
+  value: decimal("value", { precision: 20, scale: 2 }).notNull(),
+  costBasis: decimal("cost_basis", { precision: 20, scale: 2 }).notNull(),
+  gainLoss: decimal("gain_loss", { precision: 20, scale: 2 }),
+  gainLossPct: decimal("gain_loss_pct", { precision: 10, scale: 4 }),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+}, (table) => [
+  index("account_snapshots_account_date_idx").on(table.accountId, table.snapshotDate),
+  index("account_snapshots_clerk_date_idx").on(table.clerkId, table.snapshotDate),
+]);
+
 // IRS Contribution Limits (updated annually)
 export const irsLimits = pgTable("irs_limits", {
   id: uuid("id").defaultRandom().primaryKey(),

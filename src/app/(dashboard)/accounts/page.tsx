@@ -1,7 +1,8 @@
 import { getAuthContext } from "@/lib/auth-helpers";
-import { Link2, PenLine } from "lucide-react";
+import { Link2 } from "lucide-react";
 import { getAccounts } from "@/lib/queries/accounts";
 import { getHoldingsByClerkId } from "@/lib/queries/holdings";
+import { getAccountPerformanceMap } from "@/lib/queries/snapshots";
 import { AccountCard } from "@/components/dashboard/account-card";
 import { FidelityImport } from "@/components/forms/fidelity-import";
 import { AddAccountButton } from "./add-account-button";
@@ -9,15 +10,19 @@ import { AddAccountButton } from "./add-account-button";
 export default async function AccountsPage() {
   const { dataClerkId: userId } = await getAuthContext();
 
-  const [accountsList, allHoldings] = await Promise.all([
+  const [accountsList, allHoldings, periodReturnsMap] = await Promise.all([
     getAccounts(userId),
     getHoldingsByClerkId(userId),
+    getAccountPerformanceMap(userId),
   ]);
 
-  const accountValues: Record<string, number> = {};
+  // Compute per-account value, cost basis, and gain/loss from holdings
+  const accountData: Record<string, { value: number; costBasis: number }> = {};
   for (const h of allHoldings) {
-    accountValues[h.accountId] =
-      (accountValues[h.accountId] || 0) + Number(h.currentValue);
+    const entry = accountData[h.accountId] || { value: 0, costBasis: 0 };
+    entry.value += Number(h.currentValue);
+    entry.costBasis += Number(h.costBasisPerShare) * Number(h.shares);
+    accountData[h.accountId] = entry;
   }
 
   return (
@@ -54,13 +59,26 @@ export default async function AccountsPage() {
         </div>
       ) : (
         <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
-          {accountsList.map((account) => (
-            <AccountCard
-              key={account.id}
-              account={account}
-              totalValue={accountValues[account.id] || 0}
-            />
-          ))}
+          {accountsList.map((account) => {
+            const data = accountData[account.id];
+            const value = data?.value ?? 0;
+            const costBasis = data?.costBasis ?? 0;
+            const gainLoss = costBasis > 0 ? value - costBasis : undefined;
+            const gainLossPct = costBasis > 0 ? ((value - costBasis) / costBasis) * 100 : undefined;
+            const periodReturns = periodReturnsMap.get(account.id);
+
+            return (
+              <AccountCard
+                key={account.id}
+                account={account}
+                totalValue={value}
+                costBasis={costBasis > 0 ? costBasis : undefined}
+                gainLoss={gainLoss}
+                gainLossPct={gainLossPct}
+                periodReturns={periodReturns}
+              />
+            );
+          })}
         </div>
       )}
     </div>

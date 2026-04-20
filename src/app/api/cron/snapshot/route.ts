@@ -1,6 +1,6 @@
 import { eq } from "drizzle-orm";
 import { getDb } from "@/lib/db";
-import { accounts, holdings, portfolioSnapshots } from "@/lib/db/schema";
+import { accounts, holdings, portfolioSnapshots, accountSnapshots } from "@/lib/db/schema";
 import { calculateAllocation } from "@/lib/utils/calculations";
 import { getLatestSnapshot } from "@/lib/queries/snapshots";
 import { updateAllPrices } from "@/lib/utils/price-feed";
@@ -97,6 +97,30 @@ export async function GET(request: Request) {
       dailyChange: String(dailyChange),
       dailyChangePct: String(dailyChangePct),
     });
+
+    // Per-account snapshots (for time-period performance on account cards)
+    const accountValueMap = new Map<string, { value: number; costBasis: number }>();
+    for (const row of userHoldings) {
+      const acctId = row.accounts.id;
+      const entry = accountValueMap.get(acctId) || { value: 0, costBasis: 0 };
+      entry.value += Number(row.holdings.currentValue);
+      entry.costBasis += Number(row.holdings.costBasisPerShare) * Number(row.holdings.shares);
+      accountValueMap.set(acctId, entry);
+    }
+
+    for (const [acctId, data] of accountValueMap) {
+      const gl = data.value - data.costBasis;
+      const glPct = data.costBasis > 0 ? (gl / data.costBasis) * 100 : 0;
+      await db.insert(accountSnapshots).values({
+        clerkId,
+        accountId: acctId,
+        snapshotDate: today,
+        value: String(data.value),
+        costBasis: String(data.costBasis),
+        gainLoss: String(gl),
+        gainLossPct: String(glPct),
+      });
+    }
 
     snapshotsCreated++;
 
