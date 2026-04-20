@@ -5,6 +5,11 @@
  * Returns are annual percentages (7 = 7%).
  */
 
+import {
+  type GlidePathConfig,
+  getGlidePathParams,
+} from "./glide-path";
+
 export type ProjectionInput = {
   currentPortfolioValue: number;
   annualContributions: number; // combined household
@@ -14,6 +19,7 @@ export type ProjectionInput = {
   monthlyExpensesRetirement: number;
   socialSecurityMonthlyIncome: number; // combined household SS at claiming
   yearsInRetirement: number; // e.g., 30
+  glidePath?: GlidePathConfig; // optional glide path rebalancing
 };
 
 export type ProjectionResult = {
@@ -53,23 +59,33 @@ export function calculateProjection(
     monthlyExpensesRetirement,
     socialSecurityMonthlyIncome,
     yearsInRetirement,
+    glidePath,
   } = input;
 
-  const realReturnRate = (1 + expectedReturnPct / 100) / (1 + inflationPct / 100) - 1;
   const nominalReturnRate = expectedReturnPct / 100;
   const yearByYear: YearProjection[] = [];
   let portfolio = currentPortfolioValue;
   let totalContributed = 0;
 
+  // Helper: get return rate for a given age (uses glide path if enabled)
+  function getReturnRate(age: number): number {
+    if (glidePath?.enabled) {
+      return getGlidePathParams(age, glidePath).returnPct / 100;
+    }
+    return nominalReturnRate;
+  }
+
   // Accumulation phase
   for (let y = 0; y < yearsToRetirement; y++) {
-    const growth = portfolio * nominalReturnRate;
+    const age = startAge + y + 1;
+    const rate = getReturnRate(age);
+    const growth = portfolio * rate;
     portfolio += growth + annualContributions;
     totalContributed += annualContributions;
 
     yearByYear.push({
       year: y + 1,
-      age: startAge + y + 1,
+      age,
       portfolioValue: Math.round(portfolio),
       contributions: Math.round(annualContributions),
       growth: Math.round(growth),
@@ -89,7 +105,6 @@ export function calculateProjection(
     monthlyIncomeFromPortfolio + socialSecurityMonthlyIncome;
   const annualExpenses = monthlyExpensesRetirement * 12;
   const annualSSIncome = socialSecurityMonthlyIncome * 12;
-  const annualWithdrawalNeeded = Math.max(0, annualExpenses - annualSSIncome);
 
   // Retirement/drawdown phase — expenses grow with inflation each year
   const inflationRate = inflationPct / 100;
@@ -97,19 +112,22 @@ export function calculateProjection(
   for (let y = 0; y < yearsInRetirement; y++) {
     if (portfolio <= 0) break;
 
+    const age = startAge + yearsToRetirement + y + 1;
+    const rate = getReturnRate(age);
+
     // Expenses grow with inflation; SS has its own COLA (approximate as same rate)
     const inflatedExpenses = annualExpenses * Math.pow(1 + inflationRate, y);
     const inflatedSS = annualSSIncome * Math.pow(1 + inflationRate, y);
     const yearWithdrawalNeeded = Math.max(0, inflatedExpenses - inflatedSS);
 
-    const growth = portfolio * nominalReturnRate;
+    const growth = portfolio * rate;
     const withdrawal = Math.min(yearWithdrawalNeeded, portfolio + growth);
     portfolio = portfolio + growth - withdrawal;
     yearsPortfolioLasts = y + 1;
 
     yearByYear.push({
       year: yearsToRetirement + y + 1,
-      age: startAge + yearsToRetirement + y + 1,
+      age,
       portfolioValue: Math.max(0, Math.round(portfolio)),
       contributions: 0,
       growth: Math.round(growth),
@@ -167,18 +185,33 @@ export function runMonteCarlo(
     annualContributions,
     yearsToRetirement,
     expectedReturnPct,
-    inflationPct,
     monthlyExpensesRetirement,
     socialSecurityMonthlyIncome,
     yearsInRetirement,
+    glidePath,
   } = input;
 
   const totalYears = yearsToRetirement + yearsInRetirement;
-  const meanReturn = expectedReturnPct / 100;
-  const stdDev = 0.15; // typical stock/bond portfolio volatility
+  const baseMeanReturn = expectedReturnPct / 100;
+  const baseStdDev = 0.15; // typical stock/bond portfolio volatility
   const annualExpenses = monthlyExpensesRetirement * 12;
   const annualSSIncome = socialSecurityMonthlyIncome * 12;
   const annualWithdrawal = Math.max(0, annualExpenses - annualSSIncome);
+
+  // Pre-compute per-year return and volatility (avoids recalculating per simulation)
+  const yearMeanReturn: number[] = [];
+  const yearStdDev: number[] = [];
+  for (let y = 0; y < totalYears; y++) {
+    const age = startAge + y + 1;
+    if (glidePath?.enabled) {
+      const params = getGlidePathParams(age, glidePath);
+      yearMeanReturn.push(params.returnPct / 100);
+      yearStdDev.push(params.volatility / 100);
+    } else {
+      yearMeanReturn.push(baseMeanReturn);
+      yearStdDev.push(baseStdDev);
+    }
+  }
 
   // Run simulations
   const allPaths: number[][] = [];
@@ -193,7 +226,7 @@ export function runMonteCarlo(
       const u1 = Math.random();
       const u2 = Math.random();
       const z = Math.sqrt(-2 * Math.log(u1)) * Math.cos(2 * Math.PI * u2);
-      const yearReturn = meanReturn + stdDev * z;
+      const yearReturn = yearMeanReturn[y] + yearStdDev[y] * z;
 
       const growth = portfolio * yearReturn;
 

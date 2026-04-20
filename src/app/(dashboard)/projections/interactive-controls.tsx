@@ -34,7 +34,24 @@ import {
   runDetailedProjection,
   type MarketScenario,
 } from "@/lib/utils/projection-scenarios";
+import { Switch } from "@/components/ui/switch";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 import { cn } from "@/lib/utils";
+import {
+  RISK_PROFILES,
+  RISK_PROFILE_ORDER,
+  type RiskProfileId,
+  type GlidePathConfig,
+  type GlideCurve,
+  getGlidePathParams,
+  getDefaultGlidePathConfig,
+} from "@/lib/utils/glide-path";
 
 type AccountInput = {
   name: string;
@@ -67,6 +84,7 @@ type Props = {
   spouseFRA: number;
   monthlyExpenses: number;
   annualContributions: number;
+  riskTolerance?: "conservative" | "moderate" | "aggressive";
   savedControls?: {
     ssClaimAgeSelf: number | null;
     ssClaimAgeSpouse: number | null;
@@ -76,6 +94,12 @@ type Props = {
     retirementYears: number | null;
     marketScenario: string | null;
     withdrawalMethod: string | null;
+    glidePathEnabled: boolean | null;
+    glidePathStartProfile: string | null;
+    glidePathEndProfile: string | null;
+    glidePathTransitionStartAge: number | null;
+    glidePathTransitionEndAge: number | null;
+    glidePathCurve: string | null;
   };
 };
 
@@ -104,6 +128,7 @@ export function InteractiveProjections({
   spouseFRA,
   monthlyExpenses,
   annualContributions,
+  riskTolerance,
   savedControls,
 }: Props) {
   // Interactive state — initialize from saved values or defaults
@@ -120,6 +145,36 @@ export function InteractiveProjections({
   const [retirementYears, setRetirementYears] = useState(savedControls?.retirementYears || 35);
   const [selectedScenario, setSelectedScenario] = useState<string>(savedControls?.marketScenario || "moderate");
 
+  // Glide path state — defaults based on current age/retirement age/risk tolerance
+  const glideDefaults = getDefaultGlidePathConfig(currentAge, retirementAge, riskTolerance);
+  const [gpEnabled, setGpEnabled] = useState(savedControls?.glidePathEnabled ?? false);
+  const [gpStartProfile, setGpStartProfile] = useState<RiskProfileId>(
+    (savedControls?.glidePathStartProfile as RiskProfileId) || glideDefaults.startProfile
+  );
+  const [gpEndProfile, setGpEndProfile] = useState<RiskProfileId>(
+    (savedControls?.glidePathEndProfile as RiskProfileId) || glideDefaults.endProfile
+  );
+  const [gpTransitionStartAge, setGpTransitionStartAge] = useState(
+    savedControls?.glidePathTransitionStartAge ?? glideDefaults.transitionStartAge
+  );
+  const [gpTransitionEndAge, setGpTransitionEndAge] = useState(
+    savedControls?.glidePathTransitionEndAge ?? glideDefaults.transitionEndAge
+  );
+  const [gpCurve, setGpCurve] = useState<GlideCurve>(
+    (savedControls?.glidePathCurve as GlideCurve) || "linear"
+  );
+
+  const glidePathConfig: GlidePathConfig | undefined = gpEnabled
+    ? {
+        enabled: true,
+        startProfile: gpStartProfile,
+        endProfile: gpEndProfile,
+        transitionStartAge: gpTransitionStartAge,
+        transitionEndAge: gpTransitionEndAge,
+        curve: gpCurve,
+      }
+    : undefined;
+
   const scenario = MARKET_SCENARIOS.find((s) => s.id === selectedScenario) || MARKET_SCENARIOS[1];
 
   // Wrapper functions that update state AND persist
@@ -131,6 +186,14 @@ export function InteractiveProjections({
   const updateMaxWithdrawal = (v: number | null) => { setMaxWithdrawalAmount(v); saveControls({ maxWithdrawalAmount: v }); };
   const updateRetirementYears = (v: number) => { setRetirementYears(v); saveControls({ retirementYears: v }); };
   const updateScenario = (v: string) => { setSelectedScenario(v); saveControls({ marketScenario: v }); };
+
+  // Glide path update functions
+  const updateGpEnabled = (v: boolean) => { setGpEnabled(v); saveControls({ glidePathEnabled: v }); };
+  const updateGpStartProfile = (v: RiskProfileId) => { setGpStartProfile(v); saveControls({ glidePathStartProfile: v }); };
+  const updateGpEndProfile = (v: RiskProfileId) => { setGpEndProfile(v); saveControls({ glidePathEndProfile: v }); };
+  const updateGpTransitionStartAge = (v: number) => { setGpTransitionStartAge(v); saveControls({ glidePathTransitionStartAge: v }); };
+  const updateGpTransitionEndAge = (v: number) => { setGpTransitionEndAge(v); saveControls({ glidePathTransitionEndAge: v }); };
+  const updateGpCurve = (v: GlideCurve) => { setGpCurve(v); saveControls({ glidePathCurve: v }); };
 
   // Calculate adjusted SS benefits
   const selfSSMonthly = adjustSSBenefit(selfSSAtFRA, selfFRA || 67, selfSSAge);
@@ -170,19 +233,35 @@ export function InteractiveProjections({
         maxAnnualWithdrawal: maxWithdrawalAmount || undefined,
         annualSSIncome: combinedSSAnnual,
         ssStartYear,
+        glidePath: glidePathConfig,
       }),
-    [accounts, annualContributions, yearsToRetirement, retirementYears, currentAge, scenario, monthlySpending, withdrawalRatePct, withdrawalMethod, maxWithdrawalAmount, combinedSSAnnual, ssStartYear]
+    [accounts, annualContributions, yearsToRetirement, retirementYears, currentAge, scenario, monthlySpending, withdrawalRatePct, withdrawalMethod, maxWithdrawalAmount, combinedSSAnnual, ssStartYear, gpEnabled, gpStartProfile, gpEndProfile, gpTransitionStartAge, gpTransitionEndAge, gpCurve]
   );
 
   // Run Monte Carlo (client-side, reactive to all controls)
   const monteCarloData = useMemo(() => {
     const totalYears = yearsToRetirement + retirementYears;
-    const meanReturn = scenario.returnPct / 100;
-    const stdDev = scenario.volatility / 100;
+    const baseMeanReturn = scenario.returnPct / 100;
+    const baseStdDev = scenario.volatility / 100;
     const annualExpenses = monthlySpending * 12;
     const expenseBasedWithdrawal = Math.max(0, annualExpenses - combinedSSAnnual);
     const startValue = accounts.reduce((s, a) => s + a.value, 0);
     const numSims = 500;
+
+    // Pre-compute per-year return and volatility for glide path
+    const yearMeanReturn: number[] = [];
+    const yearStdDev: number[] = [];
+    for (let y = 0; y < totalYears; y++) {
+      const age = currentAge + y + 1;
+      if (glidePathConfig) {
+        const params = getGlidePathParams(age, glidePathConfig);
+        yearMeanReturn.push(params.returnPct / 100);
+        yearStdDev.push(params.volatility / 100);
+      } else {
+        yearMeanReturn.push(baseMeanReturn);
+        yearStdDev.push(baseStdDev);
+      }
+    }
 
     const allPaths: number[][] = [];
     let successes = 0;
@@ -194,7 +273,7 @@ export function InteractiveProjections({
         const u1 = Math.random();
         const u2 = Math.random();
         const z = Math.sqrt(-2 * Math.log(u1)) * Math.cos(2 * Math.PI * u2);
-        const yearReturn = meanReturn + stdDev * z;
+        const yearReturn = yearMeanReturn[y] + yearStdDev[y] * z;
         const growth = portfolio * yearReturn;
         if (y < yearsToRetirement) {
           portfolio += growth + annualContributions;
@@ -251,7 +330,7 @@ export function InteractiveProjections({
       worstCase: percentiles.p10[yearsToRetirement - 1] || 0,
       bestCase: percentiles.p90[yearsToRetirement - 1] || 0,
     };
-  }, [accounts, annualContributions, yearsToRetirement, retirementYears, currentAge, scenario, monthlySpending, withdrawalRatePct, withdrawalMethod, maxWithdrawalAmount, combinedSSAnnual]);
+  }, [accounts, annualContributions, yearsToRetirement, retirementYears, currentAge, scenario, monthlySpending, withdrawalRatePct, withdrawalMethod, maxWithdrawalAmount, combinedSSAnnual, gpEnabled, gpStartProfile, gpEndProfile, gpTransitionStartAge, gpTransitionEndAge, gpCurve]);
 
   // Chart data
   const chartData = projection.ages.map((age, i) => ({
@@ -494,6 +573,145 @@ export function InteractiveProjections({
               How long your money needs to last. Average life expectancy is ~85, but plan for longer.
             </p>
           </div>
+
+          {/* Risk Glide Path */}
+          <div className="space-y-4 rounded-lg border p-4">
+            <div className="flex items-center justify-between">
+              <div className="space-y-0.5">
+                <Label className="text-sm font-medium flex items-center gap-1.5">
+                  Risk Glide Path
+                  <HelpTip text="Gradually shifts your portfolio from aggressive to conservative as you approach retirement — like a target-date fund. This reduces volatility near retirement to protect against large downswings (sequence-of-returns risk)." />
+                </Label>
+                <p className="text-xs text-muted-foreground">
+                  Automatically reduce risk as you approach retirement
+                </p>
+              </div>
+              <Switch
+                checked={gpEnabled}
+                onCheckedChange={updateGpEnabled}
+              />
+            </div>
+
+            {gpEnabled && (
+              <div className="space-y-4 pt-2">
+                {/* Start and End Risk Profiles */}
+                <div className="grid gap-4 sm:grid-cols-2">
+                  <div className="space-y-1.5">
+                    <Label className="text-xs">Starting Risk Level</Label>
+                    <Select value={gpStartProfile} onValueChange={(v) => updateGpStartProfile(v as RiskProfileId)}>
+                      <SelectTrigger className="h-8 text-xs">
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {RISK_PROFILE_ORDER.map((id) => (
+                          <SelectItem key={id} value={id} className="text-xs">
+                            {RISK_PROFILES[id].label} — {RISK_PROFILES[id].description}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                    <p className="text-[10px] text-muted-foreground">
+                      {RISK_PROFILES[gpStartProfile].returnPct}% return, {RISK_PROFILES[gpStartProfile].volatility}% volatility
+                    </p>
+                  </div>
+                  <div className="space-y-1.5">
+                    <Label className="text-xs">Target Risk Level</Label>
+                    <Select value={gpEndProfile} onValueChange={(v) => updateGpEndProfile(v as RiskProfileId)}>
+                      <SelectTrigger className="h-8 text-xs">
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {RISK_PROFILE_ORDER.map((id) => (
+                          <SelectItem key={id} value={id} className="text-xs">
+                            {RISK_PROFILES[id].label} — {RISK_PROFILES[id].description}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                    <p className="text-[10px] text-muted-foreground">
+                      {RISK_PROFILES[gpEndProfile].returnPct}% return, {RISK_PROFILES[gpEndProfile].volatility}% volatility
+                    </p>
+                  </div>
+                </div>
+
+                {/* Transition Age Range */}
+                <div className="grid gap-4 sm:grid-cols-2">
+                  <div className="space-y-1.5">
+                    <div className="flex items-center justify-between">
+                      <Label className="text-xs">Transition Start Age</Label>
+                      <Badge variant="outline" className="font-mono text-[10px]">{gpTransitionStartAge}</Badge>
+                    </div>
+                    <Slider
+                      value={[gpTransitionStartAge]}
+                      onValueChange={(v) => updateGpTransitionStartAge(Array.isArray(v) ? v[0] : v)}
+                      min={currentAge}
+                      max={Math.max(currentAge + 1, gpTransitionEndAge - 1)}
+                      step={1}
+                    />
+                    <p className="text-[10px] text-muted-foreground">
+                      When to begin shifting allocation
+                    </p>
+                  </div>
+                  <div className="space-y-1.5">
+                    <div className="flex items-center justify-between">
+                      <Label className="text-xs">Transition End Age</Label>
+                      <Badge variant="outline" className="font-mono text-[10px]">{gpTransitionEndAge}</Badge>
+                    </div>
+                    <Slider
+                      value={[gpTransitionEndAge]}
+                      onValueChange={(v) => updateGpTransitionEndAge(Array.isArray(v) ? v[0] : v)}
+                      min={gpTransitionStartAge + 1}
+                      max={retirementAge + 10}
+                      step={1}
+                    />
+                    <p className="text-[10px] text-muted-foreground">
+                      When transition completes (can extend past retirement)
+                    </p>
+                  </div>
+                </div>
+
+                {/* Curve Shape */}
+                <div className="space-y-1.5">
+                  <Label className="text-xs">Transition Curve</Label>
+                  <div className="grid grid-cols-2 gap-2">
+                    <button
+                      onClick={() => updateGpCurve("linear")}
+                      className={cn(
+                        "rounded-lg border p-2 text-left transition-colors text-xs",
+                        gpCurve === "linear" ? "border-primary bg-primary/5" : "hover:bg-accent/50"
+                      )}
+                    >
+                      <p className="font-medium">Linear</p>
+                      <p className="text-[10px] text-muted-foreground">Steady, even shift over time</p>
+                    </button>
+                    <button
+                      onClick={() => updateGpCurve("accelerated")}
+                      className={cn(
+                        "rounded-lg border p-2 text-left transition-colors text-xs",
+                        gpCurve === "accelerated" ? "border-primary bg-primary/5" : "hover:bg-accent/50"
+                      )}
+                    >
+                      <p className="font-medium">Accelerated</p>
+                      <p className="text-[10px] text-muted-foreground">Slow start, faster shift near end</p>
+                    </button>
+                  </div>
+                </div>
+
+                {/* Inline Glide Path Preview Chart */}
+                <div className="space-y-1.5">
+                  <Label className="text-xs">Allocation Over Time</Label>
+                  <div className="h-[100px] rounded-lg border bg-muted/20 p-2">
+                    <GlidePathPreview
+                      config={glidePathConfig!}
+                      currentAge={currentAge}
+                      retirementAge={retirementAge}
+                      retirementYears={retirementYears}
+                    />
+                  </div>
+                </div>
+              </div>
+            )}
+          </div>
         </CardContent>
       </Card>
 
@@ -590,6 +808,9 @@ export function InteractiveProjections({
             )}
             <p className="text-xs text-muted-foreground mt-2">
               Based on {scenario.name} ({scenario.returnPct}% return), {formatCurrency(monthlySpending)}/mo spending, {withdrawalLabel} withdrawal
+              {gpEnabled && (
+                <span className="text-primary"> + glide path ({RISK_PROFILES[gpStartProfile].label} → {RISK_PROFILES[gpEndProfile].label})</span>
+              )}
             </p>
           </CardContent>
         </Card>
@@ -598,7 +819,10 @@ export function InteractiveProjections({
       {/* Projection Chart */}
       <Card>
         <CardHeader className="pb-2">
-          <CardTitle>Portfolio Projection — {scenario.name}</CardTitle>
+          <CardTitle className="flex items-center gap-2">
+            Portfolio Projection — {scenario.name}
+            {gpEnabled && <Badge variant="outline" className="text-[10px] font-normal">Glide Path</Badge>}
+          </CardTitle>
         </CardHeader>
         <CardContent>
           <div className="h-[220px] sm:h-[300px] -ml-2">
@@ -639,6 +863,7 @@ export function InteractiveProjections({
           <CardTitle className="flex items-center gap-1.5">Monte Carlo Simulation <HelpTip text="Runs 500 random market scenarios to estimate how often your money lasts through retirement. Each scenario uses random annual returns based on the selected market scenario's average and volatility." /></CardTitle>
           <p className="text-sm text-muted-foreground">
             500 random scenarios — {monteCarloData.successRate}% success rate (money lasts {retirementYears}+ years)
+            {gpEnabled && " — volatility decreases as glide path shifts to conservative"}
           </p>
         </CardHeader>
         <CardContent>
@@ -940,6 +1165,7 @@ export function InteractiveProjections({
         ssStartYear={ssStartYear}
         basePortfolioAtRetirement={portfolioAtRetirement}
         baseSuccessRate={monteCarloData.successRate}
+        glidePath={glidePathConfig}
       />
     </div>
   );
@@ -962,6 +1188,7 @@ type ScenarioAnalysisProps = {
   ssStartYear: number;
   basePortfolioAtRetirement: number;
   baseSuccessRate: number;
+  glidePath?: GlidePathConfig;
 };
 
 type ScenarioResult = {
@@ -1056,20 +1283,34 @@ function ScenarioAnalysis(props: ScenarioAnalysisProps) {
       maxAnnualWithdrawal: props.maxWithdrawalAmount || undefined,
       annualSSIncome: overrides.ssIncomeOverride ?? props.combinedSSAnnual,
       ssStartYear: props.ssStartYear,
+      glidePath: props.glidePath,
     });
 
     // Quick Monte Carlo for success rate
     const ytr = overrides.yearsToRetirementOverride ?? props.yearsToRetirement;
     const yir = overrides.retirementYearsOverride ?? props.retirementYears;
     const totalYears = ytr + yir;
-    const meanReturn = (overrides.returnPctOverride ?? props.scenario.returnPct) / 100;
-    const stdDev = props.scenario.volatility / 100;
+    const baseMeanReturn = (overrides.returnPctOverride ?? props.scenario.returnPct) / 100;
+    const baseStdDev = props.scenario.volatility / 100;
     const inflPct = overrides.inflationPctOverride ?? props.scenario.inflationPct;
     const ssIncome = overrides.ssIncomeOverride ?? props.combinedSSAnnual;
     const expenses = props.monthlySpending * 12;
-    const startVal = accts.reduce((s, a) => s + a.value, 0) *
-      (overrides.accountsOverride ? 1 : 1); // accounts already adjusted if crash
     const annContrib = props.annualContributions * contribMult;
+
+    // Pre-compute per-year return/volatility for glide path
+    const ymr: number[] = [];
+    const ysd: number[] = [];
+    for (let y = 0; y < totalYears; y++) {
+      const age = props.currentAge + y + 1;
+      if (props.glidePath) {
+        const gp = getGlidePathParams(age, props.glidePath);
+        ymr.push(gp.returnPct / 100);
+        ysd.push(gp.volatility / 100);
+      } else {
+        ymr.push(baseMeanReturn);
+        ysd.push(baseStdDev);
+      }
+    }
 
     let successes = 0;
     const numSims = 300;
@@ -1077,11 +1318,10 @@ function ScenarioAnalysis(props: ScenarioAnalysisProps) {
       let portfolio = overrides.accountsOverride
         ? overrides.accountsOverride.reduce((s, a) => s + a.value, 0)
         : accts.reduce((s, a) => s + a.value, 0);
-      let survived = true;
       for (let y = 0; y < totalYears; y++) {
         const u1 = Math.random(), u2 = Math.random();
         const z = Math.sqrt(-2 * Math.log(u1)) * Math.cos(2 * Math.PI * u2);
-        const yearReturn = meanReturn + stdDev * z;
+        const yearReturn = ymr[y] + ysd[y] * z;
         const growth = portfolio * yearReturn;
         if (y < ytr) {
           portfolio += growth + annContrib;
@@ -1249,5 +1489,104 @@ function ScenarioAnalysis(props: ScenarioAnalysisProps) {
         </div>
       </CardContent>
     </Card>
+  );
+}
+
+// ─── Glide Path Preview ──────────────────────────────────────────
+
+function GlidePathPreview({
+  config,
+  currentAge,
+  retirementAge,
+  retirementYears,
+}: {
+  config: GlidePathConfig;
+  currentAge: number;
+  retirementAge: number;
+  retirementYears: number;
+}) {
+  const endAge = retirementAge + retirementYears;
+  const data = useMemo(() => {
+    const points: { age: number; stocks: number; bonds: number; returnPct: number }[] = [];
+    for (let age = currentAge; age <= endAge; age++) {
+      const params = getGlidePathParams(age, config);
+      points.push({
+        age,
+        stocks: Math.round(params.stockPct),
+        bonds: Math.round(100 - params.stockPct),
+        returnPct: Math.round(params.returnPct * 10) / 10,
+      });
+    }
+    return points;
+  }, [config, currentAge, endAge]);
+
+  return (
+    <ResponsiveContainer width="100%" height="100%">
+      <AreaChart data={data} margin={{ top: 2, right: 4, left: 0, bottom: 0 }}>
+        <defs>
+          <linearGradient id="gpStocks" x1="0" y1="0" x2="0" y2="1">
+            <stop offset="0%" stopColor="#6366f1" stopOpacity={0.5} />
+            <stop offset="100%" stopColor="#6366f1" stopOpacity={0.1} />
+          </linearGradient>
+          <linearGradient id="gpBonds" x1="0" y1="0" x2="0" y2="1">
+            <stop offset="0%" stopColor="#22c55e" stopOpacity={0.5} />
+            <stop offset="100%" stopColor="#22c55e" stopOpacity={0.1} />
+          </linearGradient>
+        </defs>
+        <XAxis
+          dataKey="age"
+          tick={{ fill: "hsl(var(--muted-foreground))", fontSize: 9 }}
+          axisLine={false}
+          tickLine={false}
+          interval={Math.max(1, Math.floor((endAge - currentAge) / 6))}
+        />
+        <YAxis
+          domain={[0, 100]}
+          tick={{ fill: "hsl(var(--muted-foreground))", fontSize: 9 }}
+          axisLine={false}
+          tickLine={false}
+          width={28}
+          tickFormatter={(v) => `${v}%`}
+        />
+        <Tooltip
+          formatter={(value, name) => [`${value}%`, name === "stocks" ? "Stocks" : "Bonds"]}
+          labelFormatter={(age) => {
+            const point = data.find((d) => d.age === age);
+            return `Age ${age} — ${point?.returnPct}% expected return`;
+          }}
+          contentStyle={{
+            backgroundColor: "hsl(var(--card))",
+            border: "1px solid hsl(var(--border))",
+            borderRadius: "6px",
+            fontSize: "11px",
+            padding: "4px 8px",
+          }}
+        />
+        <ReferenceLine
+          x={retirementAge}
+          stroke="hsl(var(--muted-foreground))"
+          strokeDasharray="3 3"
+          strokeOpacity={0.5}
+        />
+        <Area
+          type="monotone"
+          dataKey="stocks"
+          stackId="1"
+          stroke="#6366f1"
+          fill="url(#gpStocks)"
+          strokeWidth={1.5}
+          name="stocks"
+        />
+        <Area
+          type="monotone"
+          dataKey="bonds"
+          stackId="1"
+          stroke="#22c55e"
+          fill="url(#gpBonds)"
+          strokeWidth={1.5}
+          name="bonds"
+        />
+      </AreaChart>
+    </ResponsiveContainer>
   );
 }

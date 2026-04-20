@@ -27,6 +27,14 @@ export async function POST(request: Request) {
   if (body.marketScenario !== undefined) data.projectionMarketScenario = body.marketScenario;
   if (body.withdrawalMethod !== undefined) data.projectionWithdrawalMethod = body.withdrawalMethod;
 
+  // Glide path rebalancing controls
+  if (body.glidePathEnabled !== undefined) data.glidePathEnabled = body.glidePathEnabled;
+  if (body.glidePathStartProfile !== undefined) data.glidePathStartProfile = body.glidePathStartProfile;
+  if (body.glidePathEndProfile !== undefined) data.glidePathEndProfile = body.glidePathEndProfile;
+  if (body.glidePathTransitionStartAge !== undefined) data.glidePathTransitionStartAge = body.glidePathTransitionStartAge;
+  if (body.glidePathTransitionEndAge !== undefined) data.glidePathTransitionEndAge = body.glidePathTransitionEndAge;
+  if (body.glidePathCurve !== undefined) data.glidePathCurve = body.glidePathCurve;
+
   if (existing.length > 0) {
     await db.update(userPreferences).set(data).where(eq(userPreferences.clerkId, userId));
   } else {
@@ -51,6 +59,12 @@ export async function GET() {
       retirementYears: userPreferences.projectionRetirementYears,
       marketScenario: userPreferences.projectionMarketScenario,
       withdrawalMethod: userPreferences.projectionWithdrawalMethod,
+      glidePathEnabled: userPreferences.glidePathEnabled,
+      glidePathStartProfile: userPreferences.glidePathStartProfile,
+      glidePathEndProfile: userPreferences.glidePathEndProfile,
+      glidePathTransitionStartAge: userPreferences.glidePathTransitionStartAge,
+      glidePathTransitionEndAge: userPreferences.glidePathTransitionEndAge,
+      glidePathCurve: userPreferences.glidePathCurve,
     })
     .from(userPreferences)
     .where(eq(userPreferences.clerkId, userId))

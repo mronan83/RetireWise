@@ -311,6 +311,14 @@ export const userPreferences = pgTable("user_preferences", {
   projectionMarketScenario: text("projection_market_scenario"),
   projectionWithdrawalMethod: text("projection_withdrawal_method"),
 
+  // Glide path rebalancing
+  glidePathEnabled: boolean("glide_path_enabled").default(false),
+  glidePathStartProfile: text("glide_path_start_profile"), // risk profile id
+  glidePathEndProfile: text("glide_path_end_profile"),
+  glidePathTransitionStartAge: integer("glide_path_transition_start_age"),
+  glidePathTransitionEndAge: integer("glide_path_transition_end_age"),
+  glidePathCurve: text("glide_path_curve"), // "linear" | "accelerated"
+
   // Household
   filingStatus: filingStatusEnum("filing_status").default(
     "married_filing_jointly"

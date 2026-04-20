@@ -184,6 +184,7 @@ export default async function ProjectionsPage() {
         spouseFRA={spouseSS[0]?.fullRetirementAge || 67}
         monthlyExpenses={monthlyExpenses}
         annualContributions={totalAnnualContributions}
+        riskTolerance={pref.riskTolerance ?? undefined}
         savedControls={{
           ssClaimAgeSelf: pref.projectionSSClaimAgeSelf || null,
           ssClaimAgeSpouse: pref.projectionSSClaimAgeSpouse || null,
@@ -193,6 +194,12 @@ export default async function ProjectionsPage() {
           retirementYears: pref.projectionRetirementYears || null,
           marketScenario: pref.projectionMarketScenario || null,
           withdrawalMethod: pref.projectionWithdrawalMethod || null,
+          glidePathEnabled: pref.glidePathEnabled ?? null,
+          glidePathStartProfile: pref.glidePathStartProfile || null,
+          glidePathEndProfile: pref.glidePathEndProfile || null,
+          glidePathTransitionStartAge: pref.glidePathTransitionStartAge || null,
+          glidePathTransitionEndAge: pref.glidePathTransitionEndAge || null,
+          glidePathCurve: pref.glidePathCurve || null,
         }}
       />
 

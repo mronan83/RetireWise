@@ -11,6 +11,11 @@ import {
   calculateWithdrawalStrategies,
   type ProjectionInput,
 } from "../utils/projections";
+import {
+  type GlidePathConfig,
+  type RiskProfileId,
+  RISK_PROFILES,
+} from "../utils/glide-path";
 
 export const runRetirementProjectionTool = tool({
   description:
@@ -104,6 +109,19 @@ export const runRetirementProjectionTool = tool({
       ? Number(pref.monthlyExpensesRetirement)
       : 7000;
 
+    // Build glide path config if enabled
+    let glidePath: GlidePathConfig | undefined;
+    if (pref.glidePathEnabled && pref.glidePathStartProfile && pref.glidePathEndProfile) {
+      glidePath = {
+        enabled: true,
+        startProfile: pref.glidePathStartProfile as RiskProfileId,
+        endProfile: pref.glidePathEndProfile as RiskProfileId,
+        transitionStartAge: pref.glidePathTransitionStartAge ?? Math.max(pref.currentAge, pref.retirementAge - 15),
+        transitionEndAge: pref.glidePathTransitionEndAge ?? pref.retirementAge,
+        curve: (pref.glidePathCurve as "linear" | "accelerated") ?? "linear",
+      };
+    }
+
     const input: ProjectionInput = {
       currentPortfolioValue: totalValue,
       annualContributions: totalAnnualContributions,
@@ -113,6 +131,7 @@ export const runRetirementProjectionTool = tool({
       monthlyExpensesRetirement: monthlyExpenses,
       socialSecurityMonthlyIncome: combinedSSMonthly,
       yearsInRetirement: 30,
+      glidePath,
     };
 
     // Run deterministic projection
@@ -163,6 +182,13 @@ export const runRetirementProjectionTool = tool({
         inflationPct: inflation,
         monthlyExpensesRetirement: monthlyExpenses,
         combinedSSMonthlyAtFRA: combinedSSMonthly,
+        glidePath: glidePath ? {
+          enabled: true,
+          startProfile: `${RISK_PROFILES[glidePath.startProfile].label} (${RISK_PROFILES[glidePath.startProfile].returnPct}% return, ${RISK_PROFILES[glidePath.startProfile].volatility}% vol)`,
+          endProfile: `${RISK_PROFILES[glidePath.endProfile].label} (${RISK_PROFILES[glidePath.endProfile].returnPct}% return, ${RISK_PROFILES[glidePath.endProfile].volatility}% vol)`,
+          transitionAges: `${glidePath.transitionStartAge} → ${glidePath.transitionEndAge}`,
+          curve: glidePath.curve,
+        } : { enabled: false },
       },
       projection: {
         portfolioAtRetirement: projection.portfolioAtRetirement,

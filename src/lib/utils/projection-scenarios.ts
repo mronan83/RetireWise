@@ -4,6 +4,7 @@
 
 import { getSalaryAtYear, type SalaryGrowthConfig } from "./salary-growth";
 import { calculateRMD } from "./financial-analytics";
+import { type GlidePathConfig, getGlidePathParams } from "./glide-path";
 
 export type MarketScenario = {
   id: string;
@@ -134,6 +135,7 @@ export function runDetailedProjection(params: {
   maxAnnualWithdrawal?: number; // cap on annual withdrawal (null/0 = unlimited)
   annualSSIncome: number;
   ssStartYear: number; // year when SS starts (0-indexed from now)
+  glidePath?: GlidePathConfig; // optional glide path rebalancing
 }): DetailedProjection {
   const {
     accounts,
@@ -149,10 +151,19 @@ export function runDetailedProjection(params: {
     maxAnnualWithdrawal,
     annualSSIncome,
     ssStartYear,
+    glidePath,
   } = params;
 
   const totalYears = yearsToRetirement + yearsInRetirement;
-  const rate = returnPct / 100;
+  const baseRate = returnPct / 100;
+
+  // Helper: get return rate for a given age (uses glide path if enabled)
+  function getRateForAge(age: number): number {
+    if (glidePath?.enabled) {
+      return getGlidePathParams(age, glidePath).returnPct / 100;
+    }
+    return baseRate;
+  }
 
   // Initialize account projections
   const accountProjs: AccountProjection[] = accounts.map((a) => ({
@@ -189,7 +200,9 @@ export function runDetailedProjection(params: {
     phases.push(isRetirement ? "retirement" : "accumulation");
     ssIncomeArr.push(yearSS);
 
-    // Grow each account
+    // Grow each account — rate varies by age when glide path is active
+    const age = startAge + y + 1;
+    const rate = getRateForAge(age);
     let yearTotalContributions = 0;
     for (const ap of accountProjs) {
       const prev =
