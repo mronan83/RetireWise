@@ -102,6 +102,7 @@ type Props = {
     glidePathTransitionStartAge: number | null;
     glidePathTransitionEndAge: number | null;
     glidePathCurve: string | null;
+    catchUpEnabled: boolean | null;
   };
 };
 
@@ -166,6 +167,10 @@ export function InteractiveProjections({
     (savedControls?.glidePathCurve as GlideCurve) || "linear"
   );
 
+  // Catch-up contributions toggle (defaults to on)
+  const [catchUpEnabled, setCatchUpEnabled] = useState(savedControls?.catchUpEnabled ?? true);
+  const updateCatchUpEnabled = (v: boolean) => { setCatchUpEnabled(v); saveControls({ catchUpEnabled: v }); };
+
   const glidePathConfig: GlidePathConfig | undefined = gpEnabled
     ? {
         enabled: true,
@@ -214,6 +219,15 @@ export function InteractiveProjections({
   // Compute catch-up contribution amounts from account types
   // Sum catch-up eligible amounts per owner across all their contributing accounts
   const catchUpSchedule = useMemo(() => {
+    if (!catchUpEnabled) {
+      return {
+        selfAge: currentAge,
+        spouseAge: spouseAge ?? undefined,
+        selfCatchUp50: 0, selfCatchUp60: 0,
+        spouseCatchUp50: 0, spouseCatchUp60: 0,
+      };
+    }
+
     let selfCatchUp50 = 0, selfCatchUp60 = 0;
     let spouseCatchUp50 = 0, spouseCatchUp60 = 0;
 
@@ -240,7 +254,7 @@ export function InteractiveProjections({
       spouseCatchUp50,
       spouseCatchUp60,
     };
-  }, [accounts, currentAge, spouseAge]);
+  }, [accounts, currentAge, spouseAge, catchUpEnabled]);
 
   // Spouse retires at a different age — calculate what your age is when they retire
   const spouseRetireAtYourAge = (spouseAge && spouseRetirementAge)
@@ -267,8 +281,9 @@ export function InteractiveProjections({
         annualSSIncome: combinedSSAnnual,
         ssStartYear,
         glidePath: glidePathConfig,
+        catchUpEnabled,
       }),
-    [accounts, annualContributions, yearsToRetirement, retirementYears, currentAge, scenario, monthlySpending, withdrawalRatePct, withdrawalMethod, maxWithdrawalAmount, combinedSSAnnual, ssStartYear, gpEnabled, gpStartProfile, gpEndProfile, gpTransitionStartAge, gpTransitionEndAge, gpCurve]
+    [accounts, annualContributions, yearsToRetirement, retirementYears, currentAge, scenario, monthlySpending, withdrawalRatePct, withdrawalMethod, maxWithdrawalAmount, combinedSSAnnual, ssStartYear, gpEnabled, gpStartProfile, gpEndProfile, gpTransitionStartAge, gpTransitionEndAge, gpCurve, catchUpEnabled]
   );
 
   // Run Monte Carlo (client-side, reactive to all controls)
@@ -619,6 +634,25 @@ export function InteractiveProjections({
             <p className="text-xs text-muted-foreground">
               How long your money needs to last. Average life expectancy is ~85, but plan for longer.
             </p>
+          </div>
+
+          {/* Catch-Up Contributions */}
+          <div className="flex items-center justify-between rounded-lg border p-4">
+            <div className="space-y-0.5">
+              <Label className="text-sm font-medium flex items-center gap-1.5">
+                Catch-Up Contributions
+                <HelpTip text="When enabled, the projection increases IRS contribution caps when account owners turn 50 (+$7,500/yr for 401k) and applies the SECURE 2.0 enhanced catch-up at ages 60-63 (+$11,250/yr for 401k). Disable if you don't plan to increase contributions at those milestones." />
+              </Label>
+              <p className="text-xs text-muted-foreground">
+                {catchUpEnabled
+                  ? "50+ and 60-63 enhanced IRS limits applied automatically"
+                  : "Using standard under-50 IRS limits for all years"}
+              </p>
+            </div>
+            <Switch
+              checked={catchUpEnabled}
+              onCheckedChange={updateCatchUpEnabled}
+            />
           </div>
 
           {/* Risk Glide Path */}

@@ -124,10 +124,13 @@ export const runRetirementProjectionTool = tool({
       };
     }
 
-    // Compute catch-up schedule from contribution account types
+    // Compute catch-up schedule from contribution account types (respects user toggle)
+    const catchUpEnabled = pref.catchUpEnabled !== false;
     let selfCatchUp50 = 0, selfCatchUp60 = 0;
     let spouseCatchUp50 = 0, spouseCatchUp60 = 0;
-    for (const c of contribs) {
+    if (!catchUpEnabled) {
+      // Skip — all catch-up amounts stay at 0
+    } else for (const c of contribs) {
       if (!c.isActive) continue;
       const acctType = c.accountType;
       const limits = IRS_LIMITS[acctType];

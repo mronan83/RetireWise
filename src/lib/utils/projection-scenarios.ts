@@ -138,6 +138,7 @@ export function runDetailedProjection(params: {
   annualSSIncome: number;
   ssStartYear: number; // year when SS starts (0-indexed from now)
   glidePath?: GlidePathConfig; // optional glide path rebalancing
+  catchUpEnabled?: boolean; // whether to apply 50+ and 60-63 catch-up IRS limits (default true)
 }): DetailedProjection {
   const {
     accounts,
@@ -154,6 +155,7 @@ export function runDetailedProjection(params: {
     annualSSIncome,
     ssStartYear,
     glidePath,
+    catchUpEnabled = true,
   } = params;
 
   const totalYears = yearsToRetirement + yearsInRetirement;
@@ -242,7 +244,9 @@ export function runDetailedProjection(params: {
 
           // Apply IRS cap — age-aware for 50+ catch-up and 60-63 enhanced catch-up
           const ownerAge = acct.ownerCurrentAge ? acct.ownerCurrentAge + y + 1 : age;
-          const ageBasedLimit = getIrsLimitForAge(acct.type, ownerAge);
+          const ageBasedLimit = catchUpEnabled
+            ? getIrsLimitForAge(acct.type, ownerAge)
+            : getIrsLimitForAge(acct.type, 30); // under-50 limit when catch-up disabled
           const effectiveCap = ageBasedLimit > 0 ? ageBasedLimit : acct.maxAnnualContribution;
           if (effectiveCap > 0) {
             yearContrib = Math.min(yearContrib, effectiveCap);

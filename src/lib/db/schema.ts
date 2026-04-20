@@ -319,6 +319,9 @@ export const userPreferences = pgTable("user_preferences", {
   glidePathTransitionEndAge: integer("glide_path_transition_end_age"),
   glidePathCurve: text("glide_path_curve"), // "linear" | "accelerated"
 
+  // Catch-up contributions
+  catchUpEnabled: boolean("catch_up_enabled").default(true),
+
   // Household
   filingStatus: filingStatusEnum("filing_status").default(
     "married_filing_jointly"

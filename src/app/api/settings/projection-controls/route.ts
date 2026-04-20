@@ -35,6 +35,9 @@ export async function POST(request: Request) {
   if (body.glidePathTransitionEndAge !== undefined) data.glidePathTransitionEndAge = body.glidePathTransitionEndAge;
   if (body.glidePathCurve !== undefined) data.glidePathCurve = body.glidePathCurve;
 
+  // Catch-up contributions
+  if (body.catchUpEnabled !== undefined) data.catchUpEnabled = body.catchUpEnabled;
+
   if (existing.length > 0) {
     await db.update(userPreferences).set(data).where(eq(userPreferences.clerkId, userId));
   } else {
@@ -65,6 +68,7 @@ export async function GET() {
       glidePathTransitionStartAge: userPreferences.glidePathTransitionStartAge,
       glidePathTransitionEndAge: userPreferences.glidePathTransitionEndAge,
       glidePathCurve: userPreferences.glidePathCurve,
+      catchUpEnabled: userPreferences.catchUpEnabled,
     })
     .from(userPreferences)
     .where(eq(userPreferences.clerkId, userId))

@@ -201,6 +201,7 @@ export default async function ProjectionsPage() {
           glidePathTransitionStartAge: pref.glidePathTransitionStartAge || null,
           glidePathTransitionEndAge: pref.glidePathTransitionEndAge || null,
           glidePathCurve: pref.glidePathCurve || null,
+          catchUpEnabled: pref.catchUpEnabled ?? null,
         }}
       />
 
