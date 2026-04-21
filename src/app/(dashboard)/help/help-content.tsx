@@ -172,6 +172,21 @@ export function HelpContent() {
               This is &quot;unrealized&quot; gain/loss — you haven&apos;t actually gained or lost money until you sell.
             </P>
           </SubSection>
+          <SubSection title="Account Card Performance">
+            <P>
+              Each account card on the Accounts page shows:
+            </P>
+            <UL>
+              <li><B>Total Gain/Loss</B> — The dollar amount and percentage your account has gained or lost since you bought your holdings. Calculated from the combined cost basis of all holdings in the account vs. their current market value.</li>
+              <li><B>Time-Period Returns</B> — Small colored indicators showing how the account has performed over specific periods: Day, YTD, 1Y, 3Y, 5Y, and 10Y. Green means positive, red means negative.</li>
+            </UL>
+            <P>
+              Time-period returns are calculated from daily account snapshots that are taken automatically each evening
+              when prices refresh. A period only appears once enough snapshot history exists — for example, the &quot;1Y&quot;
+              return won&apos;t show until there&apos;s at least one year of daily snapshots. New accounts will gradually
+              show more periods as data accumulates over time.
+            </P>
+          </SubSection>
         </Section>
 
         {/* CONTRIBUTIONS */}

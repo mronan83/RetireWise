@@ -35,6 +35,7 @@ Your home base. Shows:
 - **Add Account** → Choose "Connect via Plaid" (automatic) or "Add manually"
 - **Quick Import** — 3-step Fidelity CSV flow: pick account → open Fidelity → drop CSV
 - Smart sync: updates existing, adds new, removes sold positions. Safe to re-import daily.
+- **Account cards** show total value, gain/loss ($, %), and time-period returns (Day, YTD, 1Y, 3Y, 5Y, 10Y). Period returns build up as daily snapshots accumulate.
 - Click any account card to see its holdings and manage it
 
 ### Holdings
