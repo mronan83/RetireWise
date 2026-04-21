@@ -287,6 +287,10 @@ export const userPreferences = pgTable("user_preferences", {
 
   // AI provider preference
   aiProvider: text("ai_provider").default("anthropic"),
+  // Encrypted API keys (user-provided, optional — falls back to env vars)
+  anthropicApiKey: text("anthropic_api_key"),
+  googleApiKey: text("google_api_key"),
+  openaiApiKey: text("openai_api_key"),
 
   // Income
   annualSalary: decimal("annual_salary", { precision: 20, scale: 2 }),

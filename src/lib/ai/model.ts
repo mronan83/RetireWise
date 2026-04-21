@@ -2,37 +2,43 @@ import type { LanguageModel } from "ai";
 
 /**
  * Get the AI model for the given provider.
- * Provider can be: "anthropic", "google", "openai", or "gateway"
+ * Uses user-provided API key if available, falls back to env var.
  */
-export function getModel(provider?: string): LanguageModel {
+export function getModel(provider?: string, userApiKey?: string): LanguageModel {
   const p = provider || process.env.AI_PROVIDER || "anthropic";
 
   switch (p) {
     case "anthropic": {
-      if (!process.env.ANTHROPIC_API_KEY) {
-        throw new Error("ANTHROPIC_API_KEY is not set.");
+      const apiKey = userApiKey || process.env.ANTHROPIC_API_KEY;
+      if (!apiKey) {
+        throw new Error("No Anthropic API key configured. Add one in Settings or set ANTHROPIC_API_KEY.");
       }
       // eslint-disable-next-line @typescript-eslint/no-require-imports
-      const { anthropic } = require("@ai-sdk/anthropic");
-      return anthropic("claude-sonnet-4-5-20250929");
+      const { createAnthropic } = require("@ai-sdk/anthropic");
+      const client = createAnthropic({ apiKey });
+      return client("claude-sonnet-4-5-20250929");
     }
 
     case "google": {
-      if (!process.env.GOOGLE_API_KEY) {
-        throw new Error("GOOGLE_API_KEY is not set.");
+      const apiKey = userApiKey || process.env.GOOGLE_API_KEY;
+      if (!apiKey) {
+        throw new Error("No Google API key configured. Add one in Settings or set GOOGLE_API_KEY.");
       }
       // eslint-disable-next-line @typescript-eslint/no-require-imports
-      const { google } = require("@ai-sdk/google");
-      return google("gemini-2.0-flash");
+      const { createGoogleGenerativeAI } = require("@ai-sdk/google");
+      const client = createGoogleGenerativeAI({ apiKey });
+      return client("gemini-2.0-flash");
     }
 
     case "openai": {
-      if (!process.env.OPENAI_API_KEY) {
-        throw new Error("OPENAI_API_KEY is not set.");
+      const apiKey = userApiKey || process.env.OPENAI_API_KEY;
+      if (!apiKey) {
+        throw new Error("No OpenAI API key configured. Add one in Settings or set OPENAI_API_KEY.");
       }
       // eslint-disable-next-line @typescript-eslint/no-require-imports
-      const { openai } = require("@ai-sdk/openai");
-      return openai("gpt-4.1");
+      const { createOpenAI } = require("@ai-sdk/openai");
+      const client = createOpenAI({ apiKey });
+      return client("gpt-4.1");
     }
 
     case "gateway": {

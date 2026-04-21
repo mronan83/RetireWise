@@ -4,6 +4,7 @@ import { eq } from "drizzle-orm";
 import { getDb } from "@/lib/db";
 import { userPreferences } from "@/lib/db/schema";
 import { getModel } from "@/lib/ai/model";
+import { decrypt } from "@/lib/utils/encryption";
 import { getPortfolioSummaryTool } from "@/lib/tools/get-portfolio-summary";
 import { getHoldingsDetailTool } from "@/lib/tools/get-holdings-detail";
 import { calculateAllocationDriftTool } from "@/lib/tools/calculate-allocation-drift";
@@ -81,17 +82,36 @@ export async function POST(request: Request) {
 
   const db = getDb();
   const prefs = await db
-    .select({ aiProvider: userPreferences.aiProvider })
+    .select({
+      aiProvider: userPreferences.aiProvider,
+      anthropicApiKey: userPreferences.anthropicApiKey,
+      googleApiKey: userPreferences.googleApiKey,
+      openaiApiKey: userPreferences.openaiApiKey,
+    })
     .from(userPreferences)
     .where(eq(userPreferences.clerkId, userId))
     .limit(1);
 
   const provider = prefs[0]?.aiProvider || undefined;
 
+  // Resolve user's API key for the selected provider
+  let userApiKey: string | undefined;
+  if (prefs[0]) {
+    const keyMap: Record<string, string | null> = {
+      anthropic: prefs[0].anthropicApiKey,
+      google: prefs[0].googleApiKey,
+      openai: prefs[0].openaiApiKey,
+    };
+    const encrypted = keyMap[provider || "anthropic"];
+    if (encrypted) {
+      try { userApiKey = decrypt(encrypted); } catch { /* fall back to env var */ }
+    }
+  }
+
   const { messages } = await request.json();
 
   const result = streamText({
-    model: getModel(provider || undefined),
+    model: getModel(provider || undefined, userApiKey),
     system: SYSTEM_PROMPT,
     messages: await convertToModelMessages(messages),
     tools: {
