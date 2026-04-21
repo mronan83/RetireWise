@@ -8,7 +8,7 @@ import { AccountCard } from "@/components/dashboard/account-card";
 import { Skeleton } from "@/components/ui/skeleton";
 import { getAccounts } from "@/lib/queries/accounts";
 import { getHoldingsByClerkId } from "@/lib/queries/holdings";
-import { getSnapshots } from "@/lib/queries/snapshots";
+import { getSnapshots, getAccountPerformanceMap } from "@/lib/queries/snapshots";
 import { calculatePortfolioSummary, calculateGainLoss } from "@/lib/utils/calculations";
 import { RefreshPricesButton } from "@/components/dashboard/refresh-prices-button";
 import { AlertsPanel } from "@/components/dashboard/alerts-panel";
@@ -23,7 +23,7 @@ async function DashboardContent() {
   const { dataClerkId: userId } = await getAuthContext();
 
   const db = getDb();
-  const [accountsList, holdingsWithAccounts, snapshots, activeAlerts, userGoals, properties, cashAccounts, debtsList, vehiclesList] = await Promise.all([
+  const [accountsList, holdingsWithAccounts, snapshots, activeAlerts, userGoals, properties, cashAccounts, debtsList, vehiclesList, periodReturnsMap] = await Promise.all([
     getAccounts(userId),
     getHoldingsByClerkId(userId),
     getSnapshots(userId, 90),
@@ -35,6 +35,7 @@ async function DashboardContent() {
     db.select().from(cashReserves).where(eq(cashReserves.clerkId, userId)),
     db.select().from(debts).where(eq(debts.clerkId, userId)),
     db.select().from(vehicles).where(eq(vehicles.clerkId, userId)),
+    getAccountPerformanceMap(userId),
   ]);
 
   const holdingsForCalc = holdingsWithAccounts.map((h) => ({
@@ -76,13 +77,19 @@ async function DashboardContent() {
     }))
     .reverse();
 
-  // Calculate total value per account + per owner
+  // Calculate total value + cost basis per account, and per owner
+  const accountData: Record<string, { value: number; costBasis: number }> = {};
   const accountValues: Record<string, number> = {};
   let selfValue = 0;
   let spouseValue = 0;
   for (const h of holdingsWithAccounts) {
     const val = Number(h.currentValue);
+    const cb = Number(h.costBasisPerShare) * Number(h.shares);
     accountValues[h.accountId] = (accountValues[h.accountId] || 0) + val;
+    const entry = accountData[h.accountId] || { value: 0, costBasis: 0 };
+    entry.value += val;
+    entry.costBasis += cb;
+    accountData[h.accountId] = entry;
     if (h.accountOwner === "spouse") {
       spouseValue += val;
     } else {
@@ -144,13 +151,24 @@ async function DashboardContent() {
         <div>
           <h2 className="mb-4 text-lg font-semibold">Accounts</h2>
           <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
-            {accountsList.map((account) => (
-              <AccountCard
-                key={account.id}
-                account={account}
-                totalValue={accountValues[account.id] || 0}
-              />
-            ))}
+            {accountsList.map((account) => {
+              const data = accountData[account.id];
+              const value = data?.value ?? 0;
+              const costBasis = data?.costBasis ?? 0;
+              const gainLoss = costBasis > 0 ? value - costBasis : undefined;
+              const gainLossPct = costBasis > 0 ? ((value - costBasis) / costBasis) * 100 : undefined;
+              return (
+                <AccountCard
+                  key={account.id}
+                  account={account}
+                  totalValue={value}
+                  costBasis={costBasis > 0 ? costBasis : undefined}
+                  gainLoss={gainLoss}
+                  gainLossPct={gainLossPct}
+                  periodReturns={periodReturnsMap.get(account.id)}
+                />
+              );
+            })}
           </div>
         </div>
       )}
