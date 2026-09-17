@@ -28,7 +28,7 @@ const PROTECTED_PREFIXES = [
 
 // Machine-to-machine routes with their own auth (bearer token, webhook
 // signature). These must never be session-gated or cron and webhooks break.
-const MACHINE_PREFIXES = ["/api/cron", "/api/plaid/webhook"];
+const MACHINE_PREFIXES = ["/api/cron", "/api/plaid/webhook", "/api/health"];
 
 const matches = (path: string, prefixes: string[]) =>
   prefixes.some((p) => path === p || path.startsWith(`${p}/`));
