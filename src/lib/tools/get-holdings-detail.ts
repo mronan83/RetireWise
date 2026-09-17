@@ -1,6 +1,6 @@
 import { tool } from "ai";
 import { z } from "zod";
-import { auth } from "@clerk/nextjs/server";
+import { auth } from "@/lib/auth";
 import { getHoldingsByClerkId } from "../queries/holdings";
 import { calculateGainLoss } from "../utils/calculations";
 import { ASSET_CLASS_LABELS } from "../constants";

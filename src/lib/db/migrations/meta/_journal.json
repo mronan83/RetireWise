@@ -15,6 +15,13 @@
       "when": 1789647004699,
       "tag": "0001_skinny_mauler",
       "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "7",
+      "when": 1789648785374,
+      "tag": "0002_enable_rls",
+      "breakpoints": true
     }
   ]
 }

@@ -1,4 +1,5 @@
 import { cookies } from "next/headers";
+import { currentUser } from "@/lib/auth";
 import { SidebarNav } from "@/components/dashboard/sidebar-nav";
 import { DashboardHeader } from "@/components/dashboard/header";
 import { ChatPanel } from "@/components/ai/chat-panel";
@@ -11,6 +12,7 @@ export default async function DashboardLayout({
 }) {
   const cookieStore = await cookies();
   const isDemo = cookieStore.get("demo")?.value === "1";
+  const user = isDemo ? null : await currentUser();
 
   return (
     <div className="flex min-h-screen flex-col">
@@ -22,7 +24,7 @@ export default async function DashboardLayout({
           </div>
         </aside>
         <div className="flex flex-1 flex-col">
-          <DashboardHeader isDemo={isDemo} />
+          <DashboardHeader isDemo={isDemo} email={user?.email ?? null} />
           <main className="flex-1 p-3 sm:p-4 lg:p-6 overflow-x-hidden">{children}</main>
         </div>
         {!isDemo && <ChatPanel />}

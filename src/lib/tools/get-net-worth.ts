@@ -1,6 +1,6 @@
 import { tool } from "ai";
 import { z } from "zod";
-import { auth } from "@clerk/nextjs/server";
+import { auth } from "@/lib/auth";
 import { eq } from "drizzle-orm";
 import { getDb } from "../db";
 import { realEstate, cashReserves, debts } from "../db/schema";

@@ -1,6 +1,6 @@
 import { tool } from "ai";
 import { z } from "zod";
-import { auth } from "@clerk/nextjs/server";
+import { auth } from "@/lib/auth";
 import { getHoldingsByClerkId } from "../queries/holdings";
 import { getAccounts } from "../queries/accounts";
 import { calculatePortfolioSummary } from "../utils/calculations";

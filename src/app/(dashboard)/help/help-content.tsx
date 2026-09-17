@@ -672,7 +672,7 @@ export function HelpContent() {
           </SubSection>
           <SubSection title="Household Sharing">
             <P>
-              Both spouses can have their own Clerk login and see the same data. One person creates the household
+              Both spouses can have their own login and see the same data. One person creates the household
               and the other joins with an invite code.
             </P>
           </SubSection>

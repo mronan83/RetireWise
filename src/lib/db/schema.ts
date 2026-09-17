@@ -136,7 +136,7 @@ export const filingStatusEnum = pgEnum("filing_status", [
   "single",
 ]);
 
-// Households — links multiple Clerk users to shared data
+// Households — links multiple auth users to one shared dataset
 export const households = pgTable("households", {
   id: uuid("id").defaultRandom().primaryKey(),
   name: text("name").notNull().default("My Household"),

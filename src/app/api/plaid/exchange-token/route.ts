@@ -1,4 +1,4 @@
-import { auth } from "@clerk/nextjs/server";
+import { auth } from "@/lib/auth";
 import { revalidatePath } from "next/cache";
 import { getPlaidClient } from "@/lib/plaid/client";
 import { encryptToken } from "@/lib/plaid/encryption";

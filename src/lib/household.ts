@@ -1,7 +1,7 @@
 import { eq } from "drizzle-orm";
 import { getDb } from "./db";
 import { households, householdMembers } from "./db/schema";
-import { auth } from "@clerk/nextjs/server";
+import { auth } from "./auth";
 
 /**
  * Get the household clerkId for data queries.

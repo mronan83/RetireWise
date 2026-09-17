@@ -1,4 +1,4 @@
-import { auth } from "@clerk/nextjs/server";
+import { auth } from "@/lib/auth";
 import { CountryCode, Products } from "plaid";
 import { getPlaidClient } from "@/lib/plaid/client";
 

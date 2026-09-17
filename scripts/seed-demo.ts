@@ -2,15 +2,15 @@
  * Seed realistic demo data for the demo mode.
  * Run: pnpm exec dotenv -e .env.local -- tsx scripts/seed-demo.ts
  */
-import { neon } from "@neondatabase/serverless";
-import { drizzle } from "drizzle-orm/neon-http";
+import postgres from "postgres";
+import { drizzle } from "drizzle-orm/postgres-js";
 import { eq } from "drizzle-orm";
 import * as schema from "../src/lib/db/schema";
 
 const DEMO_ID = "demo_user_retirewise";
 
 async function main() {
-  const sql = neon(process.env.DATABASE_URL!);
+  const sql = postgres(process.env.DATABASE_URL!, { prepare: false, max: 1 });
   const db = drizzle(sql, { schema });
 
   console.log("Cleaning existing demo data...");

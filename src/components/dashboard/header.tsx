@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { UserButton } from "@clerk/nextjs";
+import { UserMenu } from "./user-menu";
 import { Menu, Eye } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { ThemeToggle } from "@/components/theme-toggle";
@@ -9,7 +9,13 @@ import { Sheet, SheetContent } from "@/components/ui/sheet";
 import { SidebarNav } from "./sidebar-nav";
 import { NotificationBell } from "./notification-bell";
 
-export function DashboardHeader({ isDemo = false }: { isDemo?: boolean }) {
+export function DashboardHeader({
+  isDemo = false,
+  email = null,
+}: {
+  isDemo?: boolean;
+  email?: string | null;
+}) {
   const [menuOpen, setMenuOpen] = useState(false);
 
   return (
@@ -41,7 +47,7 @@ export function DashboardHeader({ isDemo = false }: { isDemo?: boolean }) {
       ) : (
         <>
           <NotificationBell />
-          <UserButton />
+          <UserMenu email={email} />
         </>
       )}
     </header>
