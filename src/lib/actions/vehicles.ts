@@ -5,6 +5,8 @@ import { revalidatePath } from "next/cache";
 import { eq, and } from "drizzle-orm";
 import { getDb } from "../db";
 import { vehicles } from "../db/schema";
+import { snapshotNetWorth } from "../utils/net-worth-snapshot";
+import { recordItemHistory } from "../utils/record-item-history";
 
 type VehicleInput = {
   owner: "self" | "spouse";
@@ -34,7 +36,7 @@ export async function addVehicle(input: VehicleInput) {
   if (!userId) throw new Error("Unauthorized");
 
   const db = getDb();
-  await db.insert(vehicles).values({
+  const [inserted] = await db.insert(vehicles).values({
     clerkId: userId,
     owner: input.owner,
     name: input.name,
@@ -56,7 +58,12 @@ export async function addVehicle(input: VehicleInput) {
     purchasePrice: input.purchasePrice ? String(input.purchasePrice) : null,
     purchaseDate: input.purchaseDate || null,
     notes: input.notes || null,
-  });
+  }).returning({ id: vehicles.id, name: vehicles.name });
+  if (inserted) {
+    const loanBal = input.hasLoan ? (input.loanBalance || 0) : 0;
+    const equity = input.estimatedValue - loanBal;
+    recordItemHistory(userId, "vehicle", inserted.id, inserted.name, equity, input.estimatedValue).catch(() => {});
+  }
 
   revalidatePath("/net-worth");
   revalidatePath("/dashboard");
@@ -99,6 +106,22 @@ export async function updateVehicle(id: string, input: Partial<VehicleInput>) {
 
   await db.update(vehicles).set(set).where(eq(vehicles.id, id));
 
+  // Record item history if value was updated
+  if (input.estimatedValue !== undefined || input.loanBalance !== undefined) {
+    // Re-fetch to get current values
+    const [current] = await db
+      .select({ name: vehicles.name, estimatedValue: vehicles.estimatedValue, hasLoan: vehicles.hasLoan, loanBalance: vehicles.loanBalance })
+      .from(vehicles)
+      .where(eq(vehicles.id, id))
+      .limit(1);
+    if (current) {
+      const loanBal = current.hasLoan ? Number(current.loanBalance || 0) : 0;
+      const equity = Number(current.estimatedValue) - loanBal;
+      recordItemHistory(userId, "vehicle", id, current.name, equity, Number(current.estimatedValue)).catch(() => {});
+    }
+  }
+
+  await snapshotNetWorth(userId).catch(() => {});
   revalidatePath("/net-worth");
   revalidatePath("/dashboard");
   return { success: true };

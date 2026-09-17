@@ -604,3 +604,46 @@ export const vehicles = pgTable("vehicles", {
   createdAt: timestamp("created_at").defaultNow().notNull(),
   updatedAt: timestamp("updated_at").defaultNow().notNull(),
 });
+
+// Per-item value history (recorded on every create/update — one row per item per day)
+export const netWorthItemHistory = pgTable(
+  "net_worth_item_history",
+  {
+    id: uuid("id").defaultRandom().primaryKey(),
+    clerkId: text("clerk_id").notNull(),
+    itemType: text("item_type").notNull(), // "real_estate" | "cash_reserve" | "vehicle" | "debt"
+    itemId: text("item_id").notNull(),
+    itemName: text("item_name").notNull(),
+    recordedDate: date("recorded_date").notNull(),
+    // Primary value: estimatedValue (RE/vehicle), balance (cash), currentBalance (debt)
+    value: decimal("value", { precision: 20, scale: 2 }).notNull(),
+    // Secondary value: mortgageBalance (RE), loanBalance (vehicle), null otherwise
+    secondaryValue: decimal("secondary_value", { precision: 20, scale: 2 }),
+    createdAt: timestamp("created_at").defaultNow().notNull(),
+  },
+  (table) => [
+    index("nw_item_history_item_date_idx").on(table.itemId, table.recordedDate),
+    index("nw_item_history_clerk_idx").on(table.clerkId),
+  ]
+);
+
+// Daily snapshots of full household net worth (investments + real estate + cash + vehicles - debts)
+export const netWorthSnapshots = pgTable(
+  "net_worth_snapshots",
+  {
+    id: uuid("id").defaultRandom().primaryKey(),
+    clerkId: text("clerk_id").notNull(),
+    snapshotDate: date("snapshot_date").notNull(),
+    netWorth: decimal("net_worth", { precision: 20, scale: 2 }).notNull(),
+    totalAssets: decimal("total_assets", { precision: 20, scale: 2 }).notNull(),
+    investmentValue: decimal("investment_value", { precision: 20, scale: 2 }).notNull().default("0"),
+    realEstateEquity: decimal("real_estate_equity", { precision: 20, scale: 2 }).notNull().default("0"),
+    cashTotal: decimal("cash_total", { precision: 20, scale: 2 }).notNull().default("0"),
+    vehicleEquity: decimal("vehicle_equity", { precision: 20, scale: 2 }).notNull().default("0"),
+    totalDebts: decimal("total_debts", { precision: 20, scale: 2 }).notNull().default("0"),
+    createdAt: timestamp("created_at").defaultNow().notNull(),
+  },
+  (table) => [
+    index("net_worth_snapshots_clerk_date_idx").on(table.clerkId, table.snapshotDate),
+  ]
+);

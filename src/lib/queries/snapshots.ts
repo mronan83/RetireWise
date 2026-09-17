@@ -1,6 +1,44 @@
 import { eq, desc, and, gte, asc } from "drizzle-orm";
 import { getDb } from "../db";
-import { portfolioSnapshots, accountSnapshots } from "../db/schema";
+import { portfolioSnapshots, accountSnapshots, netWorthSnapshots, netWorthItemHistory } from "../db/schema";
+
+/**
+ * Fetch all item history records for a user, ordered by date ASC.
+ * Returns a Map<itemId, HistoryPoint[]> for easy lookup.
+ */
+export async function getItemHistoryMap(clerkId: string): Promise<
+  Map<string, { recordedDate: string; value: string; secondaryValue: string | null }[]>
+> {
+  const db = getDb();
+  const rows = await db
+    .select({
+      itemId: netWorthItemHistory.itemId,
+      recordedDate: netWorthItemHistory.recordedDate,
+      value: netWorthItemHistory.value,
+      secondaryValue: netWorthItemHistory.secondaryValue,
+    })
+    .from(netWorthItemHistory)
+    .where(eq(netWorthItemHistory.clerkId, clerkId))
+    .orderBy(asc(netWorthItemHistory.recordedDate));
+
+  const map = new Map<string, { recordedDate: string; value: string; secondaryValue: string | null }[]>();
+  for (const row of rows) {
+    const list = map.get(row.itemId) || [];
+    list.push({ recordedDate: row.recordedDate, value: row.value, secondaryValue: row.secondaryValue });
+    map.set(row.itemId, list);
+  }
+  return map;
+}
+
+export async function getNetWorthSnapshots(clerkId: string, limit = 365) {
+  const db = getDb();
+  return db
+    .select()
+    .from(netWorthSnapshots)
+    .where(eq(netWorthSnapshots.clerkId, clerkId))
+    .orderBy(asc(netWorthSnapshots.snapshotDate))
+    .limit(limit);
+}
 
 export async function getSnapshots(
   clerkId: string,

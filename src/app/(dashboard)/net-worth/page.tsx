@@ -3,67 +3,58 @@ import { eq } from "drizzle-orm";
 import { getDb } from "@/lib/db";
 import { realEstate, cashReserves, debts, vehicles } from "@/lib/db/schema";
 import { getHoldingsByClerkId } from "@/lib/queries/holdings";
+import { getNetWorthSnapshots, getItemHistoryMap } from "@/lib/queries/snapshots";
+import { snapshotNetWorth } from "@/lib/utils/net-worth-snapshot";
 import { formatCurrency } from "@/lib/utils/format";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { Badge } from "@/components/ui/badge";
 import {
   TrendingUp,
   Home,
-  Landmark,
   CreditCard,
   PiggyBank,
   Car,
 } from "lucide-react";
-import { ACCOUNT_OWNER_LABELS } from "@/lib/constants";
-import { DEBT_TYPE_LABELS, CASH_TYPE_LABELS, VEHICLE_TYPE_LABELS, getValuationUrl } from "@/lib/constants-net-worth";
 import { NetWorthForms } from "./net-worth-forms";
+import { NetWorthHistoryChart } from "./net-worth-history-chart";
 import { cn } from "@/lib/utils";
 
 export default async function NetWorthPage() {
   const { dataClerkId: userId } = await getAuthContext();
 
   const db = getDb();
-  const [holdings, properties, cash, debtsList, vehiclesList] = await Promise.all([
+  const [holdings, properties, cash, debtsList, vehiclesList, nwSnapshots, itemHistoryMap] = await Promise.all([
     getHoldingsByClerkId(userId),
     db.select().from(realEstate).where(eq(realEstate.clerkId, userId)),
     db.select().from(cashReserves).where(eq(cashReserves.clerkId, userId)),
     db.select().from(debts).where(eq(debts.clerkId, userId)),
     db.select().from(vehicles).where(eq(vehicles.clerkId, userId)),
+    getNetWorthSnapshots(userId),
+    getItemHistoryMap(userId),
   ]);
 
-  // Calculate totals
-  const investmentTotal = holdings.reduce(
-    (s, h) => s + Number(h.currentValue),
-    0
-  );
-  const realEstateTotal = properties.reduce(
-    (s, p) => s + Number(p.estimatedValue),
-    0
-  );
+  // Convert Map to plain object for client component props
+  const historyRecord = Object.fromEntries(itemHistoryMap);
+
+  // Seed today's snapshot if none exists for today (first visit of the day)
+  const today = new Date().toISOString().split("T")[0];
+  const hasTodaySnapshot = nwSnapshots.some((s) => s.snapshotDate === today);
+  if (!hasTodaySnapshot) {
+    snapshotNetWorth(userId).catch(() => {});
+  }
+
+  const investmentTotal = holdings.reduce((s, h) => s + Number(h.currentValue), 0);
+  const realEstateTotal = properties.reduce((s, p) => s + Number(p.estimatedValue), 0);
   const realEstateEquity = properties.reduce(
-    (s, p) => s + Number(p.estimatedValue) - Number(p.mortgageBalance || 0),
-    0
+    (s, p) => s + Number(p.estimatedValue) - Number(p.mortgageBalance || 0), 0
   );
   const cashTotal = cash.reduce((s, c) => s + Number(c.balance), 0);
-  const debtTotal = debtsList.reduce(
-    (s, d) => s + Number(d.currentBalance),
-    0
-  );
-  const monthlyDebtPayments = debtsList.reduce(
-    (s, d) => s + Number(d.monthlyPayment),
-    0
-  );
-  const vehicleValue = vehiclesList.reduce(
-    (s, v) => s + Number(v.estimatedValue),
-    0
-  );
+  const debtTotal = debtsList.reduce((s, d) => s + Number(d.currentBalance), 0);
+  const monthlyDebtPayments = debtsList.reduce((s, d) => s + Number(d.monthlyPayment), 0);
+  const vehicleValue = vehiclesList.reduce((s, v) => s + Number(v.estimatedValue), 0);
   const vehicleLoanTotal = vehiclesList.reduce(
-    (s, v) => s + (v.hasLoan ? Number(v.loanBalance || 0) : 0),
-    0
+    (s, v) => s + (v.hasLoan ? Number(v.loanBalance || 0) : 0), 0
   );
   const vehicleEquity = vehicleValue - vehicleLoanTotal;
-
-  // Use equity for real estate (value minus embedded mortgages) to avoid double-counting
   const totalAssets = investmentTotal + realEstateEquity + cashTotal + vehicleEquity;
   const netWorth = totalAssets - debtTotal;
 
@@ -71,53 +62,39 @@ export default async function NetWorthPage() {
     <div className="space-y-6">
       <div>
         <h1 className="text-2xl font-bold tracking-tight">Net Worth</h1>
-        <p className="text-muted-foreground">
-          Your complete household financial picture
-        </p>
+        <p className="text-muted-foreground">Your complete household financial picture</p>
       </div>
 
-      {/* Summary */}
+      {/* Summary cards */}
       <div className="grid gap-3 sm:gap-4 grid-cols-2 sm:grid-cols-3 lg:grid-cols-6">
         <Card className="sm:col-span-2 lg:col-span-1 border-primary/30">
           <CardHeader className="pb-2">
-            <CardTitle className="text-xs text-muted-foreground font-medium">
-              Net Worth
-            </CardTitle>
+            <CardTitle className="text-xs text-muted-foreground font-medium">Net Worth</CardTitle>
           </CardHeader>
           <CardContent>
             <p className={cn("text-2xl font-bold font-mono", netWorth >= 0 ? "text-green-500" : "text-red-500")}>
               {formatCurrency(netWorth)}
             </p>
-            <p className="text-xs text-muted-foreground mt-1">
-              Assets - Debts
-            </p>
+            <p className="text-xs text-muted-foreground mt-1">Assets - Debts</p>
           </CardContent>
         </Card>
         <Card>
           <CardHeader className="pb-2 flex flex-row items-center justify-between">
-            <CardTitle className="text-xs text-muted-foreground font-medium">
-              Investments
-            </CardTitle>
+            <CardTitle className="text-xs text-muted-foreground font-medium">Investments</CardTitle>
             <TrendingUp className="h-4 w-4 text-muted-foreground" />
           </CardHeader>
           <CardContent>
-            <p className="text-lg font-bold font-mono">
-              {formatCurrency(investmentTotal)}
-            </p>
+            <p className="text-lg font-bold font-mono">{formatCurrency(investmentTotal)}</p>
             <p className="text-xs text-muted-foreground">Live from portfolio</p>
           </CardContent>
         </Card>
         <Card>
           <CardHeader className="pb-2 flex flex-row items-center justify-between">
-            <CardTitle className="text-xs text-muted-foreground font-medium">
-              Real Estate Equity
-            </CardTitle>
+            <CardTitle className="text-xs text-muted-foreground font-medium">Real Estate Equity</CardTitle>
             <Home className="h-4 w-4 text-muted-foreground" />
           </CardHeader>
           <CardContent>
-            <p className="text-lg font-bold font-mono">
-              {formatCurrency(realEstateEquity)}
-            </p>
+            <p className="text-lg font-bold font-mono">{formatCurrency(realEstateEquity)}</p>
             <p className="text-xs text-muted-foreground">
               {formatCurrency(realEstateTotal)} value - {formatCurrency(realEstateTotal - realEstateEquity)} owed
             </p>
@@ -125,31 +102,21 @@ export default async function NetWorthPage() {
         </Card>
         <Card>
           <CardHeader className="pb-2 flex flex-row items-center justify-between">
-            <CardTitle className="text-xs text-muted-foreground font-medium">
-              Cash Reserves
-            </CardTitle>
+            <CardTitle className="text-xs text-muted-foreground font-medium">Cash Reserves</CardTitle>
             <PiggyBank className="h-4 w-4 text-muted-foreground" />
           </CardHeader>
           <CardContent>
-            <p className="text-lg font-bold font-mono">
-              {formatCurrency(cashTotal)}
-            </p>
-            <p className="text-xs text-muted-foreground">
-              {cash.length} account{cash.length !== 1 ? "s" : ""}
-            </p>
+            <p className="text-lg font-bold font-mono">{formatCurrency(cashTotal)}</p>
+            <p className="text-xs text-muted-foreground">{cash.length} account{cash.length !== 1 ? "s" : ""}</p>
           </CardContent>
         </Card>
         <Card>
           <CardHeader className="pb-2 flex flex-row items-center justify-between">
-            <CardTitle className="text-xs text-muted-foreground font-medium">
-              Vehicles
-            </CardTitle>
+            <CardTitle className="text-xs text-muted-foreground font-medium">Vehicles</CardTitle>
             <Car className="h-4 w-4 text-muted-foreground" />
           </CardHeader>
           <CardContent>
-            <p className="text-lg font-bold font-mono">
-              {formatCurrency(vehicleEquity)}
-            </p>
+            <p className="text-lg font-bold font-mono">{formatCurrency(vehicleEquity)}</p>
             <p className="text-xs text-muted-foreground">
               {formatCurrency(vehicleValue)} value{vehicleLoanTotal > 0 ? ` - ${formatCurrency(vehicleLoanTotal)} owed` : ""}
             </p>
@@ -157,18 +124,12 @@ export default async function NetWorthPage() {
         </Card>
         <Card>
           <CardHeader className="pb-2 flex flex-row items-center justify-between">
-            <CardTitle className="text-xs text-muted-foreground font-medium">
-              Total Debts
-            </CardTitle>
+            <CardTitle className="text-xs text-muted-foreground font-medium">Total Debts</CardTitle>
             <CreditCard className="h-4 w-4 text-muted-foreground" />
           </CardHeader>
           <CardContent>
-            <p className="text-lg font-bold font-mono text-red-500">
-              -{formatCurrency(debtTotal)}
-            </p>
-            <p className="text-xs text-muted-foreground">
-              {formatCurrency(monthlyDebtPayments)}/mo payments
-            </p>
+            <p className="text-lg font-bold font-mono text-red-500">-{formatCurrency(debtTotal)}</p>
+            <p className="text-xs text-muted-foreground">{formatCurrency(monthlyDebtPayments)}/mo payments</p>
           </CardContent>
         </Card>
       </div>
@@ -179,32 +140,24 @@ export default async function NetWorthPage() {
           <CardContent className="pt-6">
             <div className="flex h-6 rounded-full overflow-hidden">
               {investmentTotal > 0 && (
-                <div
-                  className="bg-blue-500 transition-all"
+                <div className="bg-blue-500 transition-all"
                   style={{ width: `${(investmentTotal / totalAssets) * 100}%` }}
-                  title={`Investments: ${formatCurrency(investmentTotal)}`}
-                />
+                  title={`Investments: ${formatCurrency(investmentTotal)}`} />
               )}
               {realEstateTotal > 0 && (
-                <div
-                  className="bg-green-500 transition-all"
+                <div className="bg-green-500 transition-all"
                   style={{ width: `${(realEstateTotal / totalAssets) * 100}%` }}
-                  title={`Real Estate: ${formatCurrency(realEstateTotal)}`}
-                />
+                  title={`Real Estate: ${formatCurrency(realEstateTotal)}`} />
               )}
               {cashTotal > 0 && (
-                <div
-                  className="bg-yellow-500 transition-all"
+                <div className="bg-yellow-500 transition-all"
                   style={{ width: `${(cashTotal / totalAssets) * 100}%` }}
-                  title={`Cash: ${formatCurrency(cashTotal)}`}
-                />
+                  title={`Cash: ${formatCurrency(cashTotal)}`} />
               )}
               {vehicleEquity > 0 && (
-                <div
-                  className="bg-purple-500 transition-all"
+                <div className="bg-purple-500 transition-all"
                   style={{ width: `${(vehicleEquity / totalAssets) * 100}%` }}
-                  title={`Vehicles: ${formatCurrency(vehicleEquity)}`}
-                />
+                  title={`Vehicles: ${formatCurrency(vehicleEquity)}`} />
               )}
             </div>
             <div className="flex flex-wrap gap-x-4 gap-y-1 mt-2 text-xs text-muted-foreground">
@@ -231,6 +184,9 @@ export default async function NetWorthPage() {
         </Card>
       )}
 
+      {/* History chart */}
+      <NetWorthHistoryChart snapshots={nwSnapshots} />
+
       {/* Real Estate */}
       <Card>
         <CardHeader>
@@ -240,53 +196,14 @@ export default async function NetWorthPage() {
           </CardTitle>
         </CardHeader>
         <CardContent>
-          {properties.length > 0 && (
-            <div className="space-y-2 mb-4">
-              {properties.map((p) => (
-                <div key={p.id} className="flex items-center justify-between rounded-lg border p-3">
-                  <div className="min-w-0 flex-1">
-                    <div className="flex items-center gap-2 flex-wrap">
-                      <span className="font-medium text-sm">{p.name}</span>
-                      <Badge variant={p.owner === "spouse" ? "default" : "secondary"} className="text-xs">
-                        {ACCOUNT_OWNER_LABELS[p.owner]}
-                      </Badge>
-                      {p.isPrimaryResidence && (
-                        <Badge variant="outline" className="text-xs">Primary</Badge>
-                      )}
-                      {p.address && (
-                        <a
-                          href={`https://www.zillow.com/homes/${encodeURIComponent(p.address.replace(/\s+/g, "-"))}_rb/`}
-                          target="_blank"
-                          rel="noopener noreferrer"
-                          className="text-[10px] text-primary hover:underline"
-                        >
-                          Zillow
-                        </a>
-                      )}
-                    </div>
-                    {p.address && (
-                      <p className="text-xs text-muted-foreground truncate">{p.address}</p>
-                    )}
-                    <p className="text-xs text-muted-foreground mt-0.5">
-                      Value: {formatCurrency(Number(p.estimatedValue))}
-                      {Number(p.mortgageBalance) > 0 && (
-                        <> | Mortgage: {formatCurrency(Number(p.mortgageBalance))}
-                        {p.mortgageRate && <> @ {Number(p.mortgageRate)}%</>}
-                        {p.monthlyPayment && <> | {formatCurrency(Number(p.monthlyPayment))}/mo</>}
-                        </>
-                      )}
-                    </p>
-                  </div>
-                  <div className="text-right shrink-0 ml-3">
-                    <p className="font-mono font-medium text-sm text-green-500">
-                      {formatCurrency(Number(p.estimatedValue) - Number(p.mortgageBalance || 0))}
-                    </p>
-                    <p className="text-xs text-muted-foreground">equity</p>
-                  </div>
-                </div>
-              ))}
-            </div>
-          )}
+          <NetWorthForms
+            section="real_estate"
+            properties={properties}
+            cash={[]}
+            debts={[]}
+            vehicles={[]}
+            historyRecord={historyRecord}
+          />
         </CardContent>
       </Card>
 
@@ -299,34 +216,14 @@ export default async function NetWorthPage() {
           </CardTitle>
         </CardHeader>
         <CardContent>
-          {cash.length > 0 && (
-            <div className="space-y-2 mb-4">
-              {cash.map((c) => (
-                <div key={c.id} className="flex items-center justify-between rounded-lg border p-3">
-                  <div>
-                    <div className="flex items-center gap-2">
-                      <span className="font-medium text-sm">{c.name}</span>
-                      <Badge variant={c.owner === "spouse" ? "default" : "secondary"} className="text-xs">
-                        {ACCOUNT_OWNER_LABELS[c.owner]}
-                      </Badge>
-                      <Badge variant="outline" className="text-xs">
-                        {CASH_TYPE_LABELS[c.accountType]}
-                      </Badge>
-                    </div>
-                    {(c.institution || c.interestRate) && (
-                      <p className="text-xs text-muted-foreground mt-0.5">
-                        {c.institution && <>{c.institution}</>}
-                        {c.interestRate && <> | {Number(c.interestRate)}% APY</>}
-                      </p>
-                    )}
-                  </div>
-                  <p className="font-mono font-medium text-sm">
-                    {formatCurrency(Number(c.balance))}
-                  </p>
-                </div>
-              ))}
-            </div>
-          )}
+          <NetWorthForms
+            section="cash"
+            properties={[]}
+            cash={cash}
+            debts={[]}
+            vehicles={[]}
+            historyRecord={historyRecord}
+          />
         </CardContent>
       </Card>
 
@@ -339,57 +236,14 @@ export default async function NetWorthPage() {
           </CardTitle>
         </CardHeader>
         <CardContent>
-          {vehiclesList.length > 0 && (
-            <div className="space-y-2 mb-4">
-              {vehiclesList.map((v) => {
-                const equity = Number(v.estimatedValue) - (v.hasLoan ? Number(v.loanBalance || 0) : 0);
-                const val = getValuationUrl(v);
-                return (
-                  <div key={v.id} className="flex items-center justify-between rounded-lg border p-3">
-                    <div className="min-w-0 flex-1">
-                      <div className="flex items-center gap-2 flex-wrap">
-                        <span className="font-medium text-sm">{v.name}</span>
-                        <Badge variant={v.owner === "spouse" ? "default" : "secondary"} className="text-xs">
-                          {ACCOUNT_OWNER_LABELS[v.owner]}
-                        </Badge>
-                        <Badge variant="outline" className="text-xs">
-                          {VEHICLE_TYPE_LABELS[v.vehicleType] || v.vehicleType}
-                        </Badge>
-                        <a
-                          href={val.url}
-                          target="_blank"
-                          rel="noopener noreferrer"
-                          className="text-[10px] text-primary hover:underline"
-                        >
-                          {val.label}
-                        </a>
-                      </div>
-                      <p className="text-xs text-muted-foreground mt-0.5">
-                        {[v.year, v.make, v.model, v.trim].filter(Boolean).join(" ")}
-                        {v.mileage && <> · {v.mileage.toLocaleString()} mi</>}
-                        {v.condition && <> · {v.condition}</>}
-                      </p>
-                      <p className="text-xs text-muted-foreground">
-                        Value: {formatCurrency(Number(v.estimatedValue))}
-                        {v.hasLoan && Number(v.loanBalance) > 0 && (
-                          <> | Loan: {formatCurrency(Number(v.loanBalance))}
-                          {v.loanRate && <> @ {Number(v.loanRate)}%</>}
-                          {v.loanMonthlyPayment && <> | {formatCurrency(Number(v.loanMonthlyPayment))}/mo</>}
-                          </>
-                        )}
-                      </p>
-                    </div>
-                    <div className="text-right shrink-0 ml-3">
-                      <p className={cn("font-mono font-medium text-sm", equity >= 0 ? "text-purple-400" : "text-red-500")}>
-                        {formatCurrency(equity)}
-                      </p>
-                      <p className="text-xs text-muted-foreground">equity</p>
-                    </div>
-                  </div>
-                );
-              })}
-            </div>
-          )}
+          <NetWorthForms
+            section="vehicle"
+            properties={[]}
+            cash={[]}
+            debts={[]}
+            vehicles={vehiclesList}
+            historyRecord={historyRecord}
+          />
         </CardContent>
       </Card>
 
@@ -402,37 +256,16 @@ export default async function NetWorthPage() {
           </CardTitle>
         </CardHeader>
         <CardContent>
-          {debtsList.length > 0 && (
-            <div className="space-y-2 mb-4">
-              {debtsList.map((d) => (
-                <div key={d.id} className="flex items-center justify-between rounded-lg border p-3">
-                  <div>
-                    <div className="flex items-center gap-2">
-                      <span className="font-medium text-sm">{d.name}</span>
-                      <Badge variant={d.owner === "spouse" ? "default" : "secondary"} className="text-xs">
-                        {ACCOUNT_OWNER_LABELS[d.owner]}
-                      </Badge>
-                      <Badge variant="outline" className="text-xs">
-                        {DEBT_TYPE_LABELS[d.debtType]}
-                      </Badge>
-                    </div>
-                    <p className="text-xs text-muted-foreground mt-0.5">
-                      {Number(d.interestRate)}% rate | {formatCurrency(Number(d.monthlyPayment))}/mo
-                      {d.payoffDate && <> | Payoff: {d.payoffDate}</>}
-                    </p>
-                  </div>
-                  <p className="font-mono font-medium text-sm text-red-500">
-                    {formatCurrency(Number(d.currentBalance))}
-                  </p>
-                </div>
-              ))}
-            </div>
-          )}
+          <NetWorthForms
+            section="debt"
+            properties={[]}
+            cash={[]}
+            debts={debtsList}
+            vehicles={[]}
+            historyRecord={historyRecord}
+          />
         </CardContent>
       </Card>
-
-      {/* Add forms */}
-      <NetWorthForms />
     </div>
   );
 }

@@ -1,4 +1,4 @@
-import { eq } from "drizzle-orm";
+import { eq, and, inArray } from "drizzle-orm";
 import { getDb } from "../db";
 import { alerts, accounts, userPreferences } from "../db/schema";
 import { getHoldingsByClerkId } from "../queries/holdings";
@@ -84,8 +84,16 @@ export async function generateAlerts(clerkId: string) {
     }
   }
 
-  // Insert new alerts
+  // Replace existing un-dismissed alerts of the same types so there's never more than one active per type
   if (newAlerts.length > 0) {
+    const typesToInsert = newAlerts.map((a) => a.type);
+    await db.delete(alerts).where(
+      and(
+        eq(alerts.clerkId, clerkId),
+        eq(alerts.isDismissed, false),
+        inArray(alerts.type, typesToInsert)
+      )
+    );
     await db.insert(alerts).values(
       newAlerts.map((a) => ({
         clerkId,

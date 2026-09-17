@@ -5,6 +5,7 @@ import { calculateAllocation } from "@/lib/utils/calculations";
 import { getLatestSnapshot } from "@/lib/queries/snapshots";
 import { updateAllPrices } from "@/lib/utils/price-feed";
 import { generateAlerts } from "@/lib/utils/alert-generator";
+import { snapshotNetWorth } from "@/lib/utils/net-worth-snapshot";
 
 export async function GET(request: Request) {
   const authHeader = request.headers.get("authorization");
@@ -124,14 +125,21 @@ export async function GET(request: Request) {
 
     snapshotsCreated++;
 
-    // Step 3: Generate alerts based on fresh data
+    // Step 3: Net worth snapshot (pass investment total so we don't re-query)
+    try {
+      await snapshotNetWorth(clerkId, totalValue);
+    } catch (e) {
+      console.error(`Net worth snapshot failed for ${clerkId}:`, e);
+    }
+
+    // Step 4: Generate alerts based on fresh data
     try {
       await generateAlerts(clerkId);
     } catch (e) {
       console.error(`Alert generation failed for ${clerkId}:`, e);
     }
 
-    // Step 4: Update goal progress
+    // Step 5: Update goal progress
     try {
       const { goals: goalsTable } = await import("@/lib/db/schema");
       const userGoals = await db

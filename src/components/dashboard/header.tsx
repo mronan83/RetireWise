@@ -7,6 +7,7 @@ import { Button } from "@/components/ui/button";
 import { ThemeToggle } from "@/components/theme-toggle";
 import { Sheet, SheetContent } from "@/components/ui/sheet";
 import { SidebarNav } from "./sidebar-nav";
+import { NotificationBell } from "./notification-bell";
 
 export function DashboardHeader({ isDemo = false }: { isDemo?: boolean }) {
   const [menuOpen, setMenuOpen] = useState(false);
@@ -38,7 +39,10 @@ export function DashboardHeader({ isDemo = false }: { isDemo?: boolean }) {
           <span className="text-xs font-medium text-amber-500">Demo</span>
         </div>
       ) : (
-        <UserButton />
+        <>
+          <NotificationBell />
+          <UserButton />
+        </>
       )}
     </header>
   );

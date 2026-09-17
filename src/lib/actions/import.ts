@@ -45,6 +45,9 @@ export async function importHoldings(
   }));
 
   if (values.length > 0) {
+    // Delete existing holdings for this account before inserting — ensures
+    // re-importing replaces rather than stacks on top of existing data.
+    await db.delete(holdings).where(eq(holdings.accountId, accountId));
     await db.insert(holdings).values(values);
   }
 

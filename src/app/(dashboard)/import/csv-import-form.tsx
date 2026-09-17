@@ -39,19 +39,16 @@ export function CsvImportForm({ accounts }: Props) {
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState<string | null>(null);
   const [importing, setImporting] = useState(false);
+  const [isDragging, setIsDragging] = useState(false);
 
-  const handleFileChange = useCallback(
-    (e: React.ChangeEvent<HTMLInputElement>) => {
+  const processFile = useCallback(
+    (file: File) => {
       setError(null);
       setSuccess(null);
-      const file = e.target.files?.[0];
-      if (!file) return;
-
       const reader = new FileReader();
       reader.onload = (event) => {
         const text = event.target?.result as string;
         try {
-          // Auto-detect QFX if format is set to qfx, or if the file content looks like OFX
           let result: ParsedHolding[];
           if (format === "qfx" || isQFXFormat(text)) {
             result = parseQFX(text);
@@ -74,6 +71,37 @@ export function CsvImportForm({ accounts }: Props) {
       reader.readAsText(file);
     },
     [format]
+  );
+
+  const handleFileChange = useCallback(
+    (e: React.ChangeEvent<HTMLInputElement>) => {
+      const file = e.target.files?.[0];
+      if (file) processFile(file);
+    },
+    [processFile]
+  );
+
+  const handleDragOver = useCallback((e: React.DragEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+    setIsDragging(true);
+  }, []);
+
+  const handleDragLeave = useCallback((e: React.DragEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+    setIsDragging(false);
+  }, []);
+
+  const handleDrop = useCallback(
+    (e: React.DragEvent) => {
+      e.preventDefault();
+      e.stopPropagation();
+      setIsDragging(false);
+      const file = e.dataTransfer.files?.[0];
+      if (file) processFile(file);
+    },
+    [processFile]
   );
 
   const handleImport = async () => {
@@ -150,11 +178,17 @@ export function CsvImportForm({ accounts }: Props) {
             </div>
           </div>
 
-          <div className="flex items-center justify-center rounded-lg border-2 border-dashed p-8">
+          <div
+            className={`flex items-center justify-center rounded-lg border-2 border-dashed p-8 transition-colors ${isDragging ? "border-primary bg-primary/5" : ""}`}
+            onDragOver={handleDragOver}
+            onDragEnter={handleDragOver}
+            onDragLeave={handleDragLeave}
+            onDrop={handleDrop}
+          >
             <label className="flex cursor-pointer flex-col items-center gap-2">
-              <Upload className="h-8 w-8 text-muted-foreground" />
+              <Upload className={`h-8 w-8 ${isDragging ? "text-primary" : "text-muted-foreground"}`} />
               <span className="text-sm text-muted-foreground">
-                Click to upload CSV or QFX file
+                {isDragging ? "Drop file here" : "Click to upload or drag and drop a CSV or QFX file"}
               </span>
               <input
                 type="file"

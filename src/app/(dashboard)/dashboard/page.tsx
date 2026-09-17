@@ -11,25 +11,21 @@ import { getHoldingsByClerkId } from "@/lib/queries/holdings";
 import { getSnapshots, getAccountPerformanceMap } from "@/lib/queries/snapshots";
 import { calculatePortfolioSummary, calculateGainLoss } from "@/lib/utils/calculations";
 import { RefreshPricesButton } from "@/components/dashboard/refresh-prices-button";
-import { AlertsPanel } from "@/components/dashboard/alerts-panel";
 import { GoalsPanel } from "@/components/dashboard/goals-panel";
 import { ExportButtons } from "@/components/dashboard/export-buttons";
 import { NetWorthCard } from "@/components/dashboard/net-worth-card";
-import { eq, and, desc } from "drizzle-orm";
+import { eq } from "drizzle-orm";
 import { getDb } from "@/lib/db";
-import { alerts as alertsTable, goals as goalsTable, realEstate, cashReserves, debts, vehicles } from "@/lib/db/schema";
+import { goals as goalsTable, realEstate, cashReserves, debts, vehicles } from "@/lib/db/schema";
 
 async function DashboardContent() {
   const { dataClerkId: userId } = await getAuthContext();
 
   const db = getDb();
-  const [accountsList, holdingsWithAccounts, snapshots, activeAlerts, userGoals, properties, cashAccounts, debtsList, vehiclesList, periodReturnsMap] = await Promise.all([
+  const [accountsList, holdingsWithAccounts, snapshots, userGoals, properties, cashAccounts, debtsList, vehiclesList, periodReturnsMap] = await Promise.all([
     getAccounts(userId),
     getHoldingsByClerkId(userId),
     getSnapshots(userId, 90),
-    db.select().from(alertsTable).where(
-      and(eq(alertsTable.clerkId, userId), eq(alertsTable.isDismissed, false))
-    ).orderBy(desc(alertsTable.createdAt)).limit(10),
     db.select().from(goalsTable).where(eq(goalsTable.clerkId, userId)),
     db.select().from(realEstate).where(eq(realEstate.clerkId, userId)),
     db.select().from(cashReserves).where(eq(cashReserves.clerkId, userId)),
@@ -111,10 +107,6 @@ async function DashboardContent() {
           <RefreshPricesButton />
         </div>
       </div>
-
-      {activeAlerts.length > 0 && (
-        <AlertsPanel alerts={activeAlerts} />
-      )}
 
       <NetWorthCard
         investmentTotal={summary.totalValue}
