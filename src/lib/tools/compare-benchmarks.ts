@@ -1,6 +1,6 @@
 import { tool } from "ai";
 import { z } from "zod";
-import { auth } from "@/lib/auth";
+import { getApiUserId } from "@/lib/auth-helpers";
 import { getHoldingsByClerkId } from "../queries/holdings";
 import { getSnapshots } from "../queries/snapshots";
 
@@ -18,7 +18,9 @@ export const compareBenchmarksTool = tool({
       .describe("Time period for comparison. Default: ytd"),
   }),
   execute: async ({ period = "ytd" }) => {
-    const { userId } = await auth();
+    // Holdings are keyed by the household id, not the signed-in account's own
+    // id; the raw id reads back an empty portfolio instead of an error.
+    const userId = await getApiUserId();
     if (!userId) return { error: "Not authenticated" };
 
     const holdings = await getHoldingsByClerkId(userId);

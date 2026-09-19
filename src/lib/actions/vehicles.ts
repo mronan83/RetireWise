@@ -1,6 +1,6 @@
 "use server";
 
-import { auth } from "@/lib/auth";
+import { requireWriteClerkId } from "@/lib/auth-helpers";
 import { revalidatePath } from "next/cache";
 import { eq, and } from "drizzle-orm";
 import { getDb } from "../db";
@@ -32,8 +32,8 @@ type VehicleInput = {
 };
 
 export async function addVehicle(input: VehicleInput) {
-  const { userId } = await auth();
-  if (!userId) throw new Error("Unauthorized");
+  // Rows are keyed by the household id, not the signed-in account's own id.
+  const userId = await requireWriteClerkId();
 
   const db = getDb();
   const [inserted] = await db.insert(vehicles).values({
@@ -71,8 +71,8 @@ export async function addVehicle(input: VehicleInput) {
 }
 
 export async function updateVehicle(id: string, input: Partial<VehicleInput>) {
-  const { userId } = await auth();
-  if (!userId) throw new Error("Unauthorized");
+  // Rows are keyed by the household id, not the signed-in account's own id.
+  const userId = await requireWriteClerkId();
 
   const db = getDb();
   const existing = await db
@@ -128,8 +128,8 @@ export async function updateVehicle(id: string, input: Partial<VehicleInput>) {
 }
 
 export async function deleteVehicle(id: string) {
-  const { userId } = await auth();
-  if (!userId) throw new Error("Unauthorized");
+  // Rows are keyed by the household id, not the signed-in account's own id.
+  const userId = await requireWriteClerkId();
 
   const db = getDb();
   await db.delete(vehicles).where(and(eq(vehicles.id, id), eq(vehicles.clerkId, userId)));

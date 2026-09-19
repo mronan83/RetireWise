@@ -63,3 +63,16 @@ export async function getAuthContext(): Promise<AuthContext> {
 export async function getApiUserId(): Promise<string | null> {
   return (await read())?.dataClerkId ?? null;
 }
+
+/**
+ * For anything that writes: the id to key rows by.
+ *
+ * The demo household is seeded, shared, and read-only — a demo visitor who
+ * reached a write path would otherwise edit the dataset every other visitor
+ * sees, so this refuses rather than resolving to DEMO_CLERK_ID.
+ */
+export async function requireWriteClerkId(): Promise<string> {
+  const ctx = await getAuthContext();
+  if (ctx.isDemo) throw new Error("Demo mode is read-only.");
+  return ctx.dataClerkId;
+}

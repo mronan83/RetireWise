@@ -1,9 +1,10 @@
-import { auth } from "@/lib/auth";
+import { getApiUserId } from "@/lib/auth-helpers";
 import { CountryCode, Products } from "plaid";
 import { getPlaidClient } from "@/lib/plaid/client";
 
 export async function POST() {
-  const { userId } = await auth();
+  // The Plaid user is the household, matching what exchange-token keys items by.
+  const userId = await getApiUserId();
   if (!userId) {
     return Response.json({ error: "Unauthorized" }, { status: 401 });
   }

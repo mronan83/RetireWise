@@ -1,6 +1,6 @@
 "use server";
 
-import { auth } from "@/lib/auth";
+import { requireWriteClerkId } from "@/lib/auth-helpers";
 import { revalidatePath } from "next/cache";
 import { eq, and } from "drizzle-orm";
 import { z } from "zod";
@@ -24,8 +24,8 @@ const realEstateSchema = z.object({
 });
 
 export async function createRealEstate(formData: FormData) {
-  const { userId } = await auth();
-  if (!userId) throw new Error("Unauthorized");
+  // Rows are keyed by the household id, not the signed-in account's own id.
+  const userId = await requireWriteClerkId();
   const parsed = realEstateSchema.parse({
     owner: formData.get("owner") || "self",
     name: formData.get("name"),
@@ -60,8 +60,8 @@ export async function createRealEstate(formData: FormData) {
 }
 
 export async function updateRealEstate(id: string, formData: FormData) {
-  const { userId } = await auth();
-  if (!userId) throw new Error("Unauthorized");
+  // Rows are keyed by the household id, not the signed-in account's own id.
+  const userId = await requireWriteClerkId();
   const parsed = realEstateSchema.parse({
     owner: formData.get("owner") || "self",
     name: formData.get("name"),
@@ -95,8 +95,8 @@ export async function updateRealEstate(id: string, formData: FormData) {
 }
 
 export async function deleteRealEstate(id: string) {
-  const { userId } = await auth();
-  if (!userId) throw new Error("Unauthorized");
+  // Rows are keyed by the household id, not the signed-in account's own id.
+  const userId = await requireWriteClerkId();
   const db = getDb();
   await db.delete(realEstate).where(and(eq(realEstate.id, id), eq(realEstate.clerkId, userId)));
   revalidatePath("/net-worth");
@@ -114,8 +114,8 @@ const cashSchema = z.object({
 });
 
 export async function createCashReserve(formData: FormData) {
-  const { userId } = await auth();
-  if (!userId) throw new Error("Unauthorized");
+  // Rows are keyed by the household id, not the signed-in account's own id.
+  const userId = await requireWriteClerkId();
   const parsed = cashSchema.parse({
     owner: formData.get("owner") || "self",
     name: formData.get("name"),
@@ -143,8 +143,8 @@ export async function createCashReserve(formData: FormData) {
 }
 
 export async function updateCashReserve(id: string, formData: FormData) {
-  const { userId } = await auth();
-  if (!userId) throw new Error("Unauthorized");
+  // Rows are keyed by the household id, not the signed-in account's own id.
+  const userId = await requireWriteClerkId();
   const parsed = cashSchema.parse({
     owner: formData.get("owner") || "self",
     name: formData.get("name"),
@@ -171,8 +171,8 @@ export async function updateCashReserve(id: string, formData: FormData) {
 }
 
 export async function deleteCashReserve(id: string) {
-  const { userId } = await auth();
-  if (!userId) throw new Error("Unauthorized");
+  // Rows are keyed by the household id, not the signed-in account's own id.
+  const userId = await requireWriteClerkId();
   const db = getDb();
   await db.delete(cashReserves).where(and(eq(cashReserves.id, id), eq(cashReserves.clerkId, userId)));
   revalidatePath("/net-worth");
@@ -191,8 +191,8 @@ const debtSchema = z.object({
 });
 
 export async function createDebt(formData: FormData) {
-  const { userId } = await auth();
-  if (!userId) throw new Error("Unauthorized");
+  // Rows are keyed by the household id, not the signed-in account's own id.
+  const userId = await requireWriteClerkId();
   const parsed = debtSchema.parse({
     owner: formData.get("owner") || "self",
     name: formData.get("name"),
@@ -222,8 +222,8 @@ export async function createDebt(formData: FormData) {
 }
 
 export async function updateDebt(id: string, formData: FormData) {
-  const { userId } = await auth();
-  if (!userId) throw new Error("Unauthorized");
+  // Rows are keyed by the household id, not the signed-in account's own id.
+  const userId = await requireWriteClerkId();
   const parsed = debtSchema.parse({
     owner: formData.get("owner") || "self",
     name: formData.get("name"),
@@ -252,8 +252,8 @@ export async function updateDebt(id: string, formData: FormData) {
 }
 
 export async function deleteDebt(id: string) {
-  const { userId } = await auth();
-  if (!userId) throw new Error("Unauthorized");
+  // Rows are keyed by the household id, not the signed-in account's own id.
+  const userId = await requireWriteClerkId();
   const db = getDb();
   await db.delete(debts).where(and(eq(debts.id, id), eq(debts.clerkId, userId)));
   revalidatePath("/net-worth");

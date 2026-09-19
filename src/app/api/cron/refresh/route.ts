@@ -1,9 +1,10 @@
 import { eq } from "drizzle-orm";
 import { revalidatePath } from "next/cache";
 import { getDb } from "@/lib/db";
-import { plaidItems, accounts, holdings } from "@/lib/db/schema";
+import { plaidItems } from "@/lib/db/schema";
 import { getPlaidClient } from "@/lib/plaid/client";
 import { decryptToken } from "@/lib/plaid/encryption";
+import { syncPlaidItem } from "@/lib/plaid/sync";
 
 export async function GET(request: Request) {
   const authHeader = request.headers.get("authorization");
@@ -24,67 +25,36 @@ export async function GET(request: Request) {
 
   for (const item of items) {
     try {
-      const accessToken = decryptToken(item.accessTokenEncrypted);
-
-      const response = await client.investmentsHoldingsGet({
-        access_token: accessToken,
+      // Same reconciliation the link step runs, scoped to the item's own
+      // household. The previous version matched accounts by Plaid id alone
+      // and only ever updated prices, so new positions never appeared and
+      // sold ones never went away.
+      await syncPlaidItem({
+        client,
+        clerkId: item.clerkId,
+        itemId: item.itemId,
+        accessToken: decryptToken(item.accessTokenEncrypted),
+        institutionName: item.institutionName,
       });
-
-      const securities = new Map(
-        response.data.securities.map((s) => [s.security_id, s])
-      );
-
-      // Update existing holdings prices
-      for (const ph of response.data.holdings) {
-        const security = securities.get(ph.security_id);
-        if (!security) continue;
-
-        const ticker = security.ticker_symbol || "UNKNOWN";
-        const currentPrice = ph.institution_price || 0;
-
-        // Find matching account
-        const matchingAccounts = await db
-          .select({ id: accounts.id })
-          .from(accounts)
-          .where(eq(accounts.plaidAccountId, ph.account_id))
-          .limit(1);
-
-        if (matchingAccounts.length === 0) continue;
-
-        // Update holdings for this account/ticker
-        const existingHoldings = await db
-          .select()
-          .from(holdings)
-          .where(eq(holdings.accountId, matchingAccounts[0].id));
-
-        const match = existingHoldings.find((h) => h.ticker === ticker);
-        if (match) {
-          await db
-            .update(holdings)
-            .set({
-              shares: String(ph.quantity),
-              currentPrice: String(currentPrice),
-              currentValue: String(ph.quantity * currentPrice),
-              lastPriceUpdate: new Date(),
-              updatedAt: new Date(),
-            })
-            .where(eq(holdings.id, match.id));
-        }
-      }
 
       await db
         .update(plaidItems)
-        .set({ lastSync: new Date(), updatedAt: new Date() })
+        .set({ lastSync: new Date(), status: "active", updatedAt: new Date() })
         .where(eq(plaidItems.id, item.id));
 
       refreshed++;
     } catch (e) {
       console.error(`Failed to refresh item ${item.id}:`, e);
+      await db
+        .update(plaidItems)
+        .set({ status: "error", updatedAt: new Date() })
+        .where(eq(plaidItems.id, item.id));
       errors++;
     }
   }
 
   revalidatePath("/dashboard");
+  revalidatePath("/accounts");
   revalidatePath("/holdings");
 
   return Response.json({ success: true, refreshed, errors });

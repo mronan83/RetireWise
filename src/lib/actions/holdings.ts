@@ -1,6 +1,6 @@
 "use server";
 
-import { auth } from "@/lib/auth";
+import { requireWriteClerkId } from "@/lib/auth-helpers";
 import { revalidatePath } from "next/cache";
 import { eq, and } from "drizzle-orm";
 import { z } from "zod";
@@ -27,8 +27,8 @@ const holdingSchema = z.object({
 });
 
 export async function createHolding(formData: FormData) {
-  const { userId } = await auth();
-  if (!userId) throw new Error("Unauthorized");
+  // Rows are keyed by the household id, not the signed-in account's own id.
+  const userId = await requireWriteClerkId();
 
   const parsed = holdingSchema.parse({
     accountId: formData.get("accountId"),
@@ -70,8 +70,8 @@ export async function createHolding(formData: FormData) {
 }
 
 export async function updateHolding(id: string, formData: FormData) {
-  const { userId } = await auth();
-  if (!userId) throw new Error("Unauthorized");
+  // Rows are keyed by the household id, not the signed-in account's own id.
+  const userId = await requireWriteClerkId();
 
   const parsed = holdingSchema.parse({
     accountId: formData.get("accountId"),
@@ -116,8 +116,8 @@ export async function updateHolding(id: string, formData: FormData) {
 }
 
 export async function deleteHolding(id: string, accountId: string) {
-  const { userId } = await auth();
-  if (!userId) throw new Error("Unauthorized");
+  // Rows are keyed by the household id, not the signed-in account's own id.
+  const userId = await requireWriteClerkId();
 
   // Verify ownership before deleting
   const db = getDb();

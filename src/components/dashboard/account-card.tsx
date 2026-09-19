@@ -1,5 +1,5 @@
 import Link from "next/link";
-import { Wallet, TrendingUp, TrendingDown } from "lucide-react";
+import { Wallet, TrendingUp, TrendingDown, Link2, PencilLine } from "lucide-react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import {
@@ -40,6 +40,7 @@ export function AccountCard({
   const hasGainLoss = gainLoss !== undefined && costBasis !== undefined && costBasis > 0;
   const isPositive = (gainLoss ?? 0) >= 0;
   const hasPeriodData = periodReturns && Object.values(periodReturns).some((v) => v !== null);
+  const isLinked = account.plaidAccountId !== null;
 
   return (
     <Link href={`/accounts/${account.id}`}>
@@ -117,9 +118,24 @@ export function AccountCard({
               </Badge>
             )}
           </div>
-          <p className="mt-1 text-xs text-muted-foreground">
-            {account.institution}
-          </p>
+          <div className="mt-1 flex items-center gap-1.5 text-xs text-muted-foreground">
+            <span>{account.institution}</span>
+            <span aria-hidden>·</span>
+            {/* Whether a figure updates itself changes how much you should
+                trust it, so the source belongs next to the institution rather
+                than buried on the detail page. */}
+            {isLinked ? (
+              <span className="flex items-center gap-1 text-primary">
+                <Link2 className="h-3 w-3" />
+                Connected
+              </span>
+            ) : (
+              <span className="flex items-center gap-1">
+                <PencilLine className="h-3 w-3" />
+                Manual
+              </span>
+            )}
+          </div>
         </CardContent>
       </Card>
     </Link>

@@ -1,6 +1,6 @@
 "use server";
 
-import { auth } from "@/lib/auth";
+import { requireWriteClerkId } from "@/lib/auth-helpers";
 import { revalidatePath } from "next/cache";
 import { eq, and } from "drizzle-orm";
 import { getDb } from "../db";
@@ -11,8 +11,8 @@ export async function importHoldings(
   accountId: string,
   parsedHoldings: ParsedHolding[]
 ) {
-  const { userId } = await auth();
-  if (!userId) throw new Error("Unauthorized");
+  // Rows are keyed by the household id, not the signed-in account's own id.
+  const userId = await requireWriteClerkId();
 
   const db = getDb();
   const account = await db
@@ -66,8 +66,8 @@ export async function refreshHoldings(
   accountId: string,
   parsedHoldings: ParsedHolding[]
 ) {
-  const { userId } = await auth();
-  if (!userId) throw new Error("Unauthorized");
+  // Rows are keyed by the household id, not the signed-in account's own id.
+  const userId = await requireWriteClerkId();
 
   const db = getDb();
   const account = await db

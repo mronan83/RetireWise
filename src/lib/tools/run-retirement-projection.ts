@@ -1,6 +1,6 @@
 import { tool } from "ai";
 import { z } from "zod";
-import { auth } from "@/lib/auth";
+import { getApiUserId } from "@/lib/auth-helpers";
 import { eq, and } from "drizzle-orm";
 import { getDb } from "../db";
 import { userPreferences, socialSecurityBenefits, contributions } from "../db/schema";
@@ -41,7 +41,9 @@ export const runRetirementProjectionTool = tool({
     overrideInflationPct,
     scenarioName = "Base Case",
   }) => {
-    const { userId } = await auth();
+    // Holdings are keyed by the household id, not the signed-in account's own
+    // id; the raw id reads back an empty portfolio instead of an error.
+    const userId = await getApiUserId();
     if (!userId) return { error: "Not authenticated" };
 
     const db = getDb();

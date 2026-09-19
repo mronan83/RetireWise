@@ -1,6 +1,6 @@
 import { tool } from "ai";
 import { z } from "zod";
-import { auth } from "@/lib/auth";
+import { getApiUserId } from "@/lib/auth-helpers";
 import { getHoldingsByClerkId } from "../queries/holdings";
 import { getAccounts } from "../queries/accounts";
 import { calculatePortfolioSummary } from "../utils/calculations";
@@ -11,7 +11,9 @@ export const getPortfolioSummaryTool = tool({
     "Get a complete summary of the user's investment portfolio including total value, allocation by asset class, and gain/loss figures.",
   inputSchema: z.object({}),
   execute: async () => {
-    const { userId } = await auth();
+    // Holdings are keyed by the household id, not the signed-in account's own
+    // id; the raw id reads back an empty portfolio instead of an error.
+    const userId = await getApiUserId();
     if (!userId) return { error: "Not authenticated" };
 
     const [holdings, accountsList] = await Promise.all([

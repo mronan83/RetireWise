@@ -6,6 +6,8 @@ import { getAccountPerformanceMap } from "@/lib/queries/snapshots";
 import { AccountCard } from "@/components/dashboard/account-card";
 import { FidelityImport } from "@/components/forms/fidelity-import";
 import { AddAccountButton } from "./add-account-button";
+import { DuplicateReview, type ReviewPair } from "./duplicate-review";
+import { findDuplicateCandidates } from "@/lib/accounts/duplicates";
 
 export default async function AccountsPage() {
   const { dataClerkId: userId } = await getAuthContext();
@@ -25,6 +27,16 @@ export default async function AccountsPage() {
     accountData[h.accountId] = entry;
   }
 
+  // Surfaced every load, not just after linking: a duplicate that slipped
+  // through earlier is still inflating the totals today.
+  const duplicatePairs: ReviewPair[] = findDuplicateCandidates(accountsList).map(
+    (c) => ({
+      ...c,
+      linkedValue: accountData[c.linked.id]?.value ?? 0,
+      manualValue: accountData[c.manual.id]?.value ?? 0,
+    })
+  );
+
   return (
     <div className="space-y-6">
       <div className="flex items-center justify-between">
@@ -36,6 +48,8 @@ export default async function AccountsPage() {
         </div>
         <AddAccountButton />
       </div>
+
+      {duplicatePairs.length > 0 && <DuplicateReview pairs={duplicatePairs} />}
 
       {accountsList.length > 0 && (
         <FidelityImport accounts={accountsList} />

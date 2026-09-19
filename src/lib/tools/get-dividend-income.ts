@@ -1,6 +1,6 @@
 import { tool } from "ai";
 import { z } from "zod";
-import { auth } from "@/lib/auth";
+import { getApiUserId } from "@/lib/auth-helpers";
 import { getHoldingsByClerkId } from "../queries/holdings";
 import { ASSET_CLASS_LABELS } from "../constants";
 
@@ -46,7 +46,9 @@ export const getDividendIncomeTool = tool({
     "Estimate annual dividend income for the household portfolio. Shows per-holding dividend estimates, total annual income, and monthly income projection.",
   inputSchema: z.object({}),
   execute: async () => {
-    const { userId } = await auth();
+    // Holdings are keyed by the household id, not the signed-in account's own
+    // id; the raw id reads back an empty portfolio instead of an error.
+    const userId = await getApiUserId();
     if (!userId) return { error: "Not authenticated" };
 
     const holdings = await getHoldingsByClerkId(userId);

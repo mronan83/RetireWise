@@ -1,6 +1,6 @@
 "use server";
 
-import { auth } from "@/lib/auth";
+import { requireWriteClerkId } from "@/lib/auth-helpers";
 import { revalidatePath } from "next/cache";
 import { eq, and } from "drizzle-orm";
 import { z } from "zod";
@@ -42,8 +42,8 @@ const contributionSchema = z.object({
 });
 
 export async function createContribution(formData: FormData) {
-  const { userId } = await auth();
-  if (!userId) throw new Error("Unauthorized");
+  // Rows are keyed by the household id, not the signed-in account's own id.
+  const userId = await requireWriteClerkId();
 
   const parsed = contributionSchema.parse({
     owner: formData.get("owner"),
@@ -98,8 +98,8 @@ export async function createContribution(formData: FormData) {
 }
 
 export async function updateContribution(id: string, formData: FormData) {
-  const { userId } = await auth();
-  if (!userId) throw new Error("Unauthorized");
+  // Rows are keyed by the household id, not the signed-in account's own id.
+  const userId = await requireWriteClerkId();
 
   const parsed = contributionSchema.parse({
     owner: formData.get("owner"),
@@ -146,8 +146,8 @@ export async function updateContribution(id: string, formData: FormData) {
 }
 
 export async function deleteContribution(id: string) {
-  const { userId } = await auth();
-  if (!userId) throw new Error("Unauthorized");
+  // Rows are keyed by the household id, not the signed-in account's own id.
+  const userId = await requireWriteClerkId();
 
   const db = getDb();
   await db

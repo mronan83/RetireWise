@@ -1,6 +1,6 @@
 import { tool } from "ai";
 import { z } from "zod";
-import { auth } from "@/lib/auth";
+import { getApiUserId } from "@/lib/auth-helpers";
 import { eq } from "drizzle-orm";
 import { getDb } from "../db";
 import { userPreferences } from "../db/schema";
@@ -13,7 +13,9 @@ export const calculateAllocationDriftTool = tool({
     "Compare the current portfolio allocation against the target allocation and identify drift. Shows which asset classes are over or underweight.",
   inputSchema: z.object({}),
   execute: async () => {
-    const { userId } = await auth();
+    // Holdings are keyed by the household id, not the signed-in account's own
+    // id; the raw id reads back an empty portfolio instead of an error.
+    const userId = await getApiUserId();
     if (!userId) return { error: "Not authenticated" };
 
     const db = getDb();
