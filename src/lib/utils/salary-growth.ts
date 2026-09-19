@@ -78,31 +78,41 @@ export function calculateContributionsWithSalaryGrowth(params: {
   contributionPct: number; // e.g., 6 for 6%
   employerMatchRate: number; // e.g., 1.0 for dollar-for-dollar
   employerMatchMaxPct: number; // e.g., 5 for up to 5%
+  employerNonElectivePct?: number; // paid regardless of deferral, % of salary
+  employerNonElectiveAmount?: number; // paid regardless of deferral, flat $/yr
   escalationPctPerYear: number; // e.g., 1 for +1% per year
-  maxAnnualContribution: number; // IRS limit
+  maxAnnualContribution: number; // IRS elective-deferral limit (employee only)
   years: number;
-}): { year: number; salary: number; contributionPct: number; yourContribution: number; employerMatch: number; total: number }[] {
+}): ContributionYear[] {
   const {
     currentSalary, salaryGrowth, contributionPct,
-    employerMatchRate, employerMatchMaxPct, escalationPctPerYear,
-    maxAnnualContribution, years,
+    employerMatchRate, employerMatchMaxPct,
+    employerNonElectivePct = 0, employerNonElectiveAmount = 0,
+    escalationPctPerYear, maxAnnualContribution, years,
   } = params;
 
-  const result: { year: number; salary: number; contributionPct: number; yourContribution: number; employerMatch: number; total: number }[] = [];
+  const result: ContributionYear[] = [];
 
   for (let y = 0; y < years; y++) {
     const salary = getSalaryAtYear(currentSalary, salaryGrowth, y);
     const pct = contributionPct + escalationPctPerYear * y;
     let yourContrib = (pct / 100) * salary;
 
-    // Apply IRS cap
+    // The IRS figure here is the elective-deferral limit, so it constrains
+    // the employee's own money and nothing else.
     if (maxAnnualContribution > 0) {
       yourContrib = Math.min(yourContrib, maxAnnualContribution);
     }
 
-    // Employer match
+    // Employer match — earned only on what the employee actually defers
     const matchablePct = Math.min(pct, employerMatchMaxPct);
     const employerMatch = (matchablePct / 100) * salary * employerMatchRate;
+
+    // Non-elective employer money — paid at any deferral rate, zero included
+    const employerNonElective =
+      employerNonElectivePct > 0
+        ? (employerNonElectivePct / 100) * salary
+        : employerNonElectiveAmount;
 
     result.push({
       year: y,
@@ -110,9 +120,20 @@ export function calculateContributionsWithSalaryGrowth(params: {
       contributionPct: Math.round(pct * 100) / 100,
       yourContribution: Math.round(yourContrib),
       employerMatch: Math.round(employerMatch),
-      total: Math.round(yourContrib + employerMatch),
+      employerNonElective: Math.round(employerNonElective),
+      total: Math.round(yourContrib + employerMatch + employerNonElective),
     });
   }
 
   return result;
 }
+
+export type ContributionYear = {
+  year: number;
+  salary: number;
+  contributionPct: number;
+  yourContribution: number;
+  employerMatch: number;
+  employerNonElective: number;
+  total: number;
+};

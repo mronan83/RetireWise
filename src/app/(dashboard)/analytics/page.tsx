@@ -4,6 +4,7 @@ import { getDb } from "@/lib/db";
 import { userPreferences, socialSecurityBenefits, contributions } from "@/lib/db/schema";
 import { getHoldingsByClerkId } from "@/lib/queries/holdings";
 import { getAccounts } from "@/lib/queries/accounts";
+import { totalAnnual } from "@/lib/utils/contributions";
 import { AnalyticsDashboard } from "./analytics-dashboard";
 
 export default async function AnalyticsPage() {
@@ -28,32 +29,15 @@ export default async function AnalyticsPage() {
   const spouseSalary = pref?.spouseAnnualSalary ? Number(pref.spouseAnnualSalary) : 0;
 
   // Calculate annual contributions from line items
-  let totalAnnualContributions = 0;
-  let taxDeferredContributions = 0;
-  for (const c of contribs) {
-    const salary = c.owner === "self" ? selfSalary : spouseSalary;
-    let annual = 0;
-    if (c.contributionMethod === "percent_of_salary" && salary > 0) {
-      annual = (Number(c.contributionPercent || 0) / 100) * salary;
-    } else if (c.contributionMethod === "fixed_amount") {
-      const freq: Record<string, number> = {
-        per_paycheck_biweekly: 26, per_paycheck_semimonthly: 24,
-        monthly: 12, quarterly: 4, annually: 1,
-      };
-      annual = Number(c.contributionAmount || 0) * (freq[c.frequency] || 1);
-    }
-    if (c.hasEmployerMatch && salary > 0) {
-      const yourPct = c.contributionMethod === "percent_of_salary"
-        ? Number(c.contributionPercent || 0) : salary > 0 ? (annual / salary) * 100 : 0;
-      const matchablePct = Math.min(yourPct, Number(c.employerMatchMaxPercent || 0));
-      annual += (matchablePct / 100) * salary * Number(c.employerMatchRate || 0);
-    }
-    totalAnnualContributions += annual;
-    // Track what goes to tax-deferred
-    if (["401k", "403b", "ira_traditional"].includes(c.accountType)) {
-      taxDeferredContributions += annual;
-    }
-  }
+  const salaryFor = (c: { owner: string }) =>
+    c.owner === "self" ? selfSalary : spouseSalary;
+  const totalAnnualContributions = totalAnnual(contribs, salaryFor).total;
+  const taxDeferredContributions = totalAnnual(
+    contribs.filter((c) =>
+      ["401k", "403b", "ira_traditional"].includes(c.accountType)
+    ),
+    salaryFor
+  ).total;
 
   const totalValue = holdings.reduce((s, h) => s + Number(h.currentValue), 0);
 

@@ -1,6 +1,7 @@
 import { tool } from "ai";
 import { z } from "zod";
 import { getApiUserId } from "@/lib/auth-helpers";
+import { totalAnnual } from "../utils/contributions";
 import { eq, and } from "drizzle-orm";
 import { getDb } from "../db";
 import { userPreferences, socialSecurityBenefits, contributions } from "../db/schema";
@@ -70,30 +71,9 @@ export const runRetirementProjectionTool = tool({
     // Calculate annual contributions from line items
     const selfSalary = pref.annualSalary ? Number(pref.annualSalary) : 0;
     const spouseSalary = pref.spouseAnnualSalary ? Number(pref.spouseAnnualSalary) : 0;
-    let totalAnnualContributions = 0;
-
-    for (const c of contribs) {
-      const salary = c.owner === "self" ? selfSalary : spouseSalary;
-      let annual = 0;
-      if (c.contributionMethod === "percent_of_salary" && salary > 0) {
-        annual = (Number(c.contributionPercent || 0) / 100) * salary;
-      } else if (c.contributionMethod === "fixed_amount") {
-        const freq: Record<string, number> = {
-          per_paycheck_biweekly: 26, per_paycheck_semimonthly: 24,
-          monthly: 12, quarterly: 4, annually: 1,
-        };
-        annual = Number(c.contributionAmount || 0) * (freq[c.frequency] || 1);
-      }
-      // Add employer match
-      if (c.hasEmployerMatch && salary > 0) {
-        const yourPct = c.contributionMethod === "percent_of_salary"
-          ? Number(c.contributionPercent || 0)
-          : salary > 0 ? (annual / salary) * 100 : 0;
-        const matchablePct = Math.min(yourPct, Number(c.employerMatchMaxPercent || 0));
-        annual += (matchablePct / 100) * salary * Number(c.employerMatchRate || 0);
-      }
-      totalAnnualContributions += annual;
-    }
+    const totalAnnualContributions = totalAnnual(contribs, (c) =>
+      c.owner === "self" ? selfSalary : spouseSalary
+    ).total;
 
     // Social Security combined monthly
     const selfSSMonthly = selfSS[0]?.benefitAtFRA ? Number(selfSS[0].benefitAtFRA) : 0;

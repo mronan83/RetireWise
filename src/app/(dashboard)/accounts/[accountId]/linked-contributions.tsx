@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useActionState } from "react";
-import { Plus, Trash2, AlertCircle, Pencil } from "lucide-react";
+import { Plus, Trash2, AlertCircle, Pencil, Archive, RotateCcw } from "lucide-react";
 import Link from "next/link";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -25,16 +25,10 @@ import { formatCurrency } from "@/lib/utils/format";
 import {
   createContribution,
   deleteContribution,
+  setContributionActive,
 } from "@/lib/actions/contributions";
+import { vestingStatus } from "@/lib/utils/contributions";
 import type { Contribution, Account } from "@/lib/types";
-
-const FREQUENCY_MULTIPLIER: Record<string, number> = {
-  per_paycheck_biweekly: 26,
-  per_paycheck_semimonthly: 24,
-  monthly: 12,
-  quarterly: 4,
-  annually: 1,
-};
 
 const FREQUENCY_LABELS: Record<string, string> = {
   per_paycheck_biweekly: "biweekly",
@@ -99,19 +93,24 @@ export function LinkedContributions({ contributions: contribs, account }: Props)
   return (
     <div className="space-y-2">
       {contribs.map((c) => {
-        let annual = 0;
-        if (c.contributionMethod === "percent_of_salary") {
-          annual = Number(c.contributionPercent || 0); // just show % for now
-        } else {
-          annual =
-            Number(c.contributionAmount || 0) *
-            (FREQUENCY_MULTIPLIER[c.frequency] || 1);
-        }
+        const vesting = vestingStatus(c);
 
         return (
-          <div key={c.id} className="flex items-center justify-between">
+          <div
+            key={c.id}
+            className={
+              "flex items-center justify-between" + (c.isActive ? "" : " opacity-60")
+            }
+          >
             <div>
-              <p className="text-sm font-medium">{c.label}</p>
+              <p className="text-sm font-medium">
+                {c.label}
+                {!c.isActive && (
+                  <span className="ml-2 text-xs font-normal text-muted-foreground">
+                    Retired{c.endedOn ? ` ${c.endedOn}` : ""}
+                  </span>
+                )}
+              </p>
               <p className="text-xs text-muted-foreground">
                 {c.contributionMethod === "percent_of_salary" ? (
                   <>{Number(c.contributionPercent)}% of salary</>
@@ -127,9 +126,42 @@ export function LinkedContributions({ contributions: contribs, account }: Props)
                     {Number(c.employerMatchMaxPercent)}%
                   </span>
                 )}
+                {c.hasEmployerNonElective && (
+                  <span className="text-green-500 ml-1">
+                    +{" "}
+                    {Number(c.employerNonElectivePercent) > 0
+                      ? `${Number(c.employerNonElectivePercent)}% employer, no match required`
+                      : `${formatCurrency(Number(c.employerNonElectiveAmount))}/yr employer`}
+                  </span>
+                )}
               </p>
+              {c.vestingSchedule !== "immediate" && (
+                <p
+                  className={
+                    "text-xs " +
+                    (vesting.fraction >= 1
+                      ? "text-muted-foreground"
+                      : "text-yellow-500")
+                  }
+                >
+                  {vesting.label}
+                  {vesting.yearsRemaining !== null &&
+                    ` · ${vesting.yearsRemaining.toFixed(1)} yr to 100%`}
+                </p>
+              )}
             </div>
             <div className="flex items-center gap-1">
+              <button
+                title={c.isActive ? "Retire this contribution" : "Put back in force"}
+                onClick={() => setContributionActive(c.id, !c.isActive)}
+                className="text-muted-foreground hover:text-primary p-1"
+              >
+                {c.isActive ? (
+                  <Archive className="h-3 w-3" />
+                ) : (
+                  <RotateCcw className="h-3 w-3" />
+                )}
+              </button>
               <Link href="/settings">
                 <button className="text-muted-foreground hover:text-primary p-1">
                   <Pencil className="h-3 w-3" />
@@ -183,6 +215,7 @@ function QuickAddContribution({
     "percent_of_salary"
   );
   const [hasMatch, setHasMatch] = useState(false);
+  const [hasNonElective, setHasNonElective] = useState(false);
   const [hasEscalation, setHasEscalation] = useState(false);
 
   const [error, formAction, isPending] = useActionState(
@@ -327,6 +360,44 @@ function QuickAddContribution({
                 type="number"
                 step="0.5"
                 placeholder="5"
+              />
+            </div>
+          </div>
+        )}
+      </div>
+
+      <div className="space-y-3 rounded-lg border p-3">
+        <div className="flex items-center gap-3">
+          <Switch
+            id="qhasNonElective"
+            name="hasEmployerNonElective"
+            checked={hasNonElective}
+            onCheckedChange={setHasNonElective}
+          />
+          <Label htmlFor="qhasNonElective" className="text-sm">
+            Employer contribution (no match required)
+          </Label>
+        </div>
+        <p className="text-[10px] text-muted-foreground">
+          Paid whether or not you contribute — e.g. 2% of salary no matter what
+        </p>
+        {hasNonElective && (
+          <div className="grid grid-cols-2 gap-4">
+            <div className="space-y-1">
+              <Label className="text-xs">% of salary</Label>
+              <Input
+                name="employerNonElectivePercent"
+                type="number"
+                step="0.25"
+                placeholder="2"
+              />
+            </div>
+            <div className="space-y-1">
+              <Label className="text-xs">or flat ($/yr)</Label>
+              <Input
+                name="employerNonElectiveAmount"
+                type="number"
+                step="100"
               />
             </div>
           </div>

@@ -89,6 +89,15 @@ export const contributionMethodEnum = pgEnum("contribution_method", [
   "fixed_amount",
 ]);
 
+// How employer money becomes the employee's to keep. Vesting never changes
+// what lands in the account, only what survives leaving the job, so it is
+// reported separately from every contribution figure.
+export const vestingScheduleEnum = pgEnum("vesting_schedule", [
+  "immediate",
+  "cliff",
+  "graded",
+]);
+
 export const contributionFrequencyEnum = pgEnum("contribution_frequency", [
   "per_paycheck_biweekly",
   "per_paycheck_semimonthly",
@@ -494,7 +503,35 @@ export const contributions = pgTable("contributions", {
     scale: 2,
   }),
 
+  // Employer money that does not depend on the employee deferring anything —
+  // a safe-harbor non-elective or profit-sharing contribution. Separate from
+  // the match because it is paid at 0% deferral, so folding it into the match
+  // fields would make it disappear the moment someone stops contributing.
+  hasEmployerNonElective: boolean("has_employer_non_elective").default(false),
+  // Percent of salary (e.g., 2 for "2% no matter what")
+  employerNonElectivePercent: decimal("employer_non_elective_percent", {
+    precision: 5,
+    scale: 2,
+  }),
+  // Flat dollars per year, for plans that state it that way instead
+  employerNonElectiveAmount: decimal("employer_non_elective_amount", {
+    precision: 20,
+    scale: 2,
+  }),
+
+  // Vesting of employer money
+  vestingSchedule: vestingScheduleEnum("vesting_schedule")
+    .notNull()
+    .default("immediate"),
+  // Years to 100% — the cliff year, or the length of the graded ramp
+  vestingYears: integer("vesting_years"),
+  // Date service began, which is what years-of-service is counted from
+  serviceStartDate: date("service_start_date"),
+
   isActive: boolean("is_active").notNull().default(true),
+  // When this stopped applying — a job left or a plan changed. Kept rather
+  // than deleted so past years still explain themselves.
+  endedOn: date("ended_on"),
   createdAt: timestamp("created_at").defaultNow().notNull(),
   updatedAt: timestamp("updated_at").defaultNow().notNull(),
 });

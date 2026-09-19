@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useEffect, useActionState } from "react";
-import { Plus, Trash2, Pencil, Wallet } from "lucide-react";
+import { Plus, Trash2, Pencil, Wallet, Archive, RotateCcw } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -29,7 +29,13 @@ import {
   createContribution,
   updateContribution,
   deleteContribution,
+  setContributionActive,
 } from "@/lib/actions/contributions";
+import {
+  contributionBreakdown,
+  partitionByActive,
+  vestingStatus,
+} from "@/lib/utils/contributions";
 import { formatCurrency, formatPercent } from "@/lib/utils/format";
 import type { Contribution } from "@/lib/types";
 
@@ -41,43 +47,19 @@ const FREQUENCY_LABELS: Record<string, string> = {
   annually: "Annually",
 };
 
-const FREQUENCY_MULTIPLIER: Record<string, number> = {
-  per_paycheck_biweekly: 26,
-  per_paycheck_semimonthly: 24,
-  monthly: 12,
-  quarterly: 4,
-  annually: 1,
-};
-
-function annualizeContribution(
-  c: Contribution,
-  salary: number | null
-): { yourAnnual: number; matchAnnual: number } {
-  let yourAnnual = 0;
-
-  if (c.contributionMethod === "percent_of_salary" && salary) {
-    yourAnnual = (Number(c.contributionPercent || 0) / 100) * salary;
-  } else if (c.contributionMethod === "fixed_amount") {
-    const amount = Number(c.contributionAmount || 0);
-    const multiplier = FREQUENCY_MULTIPLIER[c.frequency] || 1;
-    yourAnnual = amount * multiplier;
-  }
-
-  let matchAnnual = 0;
-  if (c.hasEmployerMatch && salary) {
-    const matchRate = Number(c.employerMatchRate || 0);
-    const matchMaxPct = Number(c.employerMatchMaxPercent || 0);
-    const yourPct =
-      c.contributionMethod === "percent_of_salary"
-        ? Number(c.contributionPercent || 0)
-        : salary > 0
-          ? (yourAnnual / salary) * 100
-          : 0;
-    const matchablePct = Math.min(yourPct, matchMaxPct);
-    matchAnnual = (matchablePct / 100) * salary * matchRate;
-  }
-
-  return { yourAnnual, matchAnnual };
+/**
+ * Annualize one entry. The arithmetic itself lives in lib/utils/contributions
+ * so the figure shown here is the same one the projections use — this screen
+ * and the forecast disagreeing is worse than either being wrong alone.
+ */
+function annualizeContribution(c: Contribution, salary: number | null) {
+  const b = contributionBreakdown(c, salary ?? 0);
+  return {
+    yourAnnual: b.employee,
+    matchAnnual: b.employerMatch,
+    nonElectiveAnnual: b.employerNonElective,
+    employerAnnual: b.employer,
+  };
 }
 
 type AccountInfo = {
@@ -150,27 +132,30 @@ export function ContributionsSection({
     return { limit: getIrsLimit(accountType, age), label: getIrsLimitLabel(age) };
   };
 
-  const selfItems = items.filter((c) => c.owner === "self");
-  const spouseItems = items.filter((c) => c.owner === "spouse");
+  // Retired entries are listed separately and counted in no total — a 401(k)
+  // from a job you left should not still be funding your retirement.
+  const { active, archived } = partitionByActive(items);
+  const selfItems = active.filter((c) => c.owner === "self");
+  const spouseItems = active.filter((c) => c.owner === "spouse");
 
-  // Totals
   let selfTotal = 0;
-  let selfMatchTotal = 0;
+  let selfEmployerTotal = 0;
   let spouseTotal = 0;
-  let spouseMatchTotal = 0;
+  let spouseEmployerTotal = 0;
 
   for (const c of selfItems) {
-    const { yourAnnual, matchAnnual } = annualizeContribution(c, selfSalary);
+    const { yourAnnual, employerAnnual } = annualizeContribution(c, selfSalary);
     selfTotal += yourAnnual;
-    selfMatchTotal += matchAnnual;
+    selfEmployerTotal += employerAnnual;
   }
   for (const c of spouseItems) {
-    const { yourAnnual, matchAnnual } = annualizeContribution(c, spouseSalary);
+    const { yourAnnual, employerAnnual } = annualizeContribution(c, spouseSalary);
     spouseTotal += yourAnnual;
-    spouseMatchTotal += matchAnnual;
+    spouseEmployerTotal += employerAnnual;
   }
 
-  const grandTotal = selfTotal + selfMatchTotal + spouseTotal + spouseMatchTotal;
+  const grandTotal =
+    selfTotal + selfEmployerTotal + spouseTotal + spouseEmployerTotal;
 
   return (
     <div className="space-y-4">
@@ -183,9 +168,9 @@ export function ContributionsSection({
               <p className="font-mono font-semibold">
                 {formatCurrency(selfTotal)}/yr
               </p>
-              {selfMatchTotal > 0 && (
+              {selfEmployerTotal > 0 && (
                 <p className="text-xs text-green-500">
-                  + {formatCurrency(selfMatchTotal)} employer match
+                  + {formatCurrency(selfEmployerTotal)} employer
                 </p>
               )}
             </div>
@@ -194,15 +179,15 @@ export function ContributionsSection({
               <p className="font-mono font-semibold">
                 {formatCurrency(spouseTotal)}/yr
               </p>
-              {spouseMatchTotal > 0 && (
+              {spouseEmployerTotal > 0 && (
                 <p className="text-xs text-green-500">
-                  + {formatCurrency(spouseMatchTotal)} employer match
+                  + {formatCurrency(spouseEmployerTotal)} employer
                 </p>
               )}
             </div>
             <div>
               <p className="text-muted-foreground">
-                Household total (with match)
+                Household total (with employer)
               </p>
               <p className="font-mono font-semibold text-lg">
                 {formatCurrency(grandTotal)}/yr
@@ -222,30 +207,48 @@ export function ContributionsSection({
           </p>
         </div>
       ) : (
-        <div className="space-y-2">
-          {items.map((c) => {
-            const salary =
-              c.owner === "self" ? selfSalary : spouseSalary;
-            const { yourAnnual, matchAnnual } = annualizeContribution(
-              c,
-              salary
-            );
-            // Find matched account
-            const matchedAccount = accounts.find(
-              (a) => c.accountId ? a.id === c.accountId : (a.owner === c.owner && a.accountType === c.accountType && a.isActivelyContributing)
-            );
-            return (
+        <div className="space-y-4">
+          <div className="space-y-2">
+            {active.map((c) => (
               <ContributionRow
                 key={c.id}
                 contribution={c}
-                yourAnnual={yourAnnual}
-                matchAnnual={matchAnnual}
-                matchedAccountName={matchedAccount?.name || null}
+                salary={c.owner === "self" ? selfSalary : spouseSalary}
+                matchedAccountName={
+                  accounts.find((a) =>
+                    c.accountId
+                      ? a.id === c.accountId
+                      : a.owner === c.owner &&
+                        a.accountType === c.accountType &&
+                        a.isActivelyContributing
+                  )?.name || null
+                }
                 accounts={accounts}
                 getIrsLimitForOwner={getIrsLimitForOwner}
               />
-            );
-          })}
+            ))}
+          </div>
+
+          {archived.length > 0 && (
+            <details className="rounded-lg border bg-muted/20">
+              <summary className="cursor-pointer select-none px-3 py-2 text-sm text-muted-foreground">
+                Retired ({archived.length}) — kept for history, excluded from
+                every total and projection
+              </summary>
+              <div className="space-y-2 p-3 pt-0">
+                {archived.map((c) => (
+                  <ContributionRow
+                    key={c.id}
+                    contribution={c}
+                    salary={c.owner === "self" ? selfSalary : spouseSalary}
+                    matchedAccountName={null}
+                    accounts={accounts}
+                    getIrsLimitForOwner={getIrsLimitForOwner}
+                  />
+                ))}
+              </div>
+            </details>
+          )}
         </div>
       )}
 
@@ -270,20 +273,23 @@ export function ContributionsSection({
 
 function ContributionRow({
   contribution: c,
-  yourAnnual,
-  matchAnnual,
+  salary,
   matchedAccountName,
   accounts,
   getIrsLimitForOwner,
 }: {
   contribution: Contribution;
-  yourAnnual: number;
-  matchAnnual: number;
+  salary: number | null;
   matchedAccountName: string | null;
   accounts: AccountInfo[];
   getIrsLimitForOwner: (t: string, owner: string) => { limit: number | null; label: string };
 }) {
   const [editOpen, setEditOpen] = useState(false);
+  const { yourAnnual, matchAnnual, nonElectiveAnnual } = annualizeContribution(
+    c,
+    salary
+  );
+  const vesting = vestingStatus(c);
 
   const handleDelete = async () => {
     await deleteContribution(c.id);
@@ -291,7 +297,12 @@ function ContributionRow({
 
   return (
     <>
-      <div className="flex items-center justify-between rounded-lg border p-3">
+      <div
+        className={
+          "flex items-center justify-between rounded-lg border p-3" +
+          (c.isActive ? "" : " opacity-60")
+        }
+      >
         <div className="flex items-center gap-3 min-w-0 flex-1">
           <div className="min-w-0">
             <div className="flex items-center gap-2 flex-wrap">
@@ -318,6 +329,14 @@ function ContributionRow({
                   {Number(c.employerMatchMaxPercent)}%
                 </span>
               )}
+              {c.hasEmployerNonElective && (
+                <span className="text-green-500 ml-2">
+                  +{" "}
+                  {Number(c.employerNonElectivePercent) > 0
+                    ? `${Number(c.employerNonElectivePercent)}% employer, no match required`
+                    : `${formatCurrency(Number(c.employerNonElectiveAmount))}/yr employer, no match required`}
+                </span>
+              )}
               {c.hasAnnualEscalation && (
                 <span className="text-blue-500 ml-2">
                   +{Number(c.annualEscalationAmount)}
@@ -328,11 +347,30 @@ function ContributionRow({
                 </span>
               )}
             </div>
-            <div className="text-xs mt-0.5">
-              {matchedAccountName ? (
+            <div className="text-xs mt-0.5 flex flex-wrap items-center gap-x-2">
+              {!c.isActive ? (
+                <span className="text-muted-foreground">
+                  Retired{c.endedOn ? ` ${c.endedOn}` : ""}
+                </span>
+              ) : matchedAccountName ? (
                 <span className="text-primary">→ {matchedAccountName}</span>
               ) : (
                 <span className="text-yellow-500">No matching account</span>
+              )}
+              {/* Vesting decides what you keep on the way out, not what the
+                  account grows to, so it is shown as its own fact. */}
+              {c.vestingSchedule !== "immediate" && (
+                <span
+                  className={
+                    vesting.fraction >= 1
+                      ? "text-muted-foreground"
+                      : "text-yellow-500"
+                  }
+                >
+                  {vesting.label}
+                  {vesting.yearsRemaining !== null &&
+                    ` · ${vesting.yearsRemaining.toFixed(1)} yr to 100%`}
+                </span>
               )}
             </div>
           </div>
@@ -347,7 +385,24 @@ function ContributionRow({
                 +{formatCurrency(matchAnnual)} match
               </p>
             )}
+            {nonElectiveAnnual > 0 && (
+              <p className="font-mono text-xs text-green-500">
+                +{formatCurrency(nonElectiveAnnual)} employer
+              </p>
+            )}
           </div>
+          <Button
+            variant="ghost"
+            size="icon"
+            title={c.isActive ? "Retire this contribution" : "Put back in force"}
+            onClick={() => setContributionActive(c.id, !c.isActive)}
+          >
+            {c.isActive ? (
+              <Archive className="h-3.5 w-3.5 text-muted-foreground" />
+            ) : (
+              <RotateCcw className="h-3.5 w-3.5 text-muted-foreground" />
+            )}
+          </Button>
           <Button variant="ghost" size="icon" onClick={() => setEditOpen(true)}>
             <Pencil className="h-3.5 w-3.5 text-muted-foreground" />
           </Button>
@@ -374,11 +429,176 @@ function ContributionRow({
   );
 }
 
+/**
+ * Employer contributions and vesting, shared by the add and edit forms.
+ *
+ * One component rather than two near-identical blocks: the pair had already
+ * drifted before this, and a field present on one form but not the other is
+ * invisible until someone's numbers are quietly wrong.
+ */
+function EmployerFields({ c }: { c?: Contribution }) {
+  const idp = c ? "edit" : "add";
+  const [hasMatch, setHasMatch] = useState(c?.hasEmployerMatch ?? false);
+  const [hasNonElective, setHasNonElective] = useState(
+    c?.hasEmployerNonElective ?? false
+  );
+  const [vesting, setVesting] = useState<string>(c?.vestingSchedule ?? "immediate");
+
+  return (
+    <>
+      <div className="space-y-3 rounded-lg border p-3">
+        <div className="flex items-center gap-3">
+          <Switch
+            id={`${idp}HasMatch`}
+            name="hasEmployerMatch"
+            checked={hasMatch}
+            onCheckedChange={setHasMatch}
+          />
+          <Label htmlFor={`${idp}HasMatch`} className="text-sm">
+            Employer match
+          </Label>
+        </div>
+        <p className="text-xs text-muted-foreground">
+          Paid only against what you contribute. Stop contributing and it stops.
+        </p>
+
+        {hasMatch && (
+          <div className="grid gap-4 sm:grid-cols-2">
+            <div className="space-y-1">
+              <Label className="text-xs">Match rate</Label>
+              <Input
+                name="employerMatchRate"
+                type="number"
+                step="0.25"
+                min="0"
+                max="10"
+                placeholder="1"
+                defaultValue={c?.employerMatchRate || ""}
+              />
+              <p className="text-xs text-muted-foreground">
+                1 = dollar-for-dollar, 0.5 = 50 cents per dollar
+              </p>
+            </div>
+            <div className="space-y-1">
+              <Label className="text-xs">Match up to (% of salary)</Label>
+              <Input
+                name="employerMatchMaxPercent"
+                type="number"
+                step="0.5"
+                min="0"
+                max="100"
+                placeholder="5"
+                defaultValue={c?.employerMatchMaxPercent || ""}
+              />
+            </div>
+          </div>
+        )}
+      </div>
+
+      <div className="space-y-3 rounded-lg border p-3">
+        <div className="flex items-center gap-3">
+          <Switch
+            id={`${idp}HasNonElective`}
+            name="hasEmployerNonElective"
+            checked={hasNonElective}
+            onCheckedChange={setHasNonElective}
+          />
+          <Label htmlFor={`${idp}HasNonElective`} className="text-sm">
+            Employer contribution (no match required)
+          </Label>
+        </div>
+        <p className="text-xs text-muted-foreground">
+          Safe harbor or profit sharing — paid whether or not you contribute.
+          Example: 2% of salary no matter what.
+        </p>
+
+        {hasNonElective && (
+          <div className="grid gap-4 sm:grid-cols-2">
+            <div className="space-y-1">
+              <Label className="text-xs">% of salary</Label>
+              <Input
+                name="employerNonElectivePercent"
+                type="number"
+                step="0.25"
+                min="0"
+                max="100"
+                placeholder="2"
+                defaultValue={c?.employerNonElectivePercent || ""}
+              />
+            </div>
+            <div className="space-y-1">
+              <Label className="text-xs">or flat amount ($/yr)</Label>
+              <Input
+                name="employerNonElectiveAmount"
+                type="number"
+                step="100"
+                min="0"
+                defaultValue={c?.employerNonElectiveAmount || ""}
+              />
+              <p className="text-xs text-muted-foreground">
+                Used only when the percent is blank
+              </p>
+            </div>
+          </div>
+        )}
+      </div>
+
+      <div className="space-y-3 rounded-lg border p-3">
+        <div className="space-y-1">
+          <Label className="text-sm">Vesting on employer money</Label>
+          <Select
+            name="vestingSchedule"
+            value={vesting}
+            onValueChange={(v) => v && setVesting(v)}
+          >
+            <SelectTrigger>
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="immediate">Immediate — yours on day one</SelectItem>
+              <SelectItem value="cliff">Cliff — 0% until the cliff, then 100%</SelectItem>
+              <SelectItem value="graded">Graded — a bit more each year</SelectItem>
+            </SelectContent>
+          </Select>
+          <p className="text-xs text-muted-foreground">
+            Affects what you keep if you leave, not what the account grows to.
+            Projections are unchanged either way.
+          </p>
+        </div>
+
+        {vesting !== "immediate" && (
+          <div className="grid gap-4 sm:grid-cols-2">
+            <div className="space-y-1">
+              <Label className="text-xs">Years to 100%</Label>
+              <Input
+                name="vestingYears"
+                type="number"
+                step="1"
+                min="0"
+                max="20"
+                placeholder="3"
+                defaultValue={c?.vestingYears ?? ""}
+              />
+            </div>
+            <div className="space-y-1">
+              <Label className="text-xs">Service start date</Label>
+              <Input
+                name="serviceStartDate"
+                type="date"
+                defaultValue={c?.serviceStartDate ?? ""}
+              />
+            </div>
+          </div>
+        )}
+      </div>
+    </>
+  );
+}
+
 function AddContributionForm({ accounts, getIrsLimitForOwner, onSuccess }: { accounts: AccountInfo[]; getIrsLimitForOwner: (t: string, owner: string) => { limit: number | null; label: string }; onSuccess: () => void }) {
   const [method, setMethod] = useState<"percent_of_salary" | "fixed_amount">(
     "percent_of_salary"
   );
-  const [hasMatch, setHasMatch] = useState(false);
   const [hasEscalation, setHasEscalation] = useState(false);
   const [selectedAccountId, setSelectedAccountId] = useState(accounts[0]?.id || "");
 
@@ -526,58 +746,7 @@ function AddContributionForm({ accounts, getIrsLimitForOwner, onSuccess }: { acc
         <input type="hidden" name="frequency" value="per_paycheck_biweekly" />
       )}
 
-      <div className="space-y-3 rounded-lg border p-3">
-        <div className="flex items-center gap-3">
-          <Switch
-            id="hasEmployerMatch"
-            name="hasEmployerMatch"
-            checked={hasMatch}
-            onCheckedChange={setHasMatch}
-          />
-          <Label htmlFor="hasEmployerMatch" className="text-sm">
-            Employer match
-          </Label>
-        </div>
-
-        {hasMatch && (
-          <div className="grid gap-4 sm:grid-cols-2">
-            <div className="space-y-1">
-              <Label htmlFor="employerMatchRate" className="text-xs">
-                Match rate
-              </Label>
-              <Input
-                id="employerMatchRate"
-                name="employerMatchRate"
-                type="number"
-                step="0.25"
-                min="0"
-                max="10"
-                placeholder="1"
-              />
-              <p className="text-xs text-muted-foreground">
-                1 = dollar-for-dollar, 0.5 = 50 cents per dollar
-              </p>
-            </div>
-            <div className="space-y-1">
-              <Label htmlFor="employerMatchMaxPercent" className="text-xs">
-                Match up to (% of salary)
-              </Label>
-              <Input
-                id="employerMatchMaxPercent"
-                name="employerMatchMaxPercent"
-                type="number"
-                step="0.5"
-                min="0"
-                max="100"
-                placeholder="5"
-              />
-              <p className="text-xs text-muted-foreground">
-                Employer matches your contributions up to this % of salary
-              </p>
-            </div>
-          </div>
-        )}
-      </div>
+      <EmployerFields />
 
       <div className="space-y-3 rounded-lg border p-3">
         <div className="flex items-center gap-3">
@@ -659,7 +828,6 @@ function EditContributionForm({
   const [method, setMethod] = useState<"percent_of_salary" | "fixed_amount">(
     c.contributionMethod as "percent_of_salary" | "fixed_amount"
   );
-  const [hasMatch, setHasMatch] = useState(c.hasEmployerMatch || false);
   const [hasEscalation, setHasEscalation] = useState(c.hasAnnualEscalation || false);
   const [selectedAccountId, setSelectedAccountId] = useState(c.accountId || accounts[0]?.id || "");
 
@@ -749,24 +917,7 @@ function EditContributionForm({
         <input type="hidden" name="frequency" value={c.frequency || "per_paycheck_biweekly"} />
       )}
 
-      <div className="space-y-3 rounded-lg border p-3">
-        <div className="flex items-center gap-3">
-          <Switch id="editHasMatch" name="hasEmployerMatch" checked={hasMatch} onCheckedChange={setHasMatch} />
-          <Label htmlFor="editHasMatch" className="text-sm">Employer match</Label>
-        </div>
-        {hasMatch && (
-          <div className="grid grid-cols-2 gap-4">
-            <div className="space-y-1">
-              <Label className="text-xs">Match rate</Label>
-              <Input name="employerMatchRate" type="number" step="0.25" defaultValue={c.employerMatchRate || ""} />
-            </div>
-            <div className="space-y-1">
-              <Label className="text-xs">Up to (% of salary)</Label>
-              <Input name="employerMatchMaxPercent" type="number" step="0.5" defaultValue={c.employerMatchMaxPercent || ""} />
-            </div>
-          </div>
-        )}
-      </div>
+      <EmployerFields c={c} />
 
       <div className="space-y-3 rounded-lg border p-3">
         <div className="flex items-center gap-3">

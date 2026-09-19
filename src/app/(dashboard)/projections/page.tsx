@@ -3,6 +3,7 @@ import { eq, and } from "drizzle-orm";
 import { getDb } from "@/lib/db";
 import { userPreferences, socialSecurityBenefits, contributions } from "@/lib/db/schema";
 import { getHoldingsByClerkId } from "@/lib/queries/holdings";
+import { totalAnnual } from "@/lib/utils/contributions";
 import { InteractiveProjections } from "./interactive-controls";
 import { getAccounts } from "@/lib/queries/accounts";
 
@@ -59,28 +60,9 @@ export default async function ProjectionsPage() {
   // Calculate contributions
   const selfSalary = pref.annualSalary ? Number(pref.annualSalary) : 0;
   const spouseSalary = pref.spouseAnnualSalary ? Number(pref.spouseAnnualSalary) : 0;
-  let totalAnnualContributions = 0;
-  for (const c of contribs) {
-    const salary = c.owner === "self" ? selfSalary : spouseSalary;
-    let annual = 0;
-    if (c.contributionMethod === "percent_of_salary" && salary > 0) {
-      annual = (Number(c.contributionPercent || 0) / 100) * salary;
-    } else if (c.contributionMethod === "fixed_amount") {
-      const freq: Record<string, number> = {
-        per_paycheck_biweekly: 26, per_paycheck_semimonthly: 24,
-        monthly: 12, quarterly: 4, annually: 1,
-      };
-      annual = Number(c.contributionAmount || 0) * (freq[c.frequency] || 1);
-    }
-    if (c.hasEmployerMatch && salary > 0) {
-      const yourPct = c.contributionMethod === "percent_of_salary"
-        ? Number(c.contributionPercent || 0)
-        : salary > 0 ? (annual / salary) * 100 : 0;
-      const matchablePct = Math.min(yourPct, Number(c.employerMatchMaxPercent || 0));
-      annual += (matchablePct / 100) * salary * Number(c.employerMatchRate || 0);
-    }
-    totalAnnualContributions += annual;
-  }
+  const salaryFor = (c: { owner: string }) =>
+    c.owner === "self" ? selfSalary : spouseSalary;
+  const totalAnnualContributions = totalAnnual(contribs, salaryFor).total;
 
   const selfSSMonthly = selfSS[0]?.benefitAtFRA ? Number(selfSS[0].benefitAtFRA) : 0;
   const spouseSSMonthly = spouseSS[0]?.benefitAtFRA ? Number(spouseSS[0].benefitAtFRA) : 0;
@@ -104,33 +86,14 @@ export default async function ProjectionsPage() {
           const value = acctHoldings.reduce((s, h) => s + Number(h.currentValue), 0);
 
           // Match contributions: prefer direct accountId link, fall back to owner+type
+          // Retired entries are excluded by totalAnnual, so a contribution
+          // left over from a previous job stops inflating this account.
           const matchingContribs = contribs.filter(
             (c) => c.accountId ? c.accountId === a.id : (c.owner === a.owner && c.accountType === a.accountType)
           );
-          let acctAnnualContribution = 0;
-          if (a.isActivelyContributing) {
-            for (const c of matchingContribs) {
-              const salary = c.owner === "self" ? selfSalary : spouseSalary;
-              let annual = 0;
-              if (c.contributionMethod === "percent_of_salary" && salary > 0) {
-                annual = (Number(c.contributionPercent || 0) / 100) * salary;
-              } else if (c.contributionMethod === "fixed_amount") {
-                const freq: Record<string, number> = {
-                  per_paycheck_biweekly: 26, per_paycheck_semimonthly: 24,
-                  monthly: 12, quarterly: 4, annually: 1,
-                };
-                annual = Number(c.contributionAmount || 0) * (freq[c.frequency] || 1);
-              }
-              if (c.hasEmployerMatch && salary > 0) {
-                const yourPct = c.contributionMethod === "percent_of_salary"
-                  ? Number(c.contributionPercent || 0)
-                  : salary > 0 ? (annual / salary) * 100 : 0;
-                const matchablePct = Math.min(yourPct, Number(c.employerMatchMaxPercent || 0));
-                annual += (matchablePct / 100) * salary * Number(c.employerMatchRate || 0);
-              }
-              acctAnnualContribution += annual;
-            }
-          }
+          const acctAnnualContribution = a.isActivelyContributing
+            ? totalAnnual(matchingContribs, salaryFor).total
+            : 0;
 
           // Get escalation from matching contributions
           const escalationContrib = matchingContribs.find((c) => c.hasAnnualEscalation);
@@ -144,13 +107,19 @@ export default async function ProjectionsPage() {
           const salary = a.owner === "self" ? selfSalary : spouseSalary;
 
           // Get contribution details for salary-growth-aware projections
-          const mainContrib = matchingContribs[0];
+          const mainContrib = matchingContribs.filter((c) => c.isActive)[0];
           const contribPct = mainContrib?.contributionMethod === "percent_of_salary"
             ? Number(mainContrib.contributionPercent || 0) : 0;
           const matchRate = mainContrib?.hasEmployerMatch
             ? Number(mainContrib.employerMatchRate || 0) : 0;
           const matchMaxPct = mainContrib?.hasEmployerMatch
             ? Number(mainContrib.employerMatchMaxPercent || 0) : 0;
+          // Employer money that is paid regardless of what you defer. Carried
+          // separately so it survives a year where the deferral is zero.
+          const nonElectivePct = mainContrib?.hasEmployerNonElective
+            ? Number(mainContrib.employerNonElectivePercent || 0) : 0;
+          const nonElectiveAmount = mainContrib?.hasEmployerNonElective
+            ? Number(mainContrib.employerNonElectiveAmount || 0) : 0;
           const salaryGrowthConfig = a.owner === "self"
             ? (pref.salaryGrowth as import("@/lib/utils/salary-growth").SalaryGrowthConfig | null)
             : (pref.spouseSalaryGrowth as import("@/lib/utils/salary-growth").SalaryGrowthConfig | null);
@@ -169,6 +138,8 @@ export default async function ProjectionsPage() {
             contributionPct: contribPct,
             employerMatchRate: matchRate,
             employerMatchMaxPct: matchMaxPct,
+            employerNonElectivePct: nonElectivePct,
+            employerNonElectiveAmount: nonElectiveAmount,
             salary,
             salaryGrowth: salaryGrowthConfig,
             ownerRetirementYear: a.owner === "spouse" ? spouseYearsToRetirement : selfYearsToRetirement,

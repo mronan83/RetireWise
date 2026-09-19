@@ -120,6 +120,8 @@ export function runDetailedProjection(params: {
     contributionPct: number; // the base % if percent_of_salary
     employerMatchRate: number; // e.g., 1.0 for dollar-for-dollar
     employerMatchMaxPct: number; // e.g., 5 for up to 5%
+    employerNonElectivePct?: number; // paid regardless of deferral, % of salary
+    employerNonElectiveAmount?: number; // paid regardless of deferral, flat $/yr
     salary: number; // current salary for this account's owner
     salaryGrowth: import("./salary-growth").SalaryGrowthConfig | null;
     ownerRetirementYear?: number; // year (0-indexed) this owner's contributions stop
@@ -221,37 +223,56 @@ export function runDetailedProjection(params: {
       const acct = accounts[idx];
       const ownerStillWorking = y < (acct.ownerRetirementYear ?? yearsToRetirement);
 
+      const nonElectivePct = acct.employerNonElectivePct ?? 0;
+      const nonElectiveAmount = acct.employerNonElectiveAmount ?? 0;
+      const hasNonElective = nonElectivePct > 0 || nonElectiveAmount > 0;
+
       if (ownerStillWorking && acct.isActivelyContributing) {
-        if (acct.annualContribution > 0 || acct.annualEscalation > 0 || (acct.contributionPct > 0 && acct.salary > 0)) {
+        if (acct.annualContribution > 0 || acct.annualEscalation > 0 || hasNonElective || (acct.contributionPct > 0 && acct.salary > 0)) {
           // Get this year's salary (accounts for salary growth config)
           const yearSalary = getSalaryAtYear(acct.salary, acct.salaryGrowth, y);
 
-          let yearContrib: number;
+          // Employee and employer money are tracked apart all the way through,
+          // because the IRS limit below applies to the employee's deferral
+          // alone. Blending them first and capping the total silently deletes
+          // employer contributions, and does it worst at high salaries.
+          let employee: number;
+          let employer = 0;
           if (acct.contributionMethod === "percent_of_salary" && yearSalary > 0) {
             // Base contribution % + escalation per year
             const pct = acct.contributionPct + (acct.annualEscalation > 0 ? acct.annualEscalation * y : 0);
-            yearContrib = (pct / 100) * yearSalary;
+            employee = (pct / 100) * yearSalary;
 
-            // Add employer match (calculated on the growing salary too)
+            // Match, earned against the growing salary too
             if (acct.employerMatchRate > 0 && acct.employerMatchMaxPct > 0) {
               const matchablePct = Math.min(pct, acct.employerMatchMaxPct);
-              yearContrib += (matchablePct / 100) * yearSalary * acct.employerMatchRate;
+              employer += (matchablePct / 100) * yearSalary * acct.employerMatchRate;
             }
           } else {
             // Fixed amount + $ increase per year
-            yearContrib = acct.annualContribution + (acct.annualEscalation > 0 ? acct.annualEscalation * y : 0);
+            employee = acct.annualContribution + (acct.annualEscalation > 0 ? acct.annualEscalation * y : 0);
           }
 
-          // Apply IRS cap — age-aware for 50+ catch-up and 60-63 enhanced catch-up
+          // Non-elective employer money is paid whatever the employee defers,
+          // so it is added outside the deferral branch and never scaled by it.
+          if (hasNonElective) {
+            employer +=
+              nonElectivePct > 0 && yearSalary > 0
+                ? (nonElectivePct / 100) * yearSalary
+                : nonElectiveAmount;
+          }
+
+          // Apply the IRS elective-deferral limit — age-aware for 50+ catch-up
+          // and the 60-63 enhanced catch-up — to the employee's share only.
           const ownerAge = acct.ownerCurrentAge ? acct.ownerCurrentAge + y + 1 : age;
           const ageBasedLimit = catchUpEnabled
             ? getIrsLimitForAge(acct.type, ownerAge)
             : getIrsLimitForAge(acct.type, 30); // under-50 limit when catch-up disabled
           const effectiveCap = ageBasedLimit > 0 ? ageBasedLimit : acct.maxAnnualContribution;
           if (effectiveCap > 0) {
-            yearContrib = Math.min(yearContrib, effectiveCap);
+            employee = Math.min(employee, effectiveCap);
           }
-          const actualContrib = Math.max(0, yearContrib);
+          const actualContrib = Math.max(0, employee + employer);
           newVal += actualContrib;
           yearTotalContributions += actualContrib;
           ap.contributionPerYear.push(Math.round(actualContrib));
