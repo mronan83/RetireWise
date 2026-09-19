@@ -13,6 +13,7 @@ import {
 } from "recharts";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Money } from "@/components/ui/money";
+import { ControlList, ControlRow } from "@/components/ui/control-row";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -28,7 +29,7 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { formatCurrency, formatCompactCurrency } from "@/lib/utils/format";
+import { formatCompactCurrency, formatCurrency } from "@/lib/utils/format";
 import {
   MARKET_SCENARIOS,
   adjustSSBenefit,
@@ -455,6 +456,29 @@ export function InteractiveProjections({
     { label: "Age 95", idx: 95 - currentAge - 1 },
   ].filter((m) => m.idx < projection.totalValues.length);
 
+  // Shown inside each control sheet so an adjustment and its consequence are
+  // on screen together.
+  const liveResult = (
+    <div className="flex items-center justify-between gap-3 text-sm">
+      <span className="text-muted-foreground">
+        At {retirementAge}{" "}
+        <span className="font-mono font-semibold text-foreground">
+          <Money value={portfolioAtRetirement} />
+        </span>
+      </span>
+      <span
+        className={cn(
+          "font-semibold",
+          portfolioLastsFullPeriod ? "text-green-500" : "text-red-500"
+        )}
+      >
+        {portfolioLastsFullPeriod
+          ? `Lasts to ${retirementAge + retirementYears}`
+          : `Runs out at ${portfolioRunsOutAge}`}
+      </span>
+    </div>
+  );
+
   const verdictLine = portfolioLastsFullPeriod
     ? `Lasts to ${retirementAge + retirementYears}`
     : `Runs out at ${portfolioRunsOutAge}`;
@@ -503,166 +527,175 @@ export function InteractiveProjections({
             Adjust these inputs to see how they affect your retirement
           </p>
         </CardHeader>
-        <CardContent className="space-y-6">
-          {/* Market Scenario */}
-          <div className="space-y-2">
-            <Label className="text-sm font-medium flex items-center gap-1.5">Market Scenario <HelpTip text="Each scenario sets different return, volatility, and inflation assumptions. The projection uses these to model portfolio growth and withdrawal sustainability." /></Label>
-            <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
-              {MARKET_SCENARIOS.map((s) => (
-                <button
-                  key={s.id}
-                  onClick={() => updateScenario(s.id)}
-                  className={cn(
-                    "rounded-lg border p-2.5 text-left transition-colors text-xs",
-                    selectedScenario === s.id
-                      ? "border-primary bg-primary/5"
-                      : "hover:bg-accent/50"
-                  )}
-                >
-                  <p className="font-medium">{s.name}</p>
-                  <p className="text-muted-foreground mt-0.5">
-                    {s.returnPct}% return, {s.inflationPct}% inflation
-                  </p>
-                </button>
-              ))}
-            </div>
-          </div>
-
-          {/* Social Security Claiming Ages */}
-          <div className="grid gap-6 sm:grid-cols-2">
-            <div className="space-y-3">
-              <div className="flex items-center justify-between">
-                <Label className="text-sm flex items-center gap-1">SS Claiming Age <HelpTip text="Each year you delay past 62 increases your monthly benefit. Delaying to 70 gives ~76% more than claiming at 62. Your Full Retirement Age (FRA) is typically 67." /></Label>
-                <Badge variant="outline" className="font-mono">{selfSSAge}</Badge>
+        <CardContent>
+        <ControlList>
+          <ControlRow label="Market scenario" value={scenario.name} hint="Return, volatility and inflation assumptions used for the projection." live={liveResult}>
+            {/* Market Scenario */}
+            <div className="space-y-2">
+              <Label className="text-sm font-medium flex items-center gap-1.5">Market Scenario <HelpTip text="Each scenario sets different return, volatility, and inflation assumptions. The projection uses these to model portfolio growth and withdrawal sustainability." /></Label>
+              <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
+                {MARKET_SCENARIOS.map((s) => (
+                  <button
+                    key={s.id}
+                    onClick={() => updateScenario(s.id)}
+                    className={cn(
+                      "rounded-lg border p-2.5 text-left transition-colors text-xs",
+                      selectedScenario === s.id
+                        ? "border-primary bg-primary/5"
+                        : "hover:bg-accent/50"
+                    )}
+                  >
+                    <p className="font-medium">{s.name}</p>
+                    <p className="text-muted-foreground mt-0.5">
+                      {s.returnPct}% return, {s.inflationPct}% inflation
+                    </p>
+                  </button>
+                ))}
               </div>
-              <Slider
-                value={[selfSSAge]}
-                onValueChange={(v) => updateSelfSSAge(Array.isArray(v) ? v[0] : v)}
-                min={62}
-                max={70}
-                step={1}
-              />
-              <div className="flex justify-between text-xs text-muted-foreground">
-                <span>62 ({formatCurrency(adjustSSBenefit(selfSSAtFRA, selfFRA || 67, 62))}/mo)</span>
-                <span>70 ({formatCurrency(adjustSSBenefit(selfSSAtFRA, selfFRA || 67, 70))}/mo)</span>
-              </div>
-              <p className="text-xs text-center font-mono text-primary">
-                {formatCurrency(selfSSMonthly)}/mo at age {selfSSAge}
-              </p>
             </div>
 
-            <div className="space-y-3">
-              <div className="flex items-center justify-between">
-                <Label className="text-sm">Spouse SS Claiming Age</Label>
-                <Badge variant="outline" className="font-mono">{spouseSSAge}</Badge>
-              </div>
-              <Slider
-                value={[spouseSSAge]}
-                onValueChange={(v) => updateSpouseSSAge(Array.isArray(v) ? v[0] : v)}
-                min={62}
-                max={70}
-                step={1}
-              />
-              <div className="flex justify-between text-xs text-muted-foreground">
-                <span>62 ({formatCurrency(adjustSSBenefit(spouseSSAtFRA, spouseFRA || 67, 62))}/mo)</span>
-                <span>70 ({formatCurrency(adjustSSBenefit(spouseSSAtFRA, spouseFRA || 67, 70))}/mo)</span>
-              </div>
-              <p className="text-xs text-center font-mono text-primary">
-                {formatCurrency(spouseSSMonthly)}/mo at age {spouseSSAge}
-              </p>
-            </div>
-          </div>
-
-          {/* Withdrawal Method */}
-          <div className="space-y-2">
-            <Label className="text-sm font-medium flex items-center gap-1.5">Withdrawal Method <HelpTip text="Controls how much you withdraw each year in retirement. Expense-based: withdraw what you need for spending minus SS. Rate-based: withdraw a % of your portfolio. Higher-of-both: use whichever amount is larger." /></Label>
-            <div className="grid grid-cols-3 gap-2">
-              {([
-                { id: "expense" as const, name: "Expense-Based", desc: "Withdraw what you need for spending minus SS" },
-                { id: "rate" as const, name: "Rate-Based", desc: "Withdraw X% of portfolio each year (4% rule)" },
-                { id: "higher" as const, name: "Higher Of Both", desc: "Use the higher of expense or rate calculation" },
-              ]).map((m) => (
-                <button
-                  key={m.id}
-                  onClick={() => updateWithdrawalMethod(m.id)}
-                  className={cn(
-                    "rounded-lg border p-2 text-left transition-colors text-xs",
-                    withdrawalMethod === m.id ? "border-primary bg-primary/5" : "hover:bg-accent/50"
-                  )}
-                >
-                  <p className="font-medium">{m.name}</p>
-                  <p className="text-muted-foreground mt-0.5 text-[10px]">{m.desc}</p>
-                </button>
-              ))}
-            </div>
-            <p className="text-[10px] text-muted-foreground">
-              Note: After age 73, Required Minimum Distributions (RMDs) from tax-deferred accounts are mandatory regardless of method chosen. The withdrawal will never be less than the RMD.
-            </p>
-          </div>
-
-          {/* Monthly Retirement Spending + Withdrawal Rate */}
-          <div className="grid gap-6 sm:grid-cols-2">
-            <div className="space-y-3">
-              <div className="flex items-center justify-between">
-                <Label className="text-sm flex items-center gap-1">Monthly Spending <HelpTip text="Your expected monthly household expenses in retirement. This amount grows with inflation each year. Used by the expense-based withdrawal method to determine how much to withdraw." /></Label>
-                <Badge variant="outline" className="font-mono">
-                  {formatCurrency(monthlySpending)}/mo
-                </Badge>
-              </div>
-              <Slider
-                value={[monthlySpending]}
-                onValueChange={(v) => updateSpending(Array.isArray(v) ? v[0] : v)}
-                min={2000}
-                max={25000}
-                step={250}
-              />
-              <div className="flex justify-between text-xs text-muted-foreground">
-                <span>$2,000/mo</span>
-                <span>$25,000/mo</span>
-              </div>
-              <p className="text-xs text-muted-foreground">
-                Your expected monthly household expenses in retirement
-              </p>
-            </div>
-
-            <div className="space-y-3">
-              <div className="flex items-center justify-between">
-                <Label className="text-sm flex items-center gap-1">Withdrawal Rate <HelpTip text="The percentage of your portfolio withdrawn annually. The '4% rule' is a common guideline — withdraw 4% of your portfolio each year, and it should last 30 years in most market conditions." /></Label>
-                <Badge variant="outline" className="font-mono">
-                  {withdrawalRatePct}%{maxWithdrawalAmount ? ` (max ${formatCurrency(maxWithdrawalAmount)}/yr)` : ""}
-                </Badge>
-              </div>
-              <Slider
-                value={[withdrawalRatePct * 10]}
-                onValueChange={(v) => updateWithdrawalRate((Array.isArray(v) ? v[0] : v) / 10)}
-                min={10}
-                max={80}
-                step={1}
-              />
-              <div className="flex justify-between text-xs text-muted-foreground">
-                <span>1% (conservative)</span>
-                <span>8% (aggressive)</span>
-              </div>
-              <div className="space-y-1">
-                <Label className="text-xs">Max annual withdrawal ($)</Label>
-                <Input
-                  type="number"
-                  step="0.01"
-                  placeholder="Unlimited (leave blank)"
-                  value={maxWithdrawalAmount ?? ""}
-                  onChange={(e) => {
-                    const val = e.target.value ? Number(e.target.value) : null;
-                    updateMaxWithdrawal(val);
-                  }}
-                  className="h-7 text-xs font-mono"
+          </ControlRow>
+          <ControlRow label="Social Security" value={`You ${selfSSAge} · Spouse ${spouseSSAge}`} hint="Each year you delay past 62 raises the monthly benefit." live={liveResult}>
+            {/* Social Security Claiming Ages */}
+            <div className="grid gap-6 sm:grid-cols-2">
+              <div className="space-y-3">
+                <div className="flex items-center justify-between">
+                  <Label className="text-sm flex items-center gap-1">SS Claiming Age <HelpTip text="Each year you delay past 62 increases your monthly benefit. Delaying to 70 gives ~76% more than claiming at 62. Your Full Retirement Age (FRA) is typically 67." /></Label>
+                  <Badge variant="outline" className="font-mono">{selfSSAge}</Badge>
+                </div>
+                <Slider
+                  value={[selfSSAge]}
+                  onValueChange={(v) => updateSelfSSAge(Array.isArray(v) ? v[0] : v)}
+                  min={62}
+                  max={70}
+                  step={1}
                 />
-                <p className="text-[10px] text-muted-foreground">
-                  Cap the annual withdrawal at this dollar amount regardless of the rate. Blank = no cap (rate drives everything).
+                <div className="flex justify-between text-xs text-muted-foreground">
+                  <span>62 ({formatCurrency(adjustSSBenefit(selfSSAtFRA, selfFRA || 67, 62))}/mo)</span>
+                  <span>70 ({formatCurrency(adjustSSBenefit(selfSSAtFRA, selfFRA || 67, 70))}/mo)</span>
+                </div>
+                <p className="text-xs text-center font-mono text-primary">
+                  {formatCurrency(selfSSMonthly)}/mo at age {selfSSAge}
+                </p>
+              </div>
+
+              <div className="space-y-3">
+                <div className="flex items-center justify-between">
+                  <Label className="text-sm">Spouse SS Claiming Age</Label>
+                  <Badge variant="outline" className="font-mono">{spouseSSAge}</Badge>
+                </div>
+                <Slider
+                  value={[spouseSSAge]}
+                  onValueChange={(v) => updateSpouseSSAge(Array.isArray(v) ? v[0] : v)}
+                  min={62}
+                  max={70}
+                  step={1}
+                />
+                <div className="flex justify-between text-xs text-muted-foreground">
+                  <span>62 ({formatCurrency(adjustSSBenefit(spouseSSAtFRA, spouseFRA || 67, 62))}/mo)</span>
+                  <span>70 ({formatCurrency(adjustSSBenefit(spouseSSAtFRA, spouseFRA || 67, 70))}/mo)</span>
+                </div>
+                <p className="text-xs text-center font-mono text-primary">
+                  {formatCurrency(spouseSSMonthly)}/mo at age {spouseSSAge}
                 </p>
               </div>
             </div>
-          </div>
 
+          </ControlRow>
+          <ControlRow label="Withdrawal method" value={withdrawalLabel} hint="How much comes out of the portfolio each year in retirement." live={liveResult}>
+            {/* Withdrawal Method */}
+            <div className="space-y-2">
+              <Label className="text-sm font-medium flex items-center gap-1.5">Withdrawal Method <HelpTip text="Controls how much you withdraw each year in retirement. Expense-based: withdraw what you need for spending minus SS. Rate-based: withdraw a % of your portfolio. Higher-of-both: use whichever amount is larger." /></Label>
+              <div className="grid grid-cols-3 gap-2">
+                {([
+                  { id: "expense" as const, name: "Expense-Based", desc: "Withdraw what you need for spending minus SS" },
+                  { id: "rate" as const, name: "Rate-Based", desc: "Withdraw X% of portfolio each year (4% rule)" },
+                  { id: "higher" as const, name: "Higher Of Both", desc: "Use the higher of expense or rate calculation" },
+                ]).map((m) => (
+                  <button
+                    key={m.id}
+                    onClick={() => updateWithdrawalMethod(m.id)}
+                    className={cn(
+                      "rounded-lg border p-2 text-left transition-colors text-xs",
+                      withdrawalMethod === m.id ? "border-primary bg-primary/5" : "hover:bg-accent/50"
+                    )}
+                  >
+                    <p className="font-medium">{m.name}</p>
+                    <p className="text-muted-foreground mt-0.5 text-[10px]">{m.desc}</p>
+                  </button>
+                ))}
+              </div>
+              <p className="text-[10px] text-muted-foreground">
+                Note: After age 73, Required Minimum Distributions (RMDs) from tax-deferred accounts are mandatory regardless of method chosen. The withdrawal will never be less than the RMD.
+              </p>
+            </div>
+
+          </ControlRow>
+          <ControlRow label="Spending & rate" value={`${formatCompactCurrency(monthlySpending)}/mo · ${withdrawalRatePct}%`} hint="What you expect to spend, and the ceiling on withdrawals." live={liveResult}>
+            {/* Monthly Retirement Spending + Withdrawal Rate */}
+            <div className="grid gap-6 sm:grid-cols-2">
+              <div className="space-y-3">
+                <div className="flex items-center justify-between">
+                  <Label className="text-sm flex items-center gap-1">Monthly Spending <HelpTip text="Your expected monthly household expenses in retirement. This amount grows with inflation each year. Used by the expense-based withdrawal method to determine how much to withdraw." /></Label>
+                  <Badge variant="outline" className="font-mono">
+                    {formatCurrency(monthlySpending)}/mo
+                  </Badge>
+                </div>
+                <Slider
+                  value={[monthlySpending]}
+                  onValueChange={(v) => updateSpending(Array.isArray(v) ? v[0] : v)}
+                  min={2000}
+                  max={25000}
+                  step={250}
+                />
+                <div className="flex justify-between text-xs text-muted-foreground">
+                  <span>$2,000/mo</span>
+                  <span>$25,000/mo</span>
+                </div>
+                <p className="text-xs text-muted-foreground">
+                  Your expected monthly household expenses in retirement
+                </p>
+              </div>
+
+              <div className="space-y-3">
+                <div className="flex items-center justify-between">
+                  <Label className="text-sm flex items-center gap-1">Withdrawal Rate <HelpTip text="The percentage of your portfolio withdrawn annually. The '4% rule' is a common guideline — withdraw 4% of your portfolio each year, and it should last 30 years in most market conditions." /></Label>
+                  <Badge variant="outline" className="font-mono">
+                    {withdrawalRatePct}%{maxWithdrawalAmount ? ` (max ${formatCurrency(maxWithdrawalAmount)}/yr)` : ""}
+                  </Badge>
+                </div>
+                <Slider
+                  value={[withdrawalRatePct * 10]}
+                  onValueChange={(v) => updateWithdrawalRate((Array.isArray(v) ? v[0] : v) / 10)}
+                  min={10}
+                  max={80}
+                  step={1}
+                />
+                <div className="flex justify-between text-xs text-muted-foreground">
+                  <span>1% (conservative)</span>
+                  <span>8% (aggressive)</span>
+                </div>
+                <div className="space-y-1">
+                  <Label className="text-xs">Max annual withdrawal ($)</Label>
+                  <Input
+                    type="number"
+                    step="0.01"
+                    placeholder="Unlimited (leave blank)"
+                    value={maxWithdrawalAmount ?? ""}
+                    onChange={(e) => {
+                      const val = e.target.value ? Number(e.target.value) : null;
+                      updateMaxWithdrawal(val);
+                    }}
+                    className="h-7 text-xs font-mono"
+                  />
+                  <p className="text-[10px] text-muted-foreground">
+                    Cap the annual withdrawal at this dollar amount regardless of the rate. Blank = no cap (rate drives everything).
+                  </p>
+                </div>
+              </div>
+            </div>
+
+          </ControlRow>
           {/* Three settings most people set once and never touch again. They
               were between the reader and the answer on every visit; behind a
               disclosure they are still one tap away. */}
@@ -857,6 +890,7 @@ export function InteractiveProjections({
             </div>
             </div>
           </details>
+        </ControlList>
         </CardContent>
       </Card>
 

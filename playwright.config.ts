@@ -52,7 +52,11 @@ export default defineConfig({
     : {
         command: "pnpm start",
         url: `${BASE_URL}/api/health`,
-        reuseExistingServer: !process.env.CI,
+        // Never reuse. A server left running from an earlier build serves
+        // stale CSS and JS, and the suite then reports failures that are not
+        // in the code and passes changes that are — which has already
+        // happened twice. A few seconds per run is the cheaper side of that.
+        reuseExistingServer: false,
         timeout: 120_000,
         stdout: "pipe",
         stderr: "pipe",
