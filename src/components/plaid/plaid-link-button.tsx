@@ -5,7 +5,15 @@ import { usePlaidLink } from "react-plaid-link";
 import { Link2, Loader2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 
-export function PlaidLinkButton() {
+export function PlaidLinkButton({
+  scope = "investments",
+  label = "Connect Account",
+}: {
+  /** Which kind of connection this is — Plaid shows a different set of
+      institutions depending on the products requested. */
+  scope?: "investments" | "banking";
+  label?: string;
+} = {}) {
   const [linkToken, setLinkToken] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -16,6 +24,8 @@ export function PlaidLinkButton() {
       try {
         const res = await fetch("/api/plaid/create-link-token", {
           method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ scope }),
         });
         const data = await res.json();
         if (data.error) {
@@ -28,7 +38,7 @@ export function PlaidLinkButton() {
       }
     }
     fetchToken();
-  }, []);
+  }, [scope]);
 
   const onSuccess = useCallback(
     async (publicToken: string, metadata: { institution?: { name: string } | null }) => {
@@ -78,7 +88,7 @@ export function PlaidLinkButton() {
         ) : (
           <Link2 className="mr-2 h-4 w-4" />
         )}
-        Connect Account via Plaid
+        {label}
       </Button>
       {error && <p className="mt-2 text-sm text-destructive">{error}</p>}
       {!linkToken && !error && (

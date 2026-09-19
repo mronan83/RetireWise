@@ -1,7 +1,7 @@
 import { and, eq, isNull } from "drizzle-orm";
 import type { PlaidApi } from "plaid";
 import { getDb } from "@/lib/db";
-import { accounts, holdings } from "@/lib/db/schema";
+import { accounts, cashReserves, debts, holdings } from "@/lib/db/schema";
 
 type Db = ReturnType<typeof getDb>;
 
@@ -384,5 +384,254 @@ export function mapPlaidSecurityType(
       return "cash";
     default:
       return "other";
+  }
+}
+
+/* ------------------------------------------------------------------------ *
+ * Balances and loans
+ *
+ * Investments are positions; a savings account and a mortgage are a single
+ * number each. They live in different tables (cash_reserves, debts) and are
+ * matched the same way — by Plaid account id first, then by an unlinked row
+ * with the same name — so linking a bank you already tracked by hand adopts
+ * the row instead of adding a second one.
+ * ------------------------------------------------------------------------ */
+
+
+export type BalanceCounts = {
+  cashLinked: number;
+  cashAdopted: number;
+  cashCreated: number;
+  debtsLinked: number;
+  debtsAdopted: number;
+  debtsCreated: number;
+};
+
+const EMPTY_BALANCES: BalanceCounts = {
+  cashLinked: 0,
+  cashAdopted: 0,
+  cashCreated: 0,
+  debtsLinked: 0,
+  debtsAdopted: 0,
+  debtsCreated: 0,
+};
+
+/**
+ * Pull depository balances and loan balances for one Plaid item.
+ *
+ * Plaid reports a loan's balance as a positive number on an account whose
+ * type is `credit` or `loan`. It is stored here as a debt, and the mortgage
+ * detail endpoint fills in the rate and payment when the institution
+ * provides them — those are the fields that would otherwise have to be
+ * retyped from a statement every time they change.
+ */
+export async function syncPlaidBalances(options: {
+  client: PlaidApi;
+  clerkId: string;
+  itemId: string;
+  accessToken: string;
+  institutionName: string;
+}): Promise<BalanceCounts> {
+  const { client, clerkId, itemId, accessToken, institutionName } = options;
+  const db = getDb();
+  const counts: BalanceCounts = { ...EMPTY_BALANCES };
+
+  const { data } = await client.accountsBalanceGet({ access_token: accessToken });
+
+  // Rate and payment for a mortgage, when the institution reports them.
+  // Not every one does, and a plain balance is still worth having.
+  const mortgageDetail = new Map<
+    string,
+    { rate: number | null; payment: number | null; origination: number | null }
+  >();
+  if (data.accounts.some((a) => a.type === "loan" || a.type === "credit")) {
+    try {
+      const liabilities = await client.liabilitiesGet({ access_token: accessToken });
+      for (const m of liabilities.data.liabilities.mortgage ?? []) {
+        mortgageDetail.set(m.account_id, {
+          rate: m.interest_rate?.percentage ?? null,
+          payment: m.next_monthly_payment ?? null,
+          origination: m.origination_principal_amount ?? null,
+        });
+      }
+    } catch {
+      // Liabilities is a separately enabled product and not every institution
+      // supports it. The balance above is the part that matters.
+    }
+  }
+
+  const unlinkedCash = await db
+    .select()
+    .from(cashReserves)
+    .where(and(eq(cashReserves.clerkId, clerkId), isNull(cashReserves.plaidAccountId)));
+  const unlinkedDebts = await db
+    .select()
+    .from(debts)
+    .where(and(eq(debts.clerkId, clerkId), isNull(debts.plaidAccountId)));
+  const cashPool = new Map(unlinkedCash.map((r) => [r.id, r]));
+  const debtPool = new Map(unlinkedDebts.map((r) => [r.id, r]));
+
+  for (const pa of data.accounts) {
+    const name = pa.name || pa.official_name || "Account";
+    const now = new Date();
+
+    if (pa.type === "depository") {
+      // Plaid's `available` excludes holds; `current` is the statement figure
+      // and is the one a person recognises as their balance.
+      const balance = pa.balances.current ?? pa.balances.available ?? 0;
+
+      const [existing] = await db
+        .select({ id: cashReserves.id })
+        .from(cashReserves)
+        .where(and(eq(cashReserves.clerkId, clerkId), eq(cashReserves.plaidAccountId, pa.account_id)))
+        .limit(1);
+
+      if (existing) {
+        await db
+          .update(cashReserves)
+          .set({ balance: String(balance), institution: institutionName, lastSyncedAt: now, updatedAt: now })
+          .where(eq(cashReserves.id, existing.id));
+        counts.cashLinked++;
+        continue;
+      }
+
+      const adoptable = [...cashPool.values()].find(
+        (r) => normalizeName(r.name) === normalizeName(name)
+      );
+      if (adoptable) {
+        cashPool.delete(adoptable.id);
+        await db
+          .update(cashReserves)
+          .set({
+            balance: String(balance),
+            institution: institutionName,
+            plaidItemId: itemId,
+            plaidAccountId: pa.account_id,
+            dataSource: "plaid",
+            lastSyncedAt: now,
+            updatedAt: now,
+          })
+          .where(eq(cashReserves.id, adoptable.id));
+        counts.cashAdopted++;
+        continue;
+      }
+
+      await db.insert(cashReserves).values({
+        clerkId,
+        name,
+        institution: institutionName,
+        balance: String(balance),
+        accountType: mapDepositorySubtype(pa.subtype),
+        plaidItemId: itemId,
+        plaidAccountId: pa.account_id,
+        dataSource: "plaid",
+        lastSyncedAt: now,
+      });
+      counts.cashCreated++;
+      continue;
+    }
+
+    if (pa.type === "loan" || pa.type === "credit") {
+      const balance = pa.balances.current ?? 0;
+      const detail = mortgageDetail.get(pa.account_id);
+
+      const [existing] = await db
+        .select({ id: debts.id })
+        .from(debts)
+        .where(and(eq(debts.clerkId, clerkId), eq(debts.plaidAccountId, pa.account_id)))
+        .limit(1);
+
+      if (existing) {
+        await db
+          .update(debts)
+          .set({
+            currentBalance: String(balance),
+            ...(detail?.rate != null ? { interestRate: String(detail.rate) } : {}),
+            ...(detail?.payment != null ? { monthlyPayment: String(detail.payment) } : {}),
+            lastSyncedAt: now,
+            updatedAt: now,
+          })
+          .where(eq(debts.id, existing.id));
+        counts.debtsLinked++;
+        continue;
+      }
+
+      const adoptable = [...debtPool.values()].find(
+        (r) => normalizeName(r.name) === normalizeName(name)
+      );
+      if (adoptable) {
+        debtPool.delete(adoptable.id);
+        await db
+          .update(debts)
+          .set({
+            currentBalance: String(balance),
+            ...(detail?.rate != null ? { interestRate: String(detail.rate) } : {}),
+            ...(detail?.payment != null ? { monthlyPayment: String(detail.payment) } : {}),
+            plaidItemId: itemId,
+            plaidAccountId: pa.account_id,
+            dataSource: "plaid",
+            lastSyncedAt: now,
+            updatedAt: now,
+          })
+          .where(eq(debts.id, adoptable.id));
+        counts.debtsAdopted++;
+        continue;
+      }
+
+      await db.insert(debts).values({
+        clerkId,
+        name,
+        debtType: mapDebtSubtype(pa.type, pa.subtype),
+        currentBalance: String(balance),
+        originalBalance: detail?.origination != null ? String(detail.origination) : null,
+        // A rate is required on the row; a linked account that does not report
+        // one gets zero rather than blocking the link, and can be corrected.
+        interestRate: String(detail?.rate ?? 0),
+        monthlyPayment: String(detail?.payment ?? 0),
+        plaidItemId: itemId,
+        plaidAccountId: pa.account_id,
+        dataSource: "plaid",
+        lastSyncedAt: now,
+      });
+      counts.debtsCreated++;
+    }
+  }
+
+  return counts;
+}
+
+function mapDepositorySubtype(
+  subtype: string | null | undefined
+): "checking" | "savings" | "high_yield_savings" | "money_market" | "cd" | "other_cash" {
+  switch (subtype) {
+    case "checking":
+      return "checking";
+    case "savings":
+      return "savings";
+    case "money market":
+      return "money_market";
+    case "cd":
+      return "cd";
+    default:
+      return "other_cash";
+  }
+}
+
+function mapDebtSubtype(
+  type: string,
+  subtype: string | null | undefined
+): "mortgage" | "auto_loan" | "student_loan" | "heloc" | "credit_card" | "other_debt" {
+  if (type === "credit") return "credit_card";
+  switch (subtype) {
+    case "mortgage":
+      return "mortgage";
+    case "auto":
+      return "auto_loan";
+    case "student":
+      return "student_loan";
+    case "home equity":
+      return "heloc";
+    default:
+      return "other_debt";
   }
 }

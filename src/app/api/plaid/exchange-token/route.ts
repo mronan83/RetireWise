@@ -3,7 +3,7 @@ import { revalidatePath } from "next/cache";
 import { getApiUserId } from "@/lib/auth-helpers";
 import { getPlaidClient } from "@/lib/plaid/client";
 import { encryptToken } from "@/lib/plaid/encryption";
-import { syncPlaidItem } from "@/lib/plaid/sync";
+import { syncPlaidBalances, syncPlaidItem } from "@/lib/plaid/sync";
 import { getDb } from "@/lib/db";
 import { plaidItems } from "@/lib/db/schema";
 
@@ -59,19 +59,19 @@ export async function POST(request: Request) {
   }
 
   try {
-    const counts = await syncPlaidItem({
-      client,
-      clerkId: userId,
-      itemId,
-      accessToken,
-      institutionName,
-    });
+    // An institution can carry both — a brokerage with a cash sweep, a bank
+    // with a mortgage — so both run and each skips what it does not find.
+    const [holdingCounts, balanceCounts] = await Promise.all([
+      syncPlaidItem({ client, clerkId: userId, itemId, accessToken, institutionName }),
+      syncPlaidBalances({ client, clerkId: userId, itemId, accessToken, institutionName }),
+    ]);
 
     revalidatePath("/dashboard");
     revalidatePath("/accounts");
     revalidatePath("/holdings");
+    revalidatePath("/net-worth");
 
-    return Response.json({ success: true, ...counts });
+    return Response.json({ success: true, ...holdingCounts, ...balanceCounts });
   } catch (e) {
     // The item is linked either way; holdings can be picked up by the nightly
     // refresh. Say so rather than reporting a clean success the UI can't tell

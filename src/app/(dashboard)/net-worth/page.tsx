@@ -7,6 +7,7 @@ import { getNetWorthSnapshots, getItemHistoryMap } from "@/lib/queries/snapshots
 import { snapshotNetWorth } from "@/lib/utils/net-worth-snapshot";
 import { formatCurrency } from "@/lib/utils/format";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { PlaidLinkButton } from "@/components/plaid/plaid-link-button";
 import {
   TrendingUp,
   Home,
@@ -58,11 +59,30 @@ export default async function NetWorthPage() {
   const totalAssets = investmentTotal + realEstateEquity + cashTotal + vehicleEquity;
   const netWorth = totalAssets - debtTotal;
 
+  // Shown so it is obvious which figures keep themselves current and which
+  // are only as fresh as the last time someone typed them.
+  const linkedCash = cash.filter((c) => c.plaidAccountId !== null).length;
+  const linkedDebts = debtsList.filter((d) => d.plaidAccountId !== null).length;
+
   return (
     <div className="space-y-6">
-      <div>
-        <h1 className="text-2xl font-bold tracking-tight">Net Worth</h1>
-        <p className="text-muted-foreground">Your complete household financial picture</p>
+      <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+        <div>
+          <h1 className="text-2xl font-bold tracking-tight">Net Worth</h1>
+          <p className="text-muted-foreground">Your complete household financial picture</p>
+          {(linkedCash > 0 || linkedDebts > 0) && (
+            <p className="mt-1 text-xs text-muted-foreground">
+              {linkedCash > 0 && `${linkedCash} balance${linkedCash === 1 ? "" : "s"}`}
+              {linkedCash > 0 && linkedDebts > 0 && " and "}
+              {linkedDebts > 0 && `${linkedDebts} loan${linkedDebts === 1 ? "" : "s"}`}
+              {" updating nightly. Property values are entered by hand."}
+            </p>
+          )}
+        </div>
+        {/* Banking is a separate Plaid product set from investments, so this
+            is its own connection rather than a second use of the one on the
+            accounts page. */}
+        <PlaidLinkButton scope="banking" label="Connect bank or loan" />
       </div>
 
       {/* Summary cards */}

@@ -4,7 +4,7 @@ import { getDb } from "@/lib/db";
 import { plaidItems } from "@/lib/db/schema";
 import { getPlaidClient } from "@/lib/plaid/client";
 import { decryptToken } from "@/lib/plaid/encryption";
-import { syncPlaidItem } from "@/lib/plaid/sync";
+import { syncPlaidBalances, syncPlaidItem } from "@/lib/plaid/sync";
 
 export async function GET(request: Request) {
   const authHeader = request.headers.get("authorization");
@@ -29,13 +29,16 @@ export async function GET(request: Request) {
       // household. The previous version matched accounts by Plaid id alone
       // and only ever updated prices, so new positions never appeared and
       // sold ones never went away.
-      await syncPlaidItem({
+      const accessToken = decryptToken(item.accessTokenEncrypted);
+      const shared = {
         client,
         clerkId: item.clerkId,
         itemId: item.itemId,
-        accessToken: decryptToken(item.accessTokenEncrypted),
+        accessToken,
         institutionName: item.institutionName,
-      });
+      };
+      await syncPlaidItem(shared);
+      await syncPlaidBalances(shared);
 
       await db
         .update(plaidItems)
@@ -56,6 +59,7 @@ export async function GET(request: Request) {
   revalidatePath("/dashboard");
   revalidatePath("/accounts");
   revalidatePath("/holdings");
+  revalidatePath("/net-worth");
 
   return Response.json({ success: true, refreshed, errors });
 }

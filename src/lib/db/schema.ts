@@ -593,6 +593,14 @@ export const cashReserves = pgTable("cash_reserves", {
   balance: decimal("balance", { precision: 20, scale: 2 }).notNull(),
   interestRate: decimal("interest_rate", { precision: 5, scale: 2 }),
   notes: text("notes"),
+  // Filled when the balance comes from a linked institution rather than by
+  // hand. Kept on the row rather than a join table so a manually entered
+  // account and a linked one are the same kind of thing.
+  plaidItemId: text("plaid_item_id"),
+  plaidAccountId: text("plaid_account_id"),
+  dataSource: dataSourceEnum("data_source").notNull().default("manual"),
+  lastSyncedAt: timestamp("last_synced_at"),
+
   createdAt: timestamp("created_at").defaultNow().notNull(),
   updatedAt: timestamp("updated_at").defaultNow().notNull(),
 });
@@ -610,6 +618,14 @@ export const debts = pgTable("debts", {
   monthlyPayment: decimal("monthly_payment", { precision: 10, scale: 2 }).notNull(),
   payoffDate: date("payoff_date"),
   notes: text("notes"),
+  // Filled when the balance comes from a linked institution rather than by
+  // hand. Kept on the row rather than a join table so a manually entered
+  // account and a linked one are the same kind of thing.
+  plaidItemId: text("plaid_item_id"),
+  plaidAccountId: text("plaid_account_id"),
+  dataSource: dataSourceEnum("data_source").notNull().default("manual"),
+  lastSyncedAt: timestamp("last_synced_at"),
+
   createdAt: timestamp("created_at").defaultNow().notNull(),
   updatedAt: timestamp("updated_at").defaultNow().notNull(),
 });
