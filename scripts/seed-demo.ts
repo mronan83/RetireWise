@@ -10,7 +10,10 @@ import * as schema from "../src/lib/db/schema";
 const DEMO_ID = "demo_user_retirewise";
 
 async function main() {
-  const sql = postgres(process.env.DATABASE_URL!, { prepare: false, max: 1 });
+  const sql = postgres(
+    (process.env.SUPABASE_DATABASE_URL ?? process.env.DATABASE_URL)!,
+    { prepare: false, max: 1 }
+  );
   const db = drizzle(sql, { schema });
 
   console.log("Cleaning existing demo data...");

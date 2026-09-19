@@ -21,8 +21,15 @@ export async function GET() {
   const startedAt = Date.now();
 
   let database = false;
+  // The database NAME, not the connection string. Cheap, non-sensitive, and
+  // the one signal that would have caught this app silently running against
+  // the wrong database for a day.
+  let databaseName: string | null = null;
   try {
-    await getDb().execute(sql`select 1`);
+    const r = (await getDb().execute(
+      sql`select current_database()::text as db`
+    )) as unknown as { db: string }[];
+    databaseName = Array.isArray(r) ? (r[0]?.db ?? null) : null;
     database = true;
   } catch {
     database = false;
@@ -40,6 +47,7 @@ export async function GET() {
     {
       status: healthy ? "ok" : "degraded",
       checks: { database, authConfigured },
+      databaseName,
       latencyMs: Date.now() - startedAt,
       checkedAt: new Date().toISOString(),
     },
