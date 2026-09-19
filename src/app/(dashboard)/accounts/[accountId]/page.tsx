@@ -90,6 +90,15 @@ export default async function AccountDetailPage({
             <span className="text-sm text-muted-foreground">
               {account.institution}
             </span>
+            {account.plaidAccountId ? (
+              <Badge variant="outline" className="text-primary">
+                Connected
+              </Badge>
+            ) : (
+              <Badge variant="outline" className="text-muted-foreground">
+                Manual
+              </Badge>
+            )}
           </div>
         </div>
         <AccountActions account={account} />

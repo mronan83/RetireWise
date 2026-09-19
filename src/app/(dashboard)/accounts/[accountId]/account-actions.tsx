@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 import { useRouter } from "next/navigation";
-import { MoreHorizontal, Pencil, Trash2 } from "lucide-react";
+import { MoreHorizontal, Pencil, Trash2, Unlink } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import {
   DropdownMenu,
@@ -18,6 +18,7 @@ import {
 } from "@/components/ui/dialog";
 import { AccountForm } from "@/components/forms/account-form";
 import { updateAccount, deleteAccount } from "@/lib/actions/accounts";
+import { disconnectAccount } from "@/lib/actions/plaid";
 import type { Account } from "@/lib/types";
 
 export function AccountActions({ account }: { account: Account }) {
@@ -41,6 +42,19 @@ export function AccountActions({ account }: { account: Account }) {
             <Pencil className="mr-2 h-4 w-4" />
             Edit Account
           </DropdownMenuItem>
+          {account.plaidAccountId && (
+            <DropdownMenuItem
+              onClick={async () => {
+                // The holdings stay exactly as they are; the account simply
+                // stops updating itself and goes back to being editable.
+                await disconnectAccount(account.id);
+                router.refresh();
+              }}
+            >
+              <Unlink className="mr-2 h-4 w-4" />
+              Disconnect from institution
+            </DropdownMenuItem>
+          )}
           <DropdownMenuItem
             onClick={() => setDeleteOpen(true)}
             className="text-destructive"
