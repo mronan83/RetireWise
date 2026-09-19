@@ -122,6 +122,13 @@ export function runDetailedProjection(params: {
     employerMatchMaxPct: number; // e.g., 5 for up to 5%
     employerNonElectivePct?: number; // paid regardless of deferral, % of salary
     employerNonElectiveAmount?: number; // paid regardless of deferral, flat $/yr
+    /**
+     * How much of each projected year this account is actually funded, 0 to 1,
+     * one entry per year. A paused contribution is not a smaller contribution
+     * and not a cancelled one — it is this many months of nothing — so it is
+     * applied as a factor on the year rather than a change to the rate.
+     */
+    contributionFactors?: number[];
     salary: number; // current salary for this account's owner
     salaryGrowth: import("./salary-growth").SalaryGrowthConfig | null;
     ownerRetirementYear?: number; // year (0-indexed) this owner's contributions stop
@@ -252,6 +259,14 @@ export function runDetailedProjection(params: {
             // Fixed amount + $ increase per year
             employee = acct.annualContribution + (acct.annualEscalation > 0 ? acct.annualEscalation * y : 0);
           }
+
+          // A pause stops the employee's money, and with it the match that is
+          // earned on it. It does not stop non-elective employer money, which
+          // is paid at any deferral rate including none — so the factor is
+          // applied before that is added, not after.
+          const funded = acct.contributionFactors?.[y] ?? 1;
+          employee *= funded;
+          employer *= funded;
 
           // Non-elective employer money is paid whatever the employee defers,
           // so it is added outside the deferral branch and never scaled by it.

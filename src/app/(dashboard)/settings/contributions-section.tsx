@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useEffect, useActionState } from "react";
-import { Plus, Trash2, Pencil, Wallet, Archive, RotateCcw } from "lucide-react";
+import { Plus, Trash2, Pencil, Wallet, Archive, RotateCcw, PauseCircle } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -33,7 +33,9 @@ import {
 } from "@/lib/actions/contributions";
 import {
   contributionBreakdown,
+  isPaused,
   partitionByActive,
+  pauseLengthMonths,
   vestingStatus,
 } from "@/lib/utils/contributions";
 import { formatCurrency, formatPercent } from "@/lib/utils/format";
@@ -290,6 +292,8 @@ function ContributionRow({
     salary
   );
   const vesting = vestingStatus(c);
+  const pausedNow = isPaused(c);
+  const pauseMonths = pauseLengthMonths(c);
 
   const handleDelete = async () => {
     await deleteContribution(c.id);
@@ -300,7 +304,8 @@ function ContributionRow({
       <div
         className={
           "flex items-center justify-between rounded-lg border p-3" +
-          (c.isActive ? "" : " opacity-60")
+          (c.isActive ? "" : " opacity-60") +
+          (pausedNow ? " border-amber-500/40 bg-amber-500/5" : "")
         }
       >
         <div className="flex items-center gap-3 min-w-0 flex-1">
@@ -313,6 +318,15 @@ function ContributionRow({
               <Badge variant="outline" className="text-xs">
                 {ACCOUNT_TYPE_LABELS[c.accountType]}
               </Badge>
+              {pausedNow && (
+                <Badge
+                  variant="outline"
+                  className="flex items-center gap-1 border-amber-500/50 text-xs text-amber-500"
+                >
+                  <PauseCircle className="h-3 w-3" />
+                  Paused
+                </Badge>
+              )}
             </div>
             <div className="text-xs text-muted-foreground mt-0.5">
               {c.contributionMethod === "percent_of_salary" ? (
@@ -359,6 +373,14 @@ function ContributionRow({
               )}
               {/* Vesting decides what you keep on the way out, not what the
                   account grows to, so it is shown as its own fact. */}
+              {pausedNow && (
+                <span className="text-amber-500">
+                  Paused {c.pausedFrom}
+                  {c.resumesOn
+                    ? ` → ${c.resumesOn}${pauseMonths ? ` (${pauseMonths} mo)` : ""}`
+                    : " · no resume date set"}
+                </span>
+              )}
               {c.vestingSchedule !== "immediate" && (
                 <span
                   className={
@@ -377,7 +399,12 @@ function ContributionRow({
         </div>
         <div className="flex items-center gap-2 shrink-0">
           <div className="text-right">
-            <p className="font-mono text-sm font-medium">
+            <p
+              className={
+                "font-mono text-sm font-medium" +
+                (pausedNow ? " text-muted-foreground line-through" : "")
+              }
+            >
               {formatCurrency(yourAnnual)}/yr
             </p>
             {matchAnnual > 0 && (
@@ -443,6 +470,7 @@ function EmployerFields({ c }: { c?: Contribution }) {
     c?.hasEmployerNonElective ?? false
   );
   const [vesting, setVesting] = useState<string>(c?.vestingSchedule ?? "immediate");
+  const [paused, setPaused] = useState(Boolean(c?.pausedFrom));
 
   return (
     <>
@@ -537,6 +565,44 @@ function EmployerFields({ c }: { c?: Contribution }) {
               />
               <p className="text-xs text-muted-foreground">
                 Used only when the percent is blank
+              </p>
+            </div>
+          </div>
+        )}
+      </div>
+
+      <div className="space-y-3 rounded-lg border p-3">
+        <div className="flex items-center gap-3">
+          <Switch
+            id={`${idp}Paused`}
+            checked={paused}
+            onCheckedChange={setPaused}
+          />
+          <Label htmlFor={`${idp}Paused`} className="text-sm">
+            Contributions paused
+          </Label>
+        </div>
+        <p className="text-xs text-muted-foreground">
+          Money is not going in right now, but this is not over. Projections
+          skip the months in the window instead of assuming the full rate.
+        </p>
+
+        {paused && (
+          <div className="grid gap-4 sm:grid-cols-2">
+            <div className="space-y-1">
+              <Label className="text-xs">Paused from</Label>
+              <Input
+                name="pausedFrom"
+                type="date"
+                defaultValue={c?.pausedFrom ?? new Date().toISOString().slice(0, 10)}
+              />
+            </div>
+            <div className="space-y-1">
+              <Label className="text-xs">Resumes on</Label>
+              <Input name="resumesOn" type="date" defaultValue={c?.resumesOn ?? ""} />
+              <p className="text-xs text-muted-foreground">
+                Leave blank if you do not know yet — it will project as paused
+                until you set one.
               </p>
             </div>
           </div>

@@ -3,7 +3,7 @@ import { eq, and } from "drizzle-orm";
 import { getDb } from "@/lib/db";
 import { userPreferences, socialSecurityBenefits, contributions } from "@/lib/db/schema";
 import { getHoldingsByClerkId } from "@/lib/queries/holdings";
-import { totalAnnual } from "@/lib/utils/contributions";
+import { fundedFractionOfYear, totalAnnual } from "@/lib/utils/contributions";
 import { InteractiveProjections } from "./interactive-controls";
 import { getAccounts } from "@/lib/queries/accounts";
 
@@ -140,6 +140,14 @@ export default async function ProjectionsPage() {
             employerMatchMaxPct: matchMaxPct,
             employerNonElectivePct: nonElectivePct,
             employerNonElectiveAmount: nonElectiveAmount,
+            // One factor per projected year. Where several contributions feed
+            // one account, the least-funded of them sets the year — a pause on
+            // the main deferral is the thing that actually stops the money.
+            contributionFactors: Array.from({ length: 60 }, (_, y) =>
+              matchingContribs
+                .filter((c) => c.isActive)
+                .reduce((lowest, c) => Math.min(lowest, fundedFractionOfYear(c, y)), 1)
+            ),
             salary,
             salaryGrowth: salaryGrowthConfig,
             ownerRetirementYear: a.owner === "spouse" ? spouseYearsToRetirement : selfYearsToRetirement,

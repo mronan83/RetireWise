@@ -70,6 +70,12 @@ type AccountInput = {
   contributionPct: number;
   employerMatchRate: number;
   employerMatchMaxPct: number;
+  // Declared rather than relied on: these reach the engine by passing the
+  // object straight through, and a type that does not mention them lets the
+  // next rebuild of this object drop them silently.
+  employerNonElectivePct?: number;
+  employerNonElectiveAmount?: number;
+  contributionFactors?: number[];
   salary: number;
   salaryGrowth: import("@/lib/utils/salary-growth").SalaryGrowthConfig | null;
   ownerRetirementYear?: number;

@@ -45,6 +45,8 @@ const contributionSchema = z.object({
   vestingSchedule: z.enum(["immediate", "cliff", "graded"]).optional(),
   vestingYears: z.coerce.number().int().min(0).max(20).optional(),
   serviceStartDate: z.string().optional(),
+  pausedFrom: z.string().optional(),
+  resumesOn: z.string().optional(),
 });
 
 /** Read the fields shared by the create and edit forms. */
@@ -72,6 +74,8 @@ function readForm(formData: FormData) {
     vestingSchedule: formData.get("vestingSchedule") || undefined,
     vestingYears: formData.get("vestingYears") || undefined,
     serviceStartDate: formData.get("serviceStartDate") || undefined,
+    pausedFrom: formData.get("pausedFrom") || undefined,
+    resumesOn: formData.get("resumesOn") || undefined,
   });
 }
 
@@ -99,6 +103,8 @@ function toColumns(parsed: z.infer<typeof contributionSchema>) {
     vestingSchedule: parsed.vestingSchedule ?? ("immediate" as const),
     vestingYears: parsed.vestingYears ?? null,
     serviceStartDate: parsed.serviceStartDate || null,
+    pausedFrom: parsed.pausedFrom || null,
+    resumesOn: parsed.resumesOn || null,
   };
 }
 
@@ -151,6 +157,33 @@ export async function setContributionActive(id: string, active: boolean) {
     .set({
       isActive: active,
       endedOn: active ? null : new Date().toISOString().slice(0, 10),
+      updatedAt: new Date(),
+    })
+    .where(and(eq(contributions.id, id), eq(contributions.clerkId, userId)));
+
+  revalidateAll();
+}
+
+/**
+ * Pause a contribution from a date, optionally until another.
+ *
+ * Separate from retiring it: the entry stays true and stays in the totals'
+ * history, it simply funds nothing across the window. Passing no `from`
+ * clears the pause, which is how resuming early works.
+ */
+export async function setContributionPause(
+  id: string,
+  from: string | null,
+  until: string | null
+) {
+  const userId = await requireWriteClerkId();
+
+  const db = getDb();
+  await db
+    .update(contributions)
+    .set({
+      pausedFrom: from,
+      resumesOn: from ? until : null,
       updatedAt: new Date(),
     })
     .where(and(eq(contributions.id, id), eq(contributions.clerkId, userId)));

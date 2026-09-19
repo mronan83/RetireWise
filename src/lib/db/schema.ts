@@ -532,6 +532,15 @@ export const contributions = pgTable("contributions", {
   // When this stopped applying — a job left or a plan changed. Kept rather
   // than deleted so past years still explain themselves.
   endedOn: date("ended_on"),
+
+  // A pause is not an ending. Cash flow tightens, contributions stop for a
+  // while, and they start again — the entry is still true, it is just not
+  // funding anything this month. Expressing that as "ended" loses the intent
+  // and expressing it as active overstates every projection that follows.
+  pausedFrom: date("paused_from"),
+  // When contributions resume. Null means "paused, no date yet", which
+  // projects as paused for good until a date is set — the cautious reading.
+  resumesOn: date("resumes_on"),
   createdAt: timestamp("created_at").defaultNow().notNull(),
   updatedAt: timestamp("updated_at").defaultNow().notNull(),
 });

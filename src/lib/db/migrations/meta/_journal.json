@@ -43,6 +43,13 @@
       "when": 1789847000000,
       "tag": "0005_link_cash_and_debts",
       "breakpoints": true
+    },
+    {
+      "idx": 6,
+      "version": "7",
+      "when": 1789853000000,
+      "tag": "0006_contribution_pause",
+      "breakpoints": true
     }
   ]
 }

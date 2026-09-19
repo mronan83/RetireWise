@@ -170,11 +170,16 @@ export function capEmployeeDeferral(
 /** Sum a list of entries, skipping retired ones. */
 export function totalAnnual(
   rows: ContributionRow[],
-  salaryFor: (row: ContributionRow) => number
+  salaryFor: (row: ContributionRow) => number,
+  asOf = new Date()
 ): ContributionBreakdown {
   return rows.filter(isContributionActive).reduce<ContributionBreakdown>(
     (acc, c) => {
-      const b = contributionBreakdown(c, salaryFor(c));
+      // A paused entry contributes nothing today. Showing its full rate would
+      // report cash flow that is not happening.
+      const b = isPaused(c, asOf)
+        ? { ...ZERO }
+        : contributionBreakdown(c, salaryFor(c));
       return {
         employee: acc.employee + b.employee,
         employerMatch: acc.employerMatch + b.employerMatch,
@@ -255,4 +260,79 @@ export function vestingStatus(c: VestingInput, asOf = new Date()): Vesting {
           ? `0% until ${years} years, then 100%`
           : `${Math.round(fraction * 100)}% vested of ${years}-year schedule`,
   };
+}
+
+/* ------------------------------------------------------------------------ *
+ * Pauses
+ * ------------------------------------------------------------------------ */
+
+type PauseInput = Pick<ContributionRow, "pausedFrom" | "resumesOn">;
+
+const MS_PER_DAY = 24 * 60 * 60 * 1000;
+
+/** The window a contribution is not being funded, as timestamps. */
+function pauseWindow(c: PauseInput): { from: number; to: number } | null {
+  if (!c.pausedFrom) return null;
+  const from = new Date(c.pausedFrom).getTime();
+  // No resume date means paused until told otherwise. Projecting that as a
+  // pause that ends on some assumed date would inflate the forecast on an
+  // assumption nobody made.
+  const to = c.resumesOn ? new Date(c.resumesOn).getTime() : Infinity;
+  return to > from ? { from, to } : null;
+}
+
+/** Is this contribution paused right now? */
+export function isPaused(c: PauseInput, asOf = new Date()): boolean {
+  const w = pauseWindow(c);
+  if (!w) return false;
+  const t = asOf.getTime();
+  return t >= w.from && t < w.to;
+}
+
+/**
+ * How much of projected year `yearIndex` this contribution is actually funded.
+ *
+ * A pause rarely lines up with a calendar year: stopping in March and
+ * resuming the following February is ten months missed across two projection
+ * years, not a year off in one and a full year in the other. Returning a
+ * fraction rather than a flag keeps the forecast honest at the edges, which
+ * is where the difference between "paused a while" and "paused for good"
+ * actually lives.
+ */
+export function fundedFractionOfYear(
+  c: PauseInput,
+  yearIndex: number,
+  asOf = new Date()
+): number {
+  const w = pauseWindow(c);
+  if (!w) return 1;
+
+  const yearStart = new Date(asOf);
+  yearStart.setFullYear(yearStart.getFullYear() + yearIndex);
+  const yearEnd = new Date(asOf);
+  yearEnd.setFullYear(yearEnd.getFullYear() + yearIndex + 1);
+
+  const start = yearStart.getTime();
+  const end = yearEnd.getTime();
+  const overlap = Math.max(0, Math.min(end, w.to) - Math.max(start, w.from));
+  const length = end - start;
+  if (length <= 0) return 1;
+
+  return Math.max(0, Math.min(1, 1 - overlap / length));
+}
+
+/** The funded fraction for each projected year, for the engine to apply. */
+export function fundedFactors(
+  c: PauseInput,
+  years: number,
+  asOf = new Date()
+): number[] {
+  return Array.from({ length: years }, (_, y) => fundedFractionOfYear(c, y, asOf));
+}
+
+/** How long the pause runs, in months, or null when it has no end. */
+export function pauseLengthMonths(c: PauseInput): number | null {
+  const w = pauseWindow(c);
+  if (!w || w.to === Infinity) return null;
+  return Math.round((w.to - w.from) / MS_PER_DAY / 30.44);
 }
