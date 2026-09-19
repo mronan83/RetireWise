@@ -5,11 +5,13 @@ const currencyFormatter = new Intl.NumberFormat("en-US", {
   maximumFractionDigits: 2,
 });
 
+// A forced decimal reads as false precision on round numbers — "$0.0 surplus"
+// and "$30.0M" both look like the formatter, not the figure.
 const compactCurrencyFormatter = new Intl.NumberFormat("en-US", {
   style: "currency",
   currency: "USD",
   notation: "compact",
-  minimumFractionDigits: 1,
+  minimumFractionDigits: 0,
   maximumFractionDigits: 1,
 });
 

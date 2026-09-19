@@ -25,7 +25,11 @@ export default async function DashboardLayout({
         </aside>
         <div className="flex min-w-0 flex-1 flex-col">
           <DashboardHeader isDemo={isDemo} email={user?.email ?? null} />
-          <main className="safe-inset-bottom flex-1 overflow-x-hidden p-3 sm:p-4 lg:p-6">
+          {/* `clip` rather than `hidden`: both stop sideways overflow, but `hidden`
+              makes this a scroll container, and `position: sticky` inside a scroll
+              container anchors to that container instead of the viewport — so
+              anything meant to stay on screen silently scrolls away. */}
+          <main className="safe-inset-bottom flex-1 overflow-x-clip p-3 sm:p-4 lg:p-6">
             {children}
           </main>
         </div>

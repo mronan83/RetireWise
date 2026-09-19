@@ -12,6 +12,7 @@ import {
   ReferenceLine,
 } from "recharts";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Money } from "@/components/ui/money";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -442,10 +443,60 @@ export function InteractiveProjections({
     ? portfolioRunsOutAge - retirementAge
     : retirementYears;
 
+  // One definition, read by both the phone cards and the desktop table.
+  const MILESTONES = [
+    { label: "Today", idx: -1 },
+    { label: `Retire (${retirementAge})`, idx: yearsToRetirement - 1 },
+    { label: "Age 70", idx: 70 - currentAge - 1 },
+    { label: "Age 75", idx: 75 - currentAge - 1 },
+    { label: "Age 80", idx: 80 - currentAge - 1 },
+    { label: "Age 85", idx: 85 - currentAge - 1 },
+    { label: "Age 90", idx: 90 - currentAge - 1 },
+    { label: "Age 95", idx: 95 - currentAge - 1 },
+  ].filter((m) => m.idx < projection.totalValues.length);
+
+  const verdictLine = portfolioLastsFullPeriod
+    ? `Lasts to ${retirementAge + retirementYears}`
+    : `Runs out at ${portfolioRunsOutAge}`;
+
   return (
-    <div className="space-y-6">
+    // A flex column rather than a stack of siblings so the phone can put the
+    // answer above the knobs. On a wide screen the controls sit beside the
+    // results and reading order is fine; stacked, "adjust these inputs" is the
+    // first thing on screen and the number you came for is two screens down.
+    <div className="flex flex-col gap-6">
+      {/* The figure that moves when you move a slider, kept on screen while
+          you are in the controls below. This is what makes the page usable on
+          a phone: without it, every adjustment is a scroll away from its own
+          result. */}
+      <div className="sticky-under-header z-20 -order-3 -mx-3 border-y bg-background/95 px-3 py-2 backdrop-blur-sm sm:-mx-4 sm:px-4 lg:hidden">
+        <div className="flex items-center justify-between gap-3">
+          <div className="min-w-0">
+            <p className="text-[10px] uppercase tracking-wide text-muted-foreground">
+              At {retirementAge}
+            </p>
+            <p className="truncate font-mono text-base font-bold">
+              <Money value={portfolioAtRetirement} />
+            </p>
+          </div>
+          <div className="min-w-0 text-right">
+            <p className="text-[10px] uppercase tracking-wide text-muted-foreground">
+              Money
+            </p>
+            <p
+              className={cn(
+                "truncate text-base font-bold",
+                portfolioLastsFullPeriod ? "text-green-500" : "text-red-500"
+              )}
+            >
+              {verdictLine}
+            </p>
+          </div>
+        </div>
+      </div>
+
       {/* Controls */}
-      <Card>
+      <Card className="-order-1 lg:order-none">
         <CardHeader className="pb-3">
           <CardTitle>Projection Controls</CardTitle>
           <p className="text-sm text-muted-foreground">
@@ -612,198 +663,211 @@ export function InteractiveProjections({
             </div>
           </div>
 
-          {/* Retirement Duration */}
-          <div className="space-y-3">
-            <div className="flex items-center justify-between">
-              <Label className="text-sm">Years in Retirement</Label>
-              <Badge variant="outline" className="font-mono">
-                {retirementYears} years (to age {retirementAge + retirementYears})
-              </Badge>
-            </div>
-            <Slider
-              value={[retirementYears]}
-              onValueChange={(v) => updateRetirementYears(Array.isArray(v) ? v[0] : v)}
-              min={10}
-              max={45}
-              step={1}
-            />
-            <div className="flex justify-between text-xs text-muted-foreground">
-              <span>10 years (age {retirementAge + 10})</span>
-              <span>45 years (age {retirementAge + 45})</span>
-            </div>
-            <p className="text-xs text-muted-foreground">
-              How long your money needs to last. Average life expectancy is ~85, but plan for longer.
-            </p>
-          </div>
-
-          {/* Catch-Up Contributions */}
-          <div className="flex items-center justify-between rounded-lg border p-4">
-            <div className="space-y-0.5">
-              <Label className="text-sm font-medium flex items-center gap-1.5">
-                Catch-Up Contributions
-                <HelpTip text="When enabled, the projection increases IRS contribution caps when account owners turn 50 (+$7,500/yr for 401k) and applies the SECURE 2.0 enhanced catch-up at ages 60-63 (+$11,250/yr for 401k). Disable if you don't plan to increase contributions at those milestones." />
-              </Label>
+          {/* Three settings most people set once and never touch again. They
+              were between the reader and the answer on every visit; behind a
+              disclosure they are still one tap away. */}
+          <details className="group rounded-lg border">
+            <summary className="flex cursor-pointer select-none items-center justify-between gap-2 px-3 py-2.5 text-sm font-medium">
+              More assumptions
+              <span className="text-xs font-normal text-muted-foreground">
+                {retirementYears} yrs · catch-up {catchUpEnabled ? "on" : "off"} · glide path {gpEnabled ? "on" : "off"}
+              </span>
+            </summary>
+            <div className="space-y-6 border-t p-3">
+            {/* Retirement Duration */}
+            <div className="space-y-3">
+              <div className="flex items-center justify-between">
+                <Label className="text-sm">Years in Retirement</Label>
+                <Badge variant="outline" className="font-mono">
+                  {retirementYears} years (to age {retirementAge + retirementYears})
+                </Badge>
+              </div>
+              <Slider
+                value={[retirementYears]}
+                onValueChange={(v) => updateRetirementYears(Array.isArray(v) ? v[0] : v)}
+                min={10}
+                max={45}
+                step={1}
+              />
+              <div className="flex justify-between text-xs text-muted-foreground">
+                <span>10 years (age {retirementAge + 10})</span>
+                <span>45 years (age {retirementAge + 45})</span>
+              </div>
               <p className="text-xs text-muted-foreground">
-                {catchUpEnabled
-                  ? "50+ and 60-63 enhanced IRS limits applied automatically"
-                  : "Using standard under-50 IRS limits for all years"}
+                How long your money needs to last. Average life expectancy is ~85, but plan for longer.
               </p>
             </div>
-            <Switch
-              checked={catchUpEnabled}
-              onCheckedChange={updateCatchUpEnabled}
-            />
-          </div>
 
-          {/* Risk Glide Path */}
-          <div className="space-y-4 rounded-lg border p-4">
-            <div className="flex items-center justify-between">
+            {/* Catch-Up Contributions */}
+            <div className="flex items-center justify-between rounded-lg border p-4">
               <div className="space-y-0.5">
                 <Label className="text-sm font-medium flex items-center gap-1.5">
-                  Risk Glide Path
-                  <HelpTip text="Gradually shifts your portfolio from aggressive to conservative as you approach retirement — like a target-date fund. This reduces volatility near retirement to protect against large downswings (sequence-of-returns risk)." />
+                  Catch-Up Contributions
+                  <HelpTip text="When enabled, the projection increases IRS contribution caps when account owners turn 50 (+$7,500/yr for 401k) and applies the SECURE 2.0 enhanced catch-up at ages 60-63 (+$11,250/yr for 401k). Disable if you don't plan to increase contributions at those milestones." />
                 </Label>
                 <p className="text-xs text-muted-foreground">
-                  Automatically reduce risk as you approach retirement
+                  {catchUpEnabled
+                    ? "50+ and 60-63 enhanced IRS limits applied automatically"
+                    : "Using standard under-50 IRS limits for all years"}
                 </p>
               </div>
               <Switch
-                checked={gpEnabled}
-                onCheckedChange={updateGpEnabled}
+                checked={catchUpEnabled}
+                onCheckedChange={updateCatchUpEnabled}
               />
             </div>
 
-            {gpEnabled && (
-              <div className="space-y-4 pt-2">
-                {/* Start and End Risk Profiles */}
-                <div className="grid gap-4 sm:grid-cols-2">
-                  <div className="space-y-1.5">
-                    <Label className="text-xs">Starting Risk Level</Label>
-                    <Select value={gpStartProfile} onValueChange={(v) => updateGpStartProfile(v as RiskProfileId)}>
-                      <SelectTrigger className="h-8 text-xs">
-                        <SelectValue />
-                      </SelectTrigger>
-                      <SelectContent>
-                        {RISK_PROFILE_ORDER.map((id) => (
-                          <SelectItem key={id} value={id} className="text-xs">
-                            {RISK_PROFILES[id].label} — {RISK_PROFILES[id].description}
-                          </SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
-                    <p className="text-[10px] text-muted-foreground">
-                      {RISK_PROFILES[gpStartProfile].returnPct}% return, {RISK_PROFILES[gpStartProfile].volatility}% volatility
-                    </p>
-                  </div>
-                  <div className="space-y-1.5">
-                    <Label className="text-xs">Target Risk Level</Label>
-                    <Select value={gpEndProfile} onValueChange={(v) => updateGpEndProfile(v as RiskProfileId)}>
-                      <SelectTrigger className="h-8 text-xs">
-                        <SelectValue />
-                      </SelectTrigger>
-                      <SelectContent>
-                        {RISK_PROFILE_ORDER.map((id) => (
-                          <SelectItem key={id} value={id} className="text-xs">
-                            {RISK_PROFILES[id].label} — {RISK_PROFILES[id].description}
-                          </SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
-                    <p className="text-[10px] text-muted-foreground">
-                      {RISK_PROFILES[gpEndProfile].returnPct}% return, {RISK_PROFILES[gpEndProfile].volatility}% volatility
-                    </p>
-                  </div>
+            {/* Risk Glide Path */}
+            <div className="space-y-4 rounded-lg border p-4">
+              <div className="flex items-center justify-between">
+                <div className="space-y-0.5">
+                  <Label className="text-sm font-medium flex items-center gap-1.5">
+                    Risk Glide Path
+                    <HelpTip text="Gradually shifts your portfolio from aggressive to conservative as you approach retirement — like a target-date fund. This reduces volatility near retirement to protect against large downswings (sequence-of-returns risk)." />
+                  </Label>
+                  <p className="text-xs text-muted-foreground">
+                    Automatically reduce risk as you approach retirement
+                  </p>
                 </div>
-
-                {/* Transition Age Range */}
-                <div className="grid gap-4 sm:grid-cols-2">
-                  <div className="space-y-1.5">
-                    <div className="flex items-center justify-between">
-                      <Label className="text-xs">Transition Start Age</Label>
-                      <Badge variant="outline" className="font-mono text-[10px]">{gpTransitionStartAge}</Badge>
-                    </div>
-                    <Slider
-                      value={[gpTransitionStartAge]}
-                      onValueChange={(v) => updateGpTransitionStartAge(Array.isArray(v) ? v[0] : v)}
-                      min={currentAge}
-                      max={Math.max(currentAge + 1, gpTransitionEndAge - 1)}
-                      step={1}
-                    />
-                    <p className="text-[10px] text-muted-foreground">
-                      When to begin shifting allocation
-                    </p>
-                  </div>
-                  <div className="space-y-1.5">
-                    <div className="flex items-center justify-between">
-                      <Label className="text-xs">Transition End Age</Label>
-                      <Badge variant="outline" className="font-mono text-[10px]">{gpTransitionEndAge}</Badge>
-                    </div>
-                    <Slider
-                      value={[gpTransitionEndAge]}
-                      onValueChange={(v) => updateGpTransitionEndAge(Array.isArray(v) ? v[0] : v)}
-                      min={gpTransitionStartAge + 1}
-                      max={retirementAge + 10}
-                      step={1}
-                    />
-                    <p className="text-[10px] text-muted-foreground">
-                      When transition completes (can extend past retirement)
-                    </p>
-                  </div>
-                </div>
-
-                {/* Curve Shape */}
-                <div className="space-y-1.5">
-                  <Label className="text-xs">Transition Curve</Label>
-                  <div className="grid grid-cols-2 gap-2">
-                    <button
-                      onClick={() => updateGpCurve("linear")}
-                      className={cn(
-                        "rounded-lg border p-2 text-left transition-colors text-xs",
-                        gpCurve === "linear" ? "border-primary bg-primary/5" : "hover:bg-accent/50"
-                      )}
-                    >
-                      <p className="font-medium">Linear</p>
-                      <p className="text-[10px] text-muted-foreground">Steady, even shift over time</p>
-                    </button>
-                    <button
-                      onClick={() => updateGpCurve("accelerated")}
-                      className={cn(
-                        "rounded-lg border p-2 text-left transition-colors text-xs",
-                        gpCurve === "accelerated" ? "border-primary bg-primary/5" : "hover:bg-accent/50"
-                      )}
-                    >
-                      <p className="font-medium">Accelerated</p>
-                      <p className="text-[10px] text-muted-foreground">Slow start, faster shift near end</p>
-                    </button>
-                  </div>
-                </div>
-
-                {/* Inline Glide Path Preview Chart */}
-                <div className="space-y-1.5">
-                  <Label className="text-xs">Allocation Over Time</Label>
-                  <div className="h-[100px] rounded-lg border bg-muted/20 p-2">
-                    <GlidePathPreview
-                      config={glidePathConfig!}
-                      currentAge={currentAge}
-                      retirementAge={retirementAge}
-                      retirementYears={retirementYears}
-                    />
-                  </div>
-                </div>
+                <Switch
+                  checked={gpEnabled}
+                  onCheckedChange={updateGpEnabled}
+                />
               </div>
-            )}
-          </div>
+
+              {gpEnabled && (
+                <div className="space-y-4 pt-2">
+                  {/* Start and End Risk Profiles */}
+                  <div className="grid gap-4 sm:grid-cols-2">
+                    <div className="space-y-1.5">
+                      <Label className="text-xs">Starting Risk Level</Label>
+                      <Select value={gpStartProfile} onValueChange={(v) => updateGpStartProfile(v as RiskProfileId)}>
+                        <SelectTrigger className="h-8 text-xs">
+                          <SelectValue />
+                        </SelectTrigger>
+                        <SelectContent>
+                          {RISK_PROFILE_ORDER.map((id) => (
+                            <SelectItem key={id} value={id} className="text-xs">
+                              {RISK_PROFILES[id].label} — {RISK_PROFILES[id].description}
+                            </SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                      <p className="text-[10px] text-muted-foreground">
+                        {RISK_PROFILES[gpStartProfile].returnPct}% return, {RISK_PROFILES[gpStartProfile].volatility}% volatility
+                      </p>
+                    </div>
+                    <div className="space-y-1.5">
+                      <Label className="text-xs">Target Risk Level</Label>
+                      <Select value={gpEndProfile} onValueChange={(v) => updateGpEndProfile(v as RiskProfileId)}>
+                        <SelectTrigger className="h-8 text-xs">
+                          <SelectValue />
+                        </SelectTrigger>
+                        <SelectContent>
+                          {RISK_PROFILE_ORDER.map((id) => (
+                            <SelectItem key={id} value={id} className="text-xs">
+                              {RISK_PROFILES[id].label} — {RISK_PROFILES[id].description}
+                            </SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                      <p className="text-[10px] text-muted-foreground">
+                        {RISK_PROFILES[gpEndProfile].returnPct}% return, {RISK_PROFILES[gpEndProfile].volatility}% volatility
+                      </p>
+                    </div>
+                  </div>
+
+                  {/* Transition Age Range */}
+                  <div className="grid gap-4 sm:grid-cols-2">
+                    <div className="space-y-1.5">
+                      <div className="flex items-center justify-between">
+                        <Label className="text-xs">Transition Start Age</Label>
+                        <Badge variant="outline" className="font-mono text-[10px]">{gpTransitionStartAge}</Badge>
+                      </div>
+                      <Slider
+                        value={[gpTransitionStartAge]}
+                        onValueChange={(v) => updateGpTransitionStartAge(Array.isArray(v) ? v[0] : v)}
+                        min={currentAge}
+                        max={Math.max(currentAge + 1, gpTransitionEndAge - 1)}
+                        step={1}
+                      />
+                      <p className="text-[10px] text-muted-foreground">
+                        When to begin shifting allocation
+                      </p>
+                    </div>
+                    <div className="space-y-1.5">
+                      <div className="flex items-center justify-between">
+                        <Label className="text-xs">Transition End Age</Label>
+                        <Badge variant="outline" className="font-mono text-[10px]">{gpTransitionEndAge}</Badge>
+                      </div>
+                      <Slider
+                        value={[gpTransitionEndAge]}
+                        onValueChange={(v) => updateGpTransitionEndAge(Array.isArray(v) ? v[0] : v)}
+                        min={gpTransitionStartAge + 1}
+                        max={retirementAge + 10}
+                        step={1}
+                      />
+                      <p className="text-[10px] text-muted-foreground">
+                        When transition completes (can extend past retirement)
+                      </p>
+                    </div>
+                  </div>
+
+                  {/* Curve Shape */}
+                  <div className="space-y-1.5">
+                    <Label className="text-xs">Transition Curve</Label>
+                    <div className="grid grid-cols-2 gap-2">
+                      <button
+                        onClick={() => updateGpCurve("linear")}
+                        className={cn(
+                          "rounded-lg border p-2 text-left transition-colors text-xs",
+                          gpCurve === "linear" ? "border-primary bg-primary/5" : "hover:bg-accent/50"
+                        )}
+                      >
+                        <p className="font-medium">Linear</p>
+                        <p className="text-[10px] text-muted-foreground">Steady, even shift over time</p>
+                      </button>
+                      <button
+                        onClick={() => updateGpCurve("accelerated")}
+                        className={cn(
+                          "rounded-lg border p-2 text-left transition-colors text-xs",
+                          gpCurve === "accelerated" ? "border-primary bg-primary/5" : "hover:bg-accent/50"
+                        )}
+                      >
+                        <p className="font-medium">Accelerated</p>
+                        <p className="text-[10px] text-muted-foreground">Slow start, faster shift near end</p>
+                      </button>
+                    </div>
+                  </div>
+
+                  {/* Inline Glide Path Preview Chart */}
+                  <div className="space-y-1.5">
+                    <Label className="text-xs">Allocation Over Time</Label>
+                    <div className="h-[100px] rounded-lg border bg-muted/20 p-2">
+                      <GlidePathPreview
+                        config={glidePathConfig!}
+                        currentAge={currentAge}
+                        retirementAge={retirementAge}
+                        retirementYears={retirementYears}
+                      />
+                    </div>
+                  </div>
+                </div>
+              )}
+            </div>
+            </div>
+          </details>
         </CardContent>
       </Card>
 
       {/* Summary Cards — all reactive to slider controls */}
-      <div className="grid gap-3 sm:gap-4 grid-cols-2 lg:grid-cols-3 xl:grid-cols-5">
+      <div className="-order-2 grid grid-cols-2 gap-3 sm:gap-4 lg:order-none lg:grid-cols-3 xl:grid-cols-5">
         <Card>
           <CardHeader className="pb-2">
             <CardTitle className="text-xs text-muted-foreground flex items-center gap-1">Portfolio at Retirement ({retirementAge}) <HelpTip text="The projected total value of all your investment accounts at the year you retire. Accounts for contributions, employer match, salary growth, and market returns." /></CardTitle>
           </CardHeader>
           <CardContent>
-            <p className="text-xl font-bold font-mono">{formatCurrency(portfolioAtRetirement)}</p>
+            <p className="text-xl font-bold font-mono"><Money value={portfolioAtRetirement} /></p>
           </CardContent>
         </Card>
         <Card>
@@ -812,21 +876,23 @@ export function InteractiveProjections({
           </CardHeader>
           <CardContent>
             <p className="text-xs text-muted-foreground">
-              Spending: <span className="font-mono text-foreground">{formatCurrency(monthlySpending)}</span>/mo
+              Spending: <span className="font-mono text-foreground"><Money value={monthlySpending} /></span>/mo
             </p>
             <p className="text-xs text-muted-foreground">
-              Income: <span className="font-mono text-foreground">{formatCurrency(monthlyFromPortfolio + selfSSMonthly + spouseSSMonthly)}</span>/mo
+              Income: <span className="font-mono text-foreground"><Money value={monthlyFromPortfolio + selfSSMonthly + spouseSSMonthly} /></span>/mo
             </p>
-            <p className="text-xs mt-1">
+            {/* The split between portfolio and Social Security is detail, not
+                headline — it stays out of the way until there is room. */}
+            <p className="mt-1 hidden text-xs sm:block">
               ({formatCurrency(monthlyFromPortfolio)} {withdrawalLabel} + {formatCurrency(selfSSMonthly + spouseSSMonthly)} SS)
             </p>
             {monthlyFromPortfolio + selfSSMonthly + spouseSSMonthly >= monthlySpending ? (
               <p className="text-xs text-green-500 font-medium mt-1">
-                +{formatCurrency(monthlyFromPortfolio + selfSSMonthly + spouseSSMonthly - monthlySpending)} surplus
+                +<Money value={monthlyFromPortfolio + selfSSMonthly + spouseSSMonthly - monthlySpending} /> surplus
               </p>
             ) : (
               <p className="text-xs text-red-500 font-medium mt-1">
-                -{formatCurrency(monthlySpending - monthlyFromPortfolio - selfSSMonthly - spouseSSMonthly)} shortfall
+                -<Money value={monthlySpending - monthlyFromPortfolio - selfSSMonthly - spouseSSMonthly} /> shortfall
               </p>
             )}
           </CardContent>
@@ -837,7 +903,7 @@ export function InteractiveProjections({
           </CardHeader>
           <CardContent>
             <p className={cn("text-xl font-bold font-mono", portfolioAt80 > 0 ? "" : "text-red-500")}>
-              {formatCurrency(portfolioAt80)}
+              <Money value={portfolioAt80} />
             </p>
           </CardContent>
         </Card>
@@ -847,7 +913,7 @@ export function InteractiveProjections({
           </CardHeader>
           <CardContent>
             <p className={cn("text-xl font-bold font-mono", portfolioAt90 > 0 ? "" : "text-red-500")}>
-              {formatCurrency(portfolioAt90)}
+              <Money value={portfolioAt90} />
             </p>
             {portfolioAt90 <= 0 && (
               <p className="text-xs text-red-500">Money runs out before 90</p>
@@ -857,7 +923,10 @@ export function InteractiveProjections({
 
         {/* Will It Last? Card */}
         <Card className={cn(
-          "border-2",
+          // "Will it last" is the question the page exists to answer, so on a
+          // phone it leads the row at full width instead of being the fifth
+          // card in reading order.
+          "order-first col-span-2 border-2 lg:order-none lg:col-span-1",
           portfolioLastsFullPeriod ? "border-green-500/50 bg-green-500/5" : "border-red-500/50 bg-red-500/5"
         )}>
           <CardHeader className="pb-2">
@@ -873,7 +942,7 @@ export function InteractiveProjections({
                   Portfolio lasts all {retirementYears} years to age {retirementAge + retirementYears}
                 </p>
                 <p className="text-xs text-green-500 mt-0.5">
-                  {formatCurrency(portfolioAtEnd)} remaining at end
+                  <Money value={portfolioAtEnd} /> remaining at end
                 </p>
               </>
             ) : (
@@ -888,7 +957,7 @@ export function InteractiveProjections({
               </>
             )}
             <p className="text-xs text-muted-foreground mt-2">
-              Based on {scenario.name} ({scenario.returnPct}% return), {formatCurrency(monthlySpending)}/mo spending, {withdrawalLabel} withdrawal
+              Based on {scenario.name} ({scenario.returnPct}% return), <Money value={monthlySpending} />/mo spending, {withdrawalLabel} withdrawal
               {gpEnabled && (
                 <span className="text-primary"> + glide path ({RISK_PROFILES[gpStartProfile].label} → {RISK_PROFILES[gpEndProfile].label})</span>
               )}
@@ -925,8 +994,11 @@ export function InteractiveProjections({
                 />
                 {hasStaggeredRetirement ? (
                   <>
-                    <ReferenceLine x={Math.min(retirementAge, spouseRetireAtYourAge!)} stroke="hsl(var(--muted-foreground))" strokeDasharray="5 5" label={{ value: spouseRetireAtYourAge! < retirementAge ? "Spouse Retires" : "You Retire", fill: "hsl(var(--muted-foreground))", fontSize: 9 }} />
-                    <ReferenceLine x={Math.max(retirementAge, spouseRetireAtYourAge!)} stroke="hsl(var(--muted-foreground))" strokeDasharray="3 3" strokeOpacity={0.5} label={{ value: spouseRetireAtYourAge! < retirementAge ? "You Retire" : "Spouse Retires", fill: "hsl(var(--muted-foreground))", fontSize: 9 }} />
+                    {/* Stacked rather than both centred on the line: at a
+                        phone's width the two labels land on top of each other
+                        and render as one unreadable smear. */}
+                    <ReferenceLine x={Math.min(retirementAge, spouseRetireAtYourAge!)} stroke="hsl(var(--muted-foreground))" strokeDasharray="5 5" label={{ value: spouseRetireAtYourAge! < retirementAge ? "Spouse retires" : "You retire", position: "insideTopLeft", fill: "hsl(var(--muted-foreground))", fontSize: 9 }} />
+                    <ReferenceLine x={Math.max(retirementAge, spouseRetireAtYourAge!)} stroke="hsl(var(--muted-foreground))" strokeDasharray="3 3" strokeOpacity={0.5} label={{ value: spouseRetireAtYourAge! < retirementAge ? "You retire" : "Spouse retires", position: "insideBottomLeft", fill: "hsl(var(--muted-foreground))", fontSize: 9 }} />
                   </>
                 ) : (
                   <ReferenceLine x={retirementAge} stroke="hsl(var(--muted-foreground))" strokeDasharray="5 5" label={{ value: "Retire", fill: "hsl(var(--muted-foreground))", fontSize: 10 }} />
@@ -975,7 +1047,10 @@ export function InteractiveProjections({
               </AreaChart>
             </ResponsiveContainer>
           </div>
-          <div className="grid grid-cols-3 gap-4 mt-3 text-center">
+          {/* Three columns of seven-figure currency do not fit a phone; the
+              range in particular wrapped into three lines of digits. Two
+              columns with the range on its own row below reads in one pass. */}
+          <div className="mt-3 grid grid-cols-2 gap-4 text-center sm:grid-cols-3">
             <div>
               <p className="text-xs text-muted-foreground">Success Rate</p>
               <p className={cn("font-mono font-bold text-lg",
@@ -987,11 +1062,13 @@ export function InteractiveProjections({
             </div>
             <div>
               <p className="text-xs text-muted-foreground">Median at Retirement</p>
-              <p className="font-mono font-medium">{formatCurrency(monteCarloData.medianAtRetirement)}</p>
+              <p className="font-mono font-medium"><Money value={monteCarloData.medianAtRetirement} /></p>
             </div>
-            <div>
+            <div className="col-span-2 sm:col-span-1">
               <p className="text-xs text-muted-foreground">Range (10th-90th)</p>
-              <p className="font-mono text-sm">{formatCurrency(monteCarloData.worstCase)} — {formatCurrency(monteCarloData.bestCase)}</p>
+              <p className="font-mono text-sm whitespace-nowrap">
+                <Money value={monteCarloData.worstCase} /> — <Money value={monteCarloData.bestCase} />
+              </p>
             </div>
           </div>
         </CardContent>
@@ -1004,7 +1081,9 @@ export function InteractiveProjections({
         </CardHeader>
         <CardContent>
           <Tabs defaultValue="milestones">
-            <TabsList className="mb-4">
+            {/* Four labels need about 520px. Rather than shrink them to
+                illegibility, the strip scrolls. */}
+            <TabsList className="mb-4 max-w-full justify-start overflow-x-auto">
               <TabsTrigger value="milestones">Key Milestones</TabsTrigger>
               <TabsTrigger value="accumulation">Accumulation (5yr)</TabsTrigger>
               <TabsTrigger value="drawdown">Drawdown (5yr)</TabsTrigger>
@@ -1013,7 +1092,46 @@ export function InteractiveProjections({
 
             {/* Key Milestones */}
             <TabsContent value="milestones">
-              <div className="rounded-lg border overflow-x-auto">
+              {/* On a phone the same data is one card per milestone: the total
+                  is what you are looking for, and the per-account split reads
+                  down the card instead of off the side of a table nobody can
+                  see the right-hand end of. */}
+              <div className="space-y-2 sm:hidden">
+                {MILESTONES.map((milestone) => (
+                  <div key={milestone.label} className="rounded-lg border p-3">
+                    <div className="flex items-baseline justify-between gap-2">
+                      <span className="text-sm font-medium">{milestone.label}</span>
+                      <span className="font-mono text-base font-bold">
+                        <Money
+                          value={
+                            milestone.idx === -1
+                              ? accounts.reduce((sum, a) => sum + a.value, 0)
+                              : projection.totalValues[milestone.idx] || 0
+                          }
+                        />
+                      </span>
+                    </div>
+                    <dl className="mt-2 space-y-0.5 border-t pt-2">
+                      {projection.accountProjections.map((ap) => (
+                        <div key={ap.name} className="flex justify-between gap-2 text-xs">
+                          <dt className="min-w-0 truncate text-muted-foreground">{ap.name}</dt>
+                          <dd className="shrink-0 font-mono">
+                            <Money
+                              value={
+                                milestone.idx === -1
+                                  ? ap.currentValue
+                                  : ap.projectedValues[milestone.idx] || 0
+                              }
+                            />
+                          </dd>
+                        </div>
+                      ))}
+                    </dl>
+                  </div>
+                ))}
+              </div>
+
+              <div className="hidden overflow-x-auto rounded-lg border sm:block">
                 <Table>
                   <TableHeader>
                     <TableRow>
@@ -1025,18 +1143,7 @@ export function InteractiveProjections({
                     </TableRow>
                   </TableHeader>
                   <TableBody>
-                    {[
-                      { label: "Today", idx: -1 },
-                      { label: `Retire (${retirementAge})`, idx: yearsToRetirement - 1 },
-                      { label: "Age 70", idx: 70 - currentAge - 1 },
-                      { label: "Age 75", idx: 75 - currentAge - 1 },
-                      { label: "Age 80", idx: 80 - currentAge - 1 },
-                      { label: "Age 85", idx: 85 - currentAge - 1 },
-                      { label: "Age 90", idx: 90 - currentAge - 1 },
-                      { label: "Age 95", idx: 95 - currentAge - 1 },
-                    ]
-                      .filter((m) => m.idx < projection.totalValues.length)
-                      .map((milestone) => (
+                    {MILESTONES.map((milestone) => (
                         <TableRow key={milestone.label}>
                           <TableCell className="font-medium text-sm">{milestone.label}</TableCell>
                           {projection.accountProjections.map((ap) => (

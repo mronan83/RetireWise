@@ -200,3 +200,13 @@
     font-size: 16px;
   }
 }
+
+/*
+ * Sit directly beneath the app header, which is 3.5rem plus whatever the
+ * device reserves at the top. Used by anything that stays on screen while the
+ * page scrolls underneath it.
+ */
+@utility sticky-under-header {
+  position: sticky;
+  top: calc(3.5rem + env(safe-area-inset-top, 0px));
+}
