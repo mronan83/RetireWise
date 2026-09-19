@@ -9,8 +9,7 @@ import {
   households,
   householdMembers,
 } from "@/lib/db/schema";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { Badge } from "@/components/ui/badge";
+import { CollapsibleSection } from "@/components/ui/collapsible-section";
 import { PreferencesForm } from "./preferences-form";
 import { SocialSecurityForm } from "./social-security-form";
 import { ContributionsSection } from "./contributions-section";
@@ -97,29 +96,30 @@ export default async function SettingsPage() {
         </p>
       </div>
 
-      <Card>
-        <CardHeader>
-          <CardTitle>Household Sharing</CardTitle>
-        </CardHeader>
-        <CardContent>
-          <HouseholdSharing household={householdData} />
-        </CardContent>
-      </Card>
+      <CollapsibleSection
+        title="Household Sharing"
+        summary={householdData ? "Shared household" : "Not shared"}
+      >
+        <HouseholdSharing household={householdData} />
+      </CollapsibleSection>
 
-      <Card>
-        <CardHeader>
-          <CardTitle>Household & Retirement Preferences</CardTitle>
-        </CardHeader>
-        <CardContent>
-          <PreferencesForm preferences={currentPrefs} />
-        </CardContent>
-      </Card>
+      <CollapsibleSection
+        title="Household & Retirement Preferences"
+        summary={
+          currentPrefs?.currentAge
+            ? `Retire at ${currentPrefs.retirementAge} · ${currentPrefs.riskTolerance ?? "moderate"} risk`
+            : "Age, retirement target, risk, salary"
+        }
+      >
+        <PreferencesForm preferences={currentPrefs} />
+      </CollapsibleSection>
 
-      <Card>
-        <CardHeader>
-          <CardTitle>Retirement Contributions</CardTitle>
-        </CardHeader>
-        <CardContent>
+      <CollapsibleSection
+        title="Retirement Contributions"
+        summary={`${contributionsList.filter((c) => c.isActive).length} active`}
+        defaultOpen
+      >
+        <div>
           <p className="text-sm text-muted-foreground mb-4">
             Track what you and your spouse contribute to retirement accounts.
             Include employer matches to see the full picture.
@@ -146,61 +146,39 @@ export default async function SettingsPage() {
             selfAge={currentPrefs?.currentAge}
             spouseAge={currentPrefs?.spouseCurrentAge}
           />
-        </CardContent>
-      </Card>
+        </div>
+      </CollapsibleSection>
 
-      <Card>
-        <CardHeader>
-          <CardTitle>IRS Contribution Limits</CardTitle>
-        </CardHeader>
-        <CardContent>
-          <IrsLimitsSection />
-        </CardContent>
-      </Card>
+      <CollapsibleSection
+        title="IRS Contribution Limits"
+        summary="Reference figures for the current tax year"
+      >
+        <IrsLimitsSection />
+      </CollapsibleSection>
 
-      <Card>
-        <CardHeader>
-          <CardTitle>AI Model</CardTitle>
-        </CardHeader>
-        <CardContent>
-          <AiProviderSection
-            currentProvider={currentPrefs?.aiProvider || "anthropic"}
-          />
-        </CardContent>
-      </Card>
+      <CollapsibleSection
+        title="AI Model"
+        summary={currentPrefs?.aiProvider || "anthropic"}
+      >
+        <AiProviderSection
+          currentProvider={currentPrefs?.aiProvider || "anthropic"}
+        />
+      </CollapsibleSection>
 
       <div className="grid gap-6 lg:grid-cols-2">
-        <Card>
-          <CardHeader>
-            <CardTitle className="flex items-center gap-2">
-              My Social Security
-              <Badge variant="secondary" className="text-xs">
-                Self
-              </Badge>
-            </CardTitle>
-          </CardHeader>
-          <CardContent>
-            <SocialSecurityForm
-              owner="self"
-              benefits={selfSS[0] || null}
-            />
-          </CardContent>
-        </Card>
+        <CollapsibleSection
+          title="Your Social Security"
+          summary={selfSS[0]?.benefitAtFRA ? `$${Math.round(Number(selfSS[0].benefitAtFRA)).toLocaleString()}/mo at FRA` : "Not set"}
+        >
+          <SocialSecurityForm owner="self" benefits={selfSS[0] || null} />
+        </CollapsibleSection>
 
-        <Card>
-          <CardHeader>
-            <CardTitle className="flex items-center gap-2">
-              Spouse&apos;s Social Security
-              <Badge className="text-xs">Spouse</Badge>
-            </CardTitle>
-          </CardHeader>
-          <CardContent>
-            <SocialSecurityForm
-              owner="spouse"
-              benefits={spouseSS[0] || null}
-            />
-          </CardContent>
-        </Card>
+        <CollapsibleSection
+          title="Spouse's Social Security"
+          summary={spouseSS[0]?.benefitAtFRA ? `$${Math.round(Number(spouseSS[0].benefitAtFRA)).toLocaleString()}/mo at FRA` : "Not set"}
+        >
+          <SocialSecurityForm owner="spouse" benefits={spouseSS[0] || null} />
+        </CollapsibleSection>
       </div>
     </div>
   );
