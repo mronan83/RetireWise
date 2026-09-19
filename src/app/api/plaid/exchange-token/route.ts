@@ -58,33 +58,47 @@ export async function POST(request: Request) {
     });
   }
 
-  try {
-    // An institution can carry both — a brokerage with a cash sweep, a bank
-    // with a mortgage — so both run and each skips what it does not find.
-    const [holdingCounts, balanceCounts] = await Promise.all([
-      syncPlaidItem({ client, clerkId: userId, itemId, accessToken, institutionName }),
-      syncPlaidBalances({ client, clerkId: userId, itemId, accessToken, institutionName }),
-    ]);
+  // An institution carries some products and not others: a bank has balances
+  // and no holdings, a brokerage the reverse. Asking each for what it does not
+  // have is expected and must not be read as the link failing — settling them
+  // independently is the difference between "your balance is in" and an error
+  // message on top of a row that imported correctly.
+  const [holdings, balances] = await Promise.allSettled([
+    syncPlaidItem({ client, clerkId: userId, itemId, accessToken, institutionName }),
+    syncPlaidBalances({ client, clerkId: userId, itemId, accessToken, institutionName }),
+  ]);
 
-    revalidatePath("/dashboard");
-    revalidatePath("/accounts");
-    revalidatePath("/holdings");
-    revalidatePath("/net-worth");
+  if (holdings.status === "rejected") {
+    console.error("Holdings sync failed for", itemId, holdings.reason);
+  }
+  if (balances.status === "rejected") {
+    console.error("Balance sync failed for", itemId, balances.reason);
+  }
 
-    return Response.json({ success: true, ...holdingCounts, ...balanceCounts });
-  } catch (e) {
-    // The item is linked either way; holdings can be picked up by the nightly
-    // refresh. Say so rather than reporting a clean success the UI can't tell
-    // apart from an import that actually landed.
-    console.error("Failed to sync holdings:", e);
-    revalidatePath("/accounts");
+  revalidatePath("/dashboard");
+  revalidatePath("/accounts");
+  revalidatePath("/holdings");
+  revalidatePath("/net-worth");
+
+  const imported = {
+    ...(holdings.status === "fulfilled" ? holdings.value : {}),
+    ...(balances.status === "fulfilled" ? balances.value : {}),
+  };
+  const anythingImported = Object.values(imported).some((n) => Number(n) > 0);
+
+  // Only a link that brought nothing back at all is worth flagging. Anything
+  // else is a normal partial result and the numbers say what landed.
+  if (!anythingImported) {
     return Response.json(
       {
         success: true,
-        holdingsSynced: false,
-        error: "Account linked, but holdings could not be imported yet.",
+        ...imported,
+        error:
+          "Account linked, but nothing was imported yet. The nightly refresh will try again.",
       },
       { status: 207 }
     );
   }
+
+  return Response.json({ success: true, ...imported });
 }

@@ -8,6 +8,8 @@ import { snapshotNetWorth } from "@/lib/utils/net-worth-snapshot";
 import { formatCurrency } from "@/lib/utils/format";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { PlaidLinkButton } from "@/components/plaid/plaid-link-button";
+import { DuplicateCashReview, type DuplicatePair } from "./duplicate-cash-review";
+import { normalizeName } from "@/lib/plaid/sync";
 import {
   TrendingUp,
   Home,
@@ -64,6 +66,48 @@ export default async function NetWorthPage() {
   const linkedCash = cash.filter((c) => c.plaidAccountId !== null).length;
   const linkedDebts = debtsList.filter((d) => d.plaidAccountId !== null).length;
 
+  // A linked balance sitting beside a hand-entered one at the same institution
+  // is the same money twice, and here it lands straight in the net worth
+  // total. Names rarely match well enough to resolve this automatically.
+  const duplicatePairs: DuplicatePair[] = [
+    ...cash
+      .filter((c) => c.plaidAccountId !== null)
+      .flatMap((linked) =>
+        cash
+          .filter(
+            (m) =>
+              m.plaidAccountId === null &&
+              normalizeName(m.institution) === normalizeName(linked.institution)
+          )
+          .map<DuplicatePair>((m) => ({
+            kind: "cash",
+            linkedId: linked.id,
+            linkedName: linked.name,
+            linkedValue: Number(linked.balance),
+            manualId: m.id,
+            manualName: m.name,
+            manualValue: Number(m.balance),
+            institution: linked.institution ?? "",
+          }))
+      ),
+    ...debtsList
+      .filter((d) => d.plaidAccountId !== null)
+      .flatMap((linked) =>
+        debtsList
+          .filter((m) => m.plaidAccountId === null && m.debtType === linked.debtType)
+          .map<DuplicatePair>((m) => ({
+            kind: "debt",
+            linkedId: linked.id,
+            linkedName: linked.name,
+            linkedValue: Number(linked.currentBalance),
+            manualId: m.id,
+            manualName: m.name,
+            manualValue: Number(m.currentBalance),
+            institution: linked.name,
+          }))
+      ),
+  ];
+
   return (
     <div className="space-y-6">
       <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
@@ -84,6 +128,8 @@ export default async function NetWorthPage() {
             accounts page. */}
         <PlaidLinkButton scope="banking" label="Connect bank or loan" />
       </div>
+
+      {duplicatePairs.length > 0 && <DuplicateCashReview pairs={duplicatePairs} />}
 
       {/* Summary cards */}
       <div className="grid gap-3 sm:gap-4 grid-cols-2 sm:grid-cols-3 lg:grid-cols-6">

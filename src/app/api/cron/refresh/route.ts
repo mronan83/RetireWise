@@ -37,8 +37,20 @@ export async function GET(request: Request) {
         accessToken,
         institutionName: item.institutionName,
       };
-      await syncPlaidItem(shared);
-      await syncPlaidBalances(shared);
+      // Settled, not sequential: a bank item has no holdings endpoint, and
+      // letting that throw skipped the balance sync and marked the item
+      // errored — so the account would have stopped refreshing entirely.
+      const results = await Promise.allSettled([
+        syncPlaidItem(shared),
+        syncPlaidBalances(shared),
+      ]);
+      const failures = results.filter((r) => r.status === "rejected");
+      if (failures.length === results.length) {
+        throw (failures[0] as PromiseRejectedResult).reason;
+      }
+      for (const f of failures) {
+        console.warn(`Partial refresh for item ${item.id}:`, (f as PromiseRejectedResult).reason);
+      }
 
       await db
         .update(plaidItems)
