@@ -23,7 +23,7 @@ export default async function DashboardLayout({
             <SidebarNav />
           </div>
         </aside>
-        <div className="flex flex-1 flex-col">
+        <div className="flex min-w-0 flex-1 flex-col">
           <DashboardHeader isDemo={isDemo} email={user?.email ?? null} />
           <main className="safe-inset-bottom flex-1 overflow-x-hidden p-3 sm:p-4 lg:p-6">
             {children}

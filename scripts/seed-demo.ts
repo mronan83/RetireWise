@@ -9,11 +9,7 @@ import * as schema from "../src/lib/db/schema";
 
 const DEMO_ID = "demo_user_retirewise";
 
-async function main() {
-  const sql = postgres(
-    (process.env.SUPABASE_DATABASE_URL ?? process.env.DATABASE_URL)!,
-    { prepare: false, max: 1 }
-  );
+async function main(sql: postgres.Sql) {
   const db = drizzle(sql, { schema });
 
   console.log("Cleaning existing demo data...");
@@ -39,7 +35,7 @@ async function main() {
     schema.userPreferences,
   ];
   for (const table of tables) {
-    await db.delete(table).where(eq((table as any).clerkId, DEMO_ID));
+    await db.delete(table).where(eq((table as { clerkId: typeof schema.accounts.clerkId }).clerkId, DEMO_ID));
   }
 
   console.log("Seeding demo data...");
@@ -133,7 +129,7 @@ async function main() {
       accountId: acctMap[h.accountName],
       ticker: h.ticker,
       name: h.name,
-      assetClass: h.assetClass as any,
+      assetClass: h.assetClass as typeof schema.holdings.$inferInsert.assetClass,
       shares: String(h.shares),
       costBasisPerShare: String(h.costBasis),
       currentPrice: String(h.price),
@@ -308,4 +304,22 @@ async function main() {
   console.log(`\nAccess demo at: https://your-app.vercel.app/?demo=true`);
 }
 
-main().catch(console.error);
+/**
+ * Close the connection and set an exit code.
+ *
+ * postgres.js keeps its socket open, so a script that just falls off the end
+ * of main() never exits — which in CI is an unattended step that hangs until
+ * the job times out rather than failing. Closing explicitly, and exiting
+ * non-zero on failure, makes this usable as a build step.
+ */
+const sql = postgres(
+  (process.env.SUPABASE_DATABASE_URL ?? process.env.DATABASE_URL)!,
+  { prepare: false, max: 1 }
+);
+
+main(sql)
+  .catch((error) => {
+    console.error(error);
+    process.exitCode = 1;
+  })
+  .finally(() => sql.end({ timeout: 5 }));

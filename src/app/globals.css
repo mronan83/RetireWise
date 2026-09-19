@@ -128,43 +128,75 @@
     @apply font-sans;
   }
 }
-@layer components {
-  /*
-   * Cap an overlay at what the device is actually showing.
-   *
-   * A centred, fixed-position panel with no height limit grows past the
-   * viewport in both directions at once: the top half goes above y=0 where
-   * nothing can scroll it back, and the submit button goes below the fold.
-   * The panel looks fine on a laptop and is unusable on a phone.
-   *
-   * `dvh` rather than `vh` because iOS Safari resolves `vh` against the
-   * *large* viewport — the height with the toolbar hidden — so a panel sized
-   * in `vh` still runs underneath the toolbar. The safe-area insets keep it
-   * clear of the notch and the home indicator.
-   */
-  .overlay-max-h {
-    max-height: calc(
-      100dvh - env(safe-area-inset-top, 0px) - env(safe-area-inset-bottom, 0px) -
-        2rem
-    );
-  }
+/*
+ * Custom utilities are declared with `@utility`, not inside `@layer
+ * components`. Tailwind v4 only emits a `@layer components` rule when it sees
+ * a matching candidate in the scanned source, and a class referenced through
+ * `cn()` inside a long template string is not reliably seen — these rules
+ * silently vanished from the production build while working in dev.
+ */
 
-  /* Same idea for a panel pinned to an edge, which owns its whole axis. */
-  .overlay-edge-h {
-    max-height: calc(
-      100dvh - env(safe-area-inset-top, 0px) - env(safe-area-inset-bottom, 0px)
-    );
-  }
+/*
+ * Cap an overlay at what the device is actually showing.
+ *
+ * A centred, fixed-position panel with no height limit grows past the viewport
+ * in both directions at once: the top half goes above y=0 where nothing can
+ * scroll it back, and the submit button goes below the fold. The panel looks
+ * fine on a laptop and is unusable on a phone.
+ *
+ */
+@utility overlay-max-h {
+  /* `vh` first as a floor for anything without `dvh`. iOS Safari resolves
+     `vh` against the *large* viewport — the height with the toolbar hidden —
+     so `dvh` is what actually tracks the visible area. */
+  max-height: calc(100vh - env(safe-area-inset-top, 0px) - env(safe-area-inset-bottom, 0px) - 2rem);
+  max-height: calc(100dvh - env(safe-area-inset-top, 0px) - env(safe-area-inset-bottom, 0px) - 2rem);
+  overflow-y: auto;
+  overscroll-behavior: contain;
+}
 
-  /* Keep a panel's content clear of the notch and the home indicator. */
-  .safe-inset-y {
-    padding-top: env(safe-area-inset-top, 0px);
-    padding-bottom: env(safe-area-inset-bottom, 0px);
-  }
-  .safe-inset-bottom {
-    padding-bottom: env(safe-area-inset-bottom, 0px);
-  }
-  .safe-inset-top {
-    padding-top: env(safe-area-inset-top, 0px);
+/* Same idea for a panel pinned to an edge, which owns its whole axis. */
+@utility overlay-edge-h {
+  max-height: calc(100vh - env(safe-area-inset-top, 0px) - env(safe-area-inset-bottom, 0px));
+  max-height: calc(100dvh - env(safe-area-inset-top, 0px) - env(safe-area-inset-bottom, 0px));
+  overflow-y: auto;
+  overscroll-behavior: contain;
+}
+
+/* Keep content clear of the notch and the home indicator. */
+@utility safe-inset-y {
+  padding-top: env(safe-area-inset-top, 0px);
+  padding-bottom: env(safe-area-inset-bottom, 0px);
+}
+
+@utility safe-inset-bottom {
+  padding-bottom: env(safe-area-inset-bottom, 0px);
+}
+
+@utility safe-inset-top {
+  padding-top: env(safe-area-inset-top, 0px);
+}
+
+/*
+ * Never let a text-entry control render below 16px on a phone.
+ *
+ * iOS Safari zooms the page when a control smaller than 16px is focused, and
+ * it does not zoom back out — the reader is left panning a magnified layout
+ * to find the rest of the form. Individual components kept overriding the
+ * Input's own responsive size with `text-xs` for dense tables and reopening
+ * the problem one component at a time, so the guarantee lives here instead.
+ *
+ * Deliberately outside every `@layer`, which puts it above Tailwind's
+ * utilities in the cascade: a `text-xs` on a component cannot silently win.
+ * Controls that raise no keyboard are excluded — they never trigger the zoom.
+ *
+ * The cost is that dense tables read a little larger on a phone. That is the
+ * better side of the trade.
+ */
+@media (max-width: 767px) {
+  input:not([type="range"], [type="checkbox"], [type="radio"], [type="color"], [type="file"], [type="button"], [type="submit"], [type="reset"]),
+  select,
+  textarea {
+    font-size: 16px;
   }
 }

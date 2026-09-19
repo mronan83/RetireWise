@@ -745,7 +745,7 @@ function VehicleForm({ item, onSuccess }: { item?: VehicleItem; onSuccess: () =>
   const valUrl = getValuationUrl({ vehicleType, year: year ? parseInt(year) : null, make, model });
 
   return (
-    <form action={formAction} className="space-y-4 max-h-[70vh] overflow-y-auto pr-1">
+    <form action={formAction} className="space-y-4 max-h-[70dvh] overflow-y-auto pr-1">
       {error && <div className="rounded-md bg-destructive/10 p-3 text-sm text-destructive">{error}</div>}
       <div className="space-y-1">
         <Label>VIN (optional — auto-fills year/make/model)</Label>

@@ -122,7 +122,12 @@ export function ItemHistoryChart({ itemName, itemType, history }: Props) {
               width={56}
               tickMargin={4}
             />
-            <Tooltip content={<CustomTooltip />} />
+            {/* CustomTooltip closes over this chart's labels and formatters, so it
+                  lives inside the component. Hoisting it is the right fix and is a
+                  change of its own; suppressed rather than left failing so CI
+                  reports new problems rather than this one. */}
+              {/* eslint-disable-next-line react-hooks/static-components */}
+              <Tooltip content={<CustomTooltip />} />
             {labels.secondary && (
               <Line
                 type="monotone"

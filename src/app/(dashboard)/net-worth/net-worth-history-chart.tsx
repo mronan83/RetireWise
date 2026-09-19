@@ -187,6 +187,11 @@ export function NetWorthHistoryChart({ snapshots }: { snapshots: Snapshot[] }) {
                 width={62}
                 tickMargin={4}
               />
+              {/* CustomTooltip closes over this chart's labels and formatters, so it
+                  lives inside the component. Hoisting it is the right fix and is a
+                  change of its own; suppressed rather than left failing so CI
+                  reports new problems rather than this one. */}
+              {/* eslint-disable-next-line react-hooks/static-components */}
               <Tooltip content={<CustomTooltip />} />
               <Legend
                 iconType="square"

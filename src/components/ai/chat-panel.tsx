@@ -125,7 +125,7 @@ export function ChatPanel() {
         "fixed z-50 flex flex-col rounded-xl border bg-card shadow-2xl transition-all",
         isFullScreen
           ? "inset-2 sm:inset-4 lg:inset-8"
-          : "bottom-3 right-3 sm:bottom-6 sm:right-6 w-[calc(100vw-24px)] sm:w-[440px] h-[70vh] sm:h-[600px] max-h-[80vh]"
+          : "bottom-3 right-3 sm:bottom-6 sm:right-6 w-[calc(100dvw-24px)] sm:w-[440px] h-[70dvh] sm:h-[600px] max-h-[80dvh]"
       )}
       style={!isFullScreen ? { resize: "both", overflow: "hidden", minWidth: 280, minHeight: 350 } : undefined}
     >

@@ -1,0 +1,94 @@
+name: CI
+
+on:
+  push:
+    branches: ["**"]
+  pull_request:
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  # A throwaway database for the run. Nothing here reaches a real project.
+  SUPABASE_DATABASE_URL: postgres://postgres:postgres@127.0.0.1:5432/retirewise_test
+  # Demo mode never contacts Supabase, but the values must be present for the
+  # build to resolve them.
+  NEXT_PUBLIC_SUPABASE_URL: http://127.0.0.1:54321
+  NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY: ci-placeholder-key
+  NEXT_PUBLIC_DEMO_ENABLED: "true"
+  ENCRYPTION_KEY: "0000000000000000000000000000000000000000000000000000000000000000"
+  CRON_SECRET: ci
+
+jobs:
+  checks:
+    name: Lint and types
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v5
+        with:
+          node-version: 22
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm lint
+      - run: pnpm exec tsc --noEmit
+
+  mobile:
+    name: Mobile layout
+    runs-on: ubuntu-latest
+    # Two WebKit projects and one Chromium against a real build; well inside
+    # this, and a hang should fail rather than burn the hour.
+    timeout-minutes: 20
+
+    services:
+      postgres:
+        image: postgres:17
+        env:
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: retirewise_test
+        ports: ["5432:5432"]
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+
+    steps:
+      - uses: actions/checkout@v5
+
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v5
+        with:
+          node-version: 22
+          cache: pnpm
+
+      - run: pnpm install --frozen-lockfile
+
+      # WebKit is the engine the reported bug appeared on, so it is not
+      # optional here. --with-deps pulls the system libraries it needs.
+      - name: Install browsers
+        run: pnpm exec playwright install --with-deps webkit chromium
+
+      - name: Create the schema
+        run: pnpm db:migrate:ci
+
+      - name: Seed the demo household
+        run: pnpm db:seed-demo:ci
+
+      - name: Build
+        run: pnpm build
+
+      - name: Run the mobile suite
+        run: pnpm test:e2e
+
+      # The report carries the failing screenshot and a trace that can be
+      # opened locally, which is the difference between "a test failed" and
+      # knowing what the screen looked like.
+      - uses: actions/upload-artifact@v4
+        if: ${{ !cancelled() }}
+        with:
+          name: playwright-report
+          path: playwright-report/
+          retention-days: 14

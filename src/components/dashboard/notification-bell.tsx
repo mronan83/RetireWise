@@ -33,18 +33,27 @@ export function NotificationBell() {
   const [alerts, setAlerts] = useState<Alert[]>([]);
   const [loaded, setLoaded] = useState(false);
 
-  const fetchAlerts = useCallback(async () => {
-    const res = await fetch("/api/alerts");
-    if (res.ok) {
-      const data = await res.json();
-      setAlerts(data);
-    }
-    setLoaded(true);
-  }, []);
+  const [reloadToken, setReloadToken] = useState(0);
+  const reload = useCallback(() => setReloadToken((n) => n + 1), []);
 
   useEffect(() => {
-    fetchAlerts();
-  }, [fetchAlerts]);
+    const controller = new AbortController();
+
+    (async () => {
+      try {
+        const res = await fetch("/api/alerts", { signal: controller.signal });
+        if (!res.ok) return;
+        const data = await res.json();
+        if (!controller.signal.aborted) setAlerts(data);
+      } catch {
+        // An aborted request is the component going away, not a failure.
+      } finally {
+        if (!controller.signal.aborted) setLoaded(true);
+      }
+    })();
+
+    return () => controller.abort();
+  }, [reloadToken]);
 
   const handleDismiss = async (id: string) => {
     setAlerts((prev) => prev.filter((a) => a.id !== id));
