@@ -1,8 +1,9 @@
-import { auth } from "@/lib/auth";
+import { getApiUserId } from "@/lib/auth-helpers";
 import { eq } from "drizzle-orm";
 import { getDb } from "@/lib/db";
 import { userPreferences } from "@/lib/db/schema";
 import { encrypt, decrypt, maskKey } from "@/lib/utils/encryption";
+import { CLAUDE_MODELS, isValidClaudeModel, resolveClaudeModel } from "@/lib/ai/models";
 
 const KEY_COLUMNS = {
   anthropic: "anthropicApiKey",
@@ -11,13 +12,13 @@ const KEY_COLUMNS = {
 } as const;
 
 export async function POST(request: Request) {
-  const { userId } = await auth();
+  const userId = await getApiUserId();
   if (!userId) {
     return Response.json({ error: "Unauthorized" }, { status: 401 });
   }
 
   const body = await request.json();
-  const { provider, apiKey, removeKey } = body;
+  const { provider, apiKey, removeKey, claudeModel } = body;
 
   const db = getDb();
   const existing = await db
@@ -31,6 +32,15 @@ export async function POST(request: Request) {
   // Save provider selection
   if (provider && ["anthropic", "google", "openai", "gateway"].includes(provider)) {
     data.aiProvider = provider;
+  }
+
+  // Save the Claude model choice. Rejected unless it is one we offer, so a
+  // stale or hand-edited value can never reach the provider.
+  if (claudeModel !== undefined) {
+    if (!isValidClaudeModel(claudeModel)) {
+      return Response.json({ error: "Unknown model" }, { status: 400 });
+    }
+    data.anthropicModel = claudeModel;
   }
 
   // Save or remove API key
@@ -56,7 +66,7 @@ export async function POST(request: Request) {
 }
 
 export async function GET() {
-  const { userId } = await auth();
+  const userId = await getApiUserId();
   if (!userId) {
     return Response.json({ error: "Unauthorized" }, { status: 401 });
   }
@@ -65,6 +75,7 @@ export async function GET() {
   const prefs = await db
     .select({
       aiProvider: userPreferences.aiProvider,
+      anthropicModel: userPreferences.anthropicModel,
       anthropicApiKey: userPreferences.anthropicApiKey,
       googleApiKey: userPreferences.googleApiKey,
       openaiApiKey: userPreferences.openaiApiKey,
@@ -74,7 +85,14 @@ export async function GET() {
     .limit(1);
 
   const pref = prefs[0];
-  if (!pref) return Response.json({ provider: "anthropic", keys: {} });
+  if (!pref) {
+    return Response.json({
+      provider: "anthropic",
+      claudeModel: resolveClaudeModel(null),
+      claudeModels: CLAUDE_MODELS,
+      keys: {},
+    });
+  }
 
   // Return masked keys (never send the real key back to the client)
   const keys: Record<string, { configured: boolean; masked: string | null; source: string }> = {};
@@ -102,6 +120,8 @@ export async function GET() {
 
   return Response.json({
     provider: pref.aiProvider || "anthropic",
+    claudeModel: resolveClaudeModel(pref.anthropicModel),
+    claudeModels: CLAUDE_MODELS,
     keys,
   });
 }

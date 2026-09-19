@@ -287,6 +287,7 @@ export const userPreferences = pgTable("user_preferences", {
 
   // AI provider preference
   aiProvider: text("ai_provider").default("anthropic"),
+  anthropicModel: text("anthropic_model"),
   // Encrypted API keys (user-provided, optional — falls back to env vars)
   anthropicApiKey: text("anthropic_api_key"),
   googleApiKey: text("google_api_key"),

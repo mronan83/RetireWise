@@ -1,4 +1,4 @@
-import { auth } from "@/lib/auth";
+import { getApiUserId } from "@/lib/auth-helpers";
 import { eq, and } from "drizzle-orm";
 import { generateText } from "ai";
 import { getDb } from "@/lib/db";
@@ -30,7 +30,7 @@ const COLORS = [
 ];
 
 export async function GET() {
-  const { userId } = await auth();
+  const userId = await getApiUserId();
   if (!userId)
     return Response.json({ error: "Unauthorized" }, { status: 401 });
 
@@ -142,7 +142,7 @@ export async function GET() {
   // AI insights
   let aiInsights = "";
   try {
-    const model = getModel(pref?.aiProvider || undefined);
+    const model = getModel(pref?.aiProvider || undefined, undefined, pref?.anthropicModel);
     const holdingSummary = sortedHoldings
       .map(
         (h) =>

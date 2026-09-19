@@ -1,10 +1,10 @@
-import { auth } from "@/lib/auth";
+import { getApiUserId } from "@/lib/auth-helpers";
 import { eq, and, desc } from "drizzle-orm";
 import { getDb } from "@/lib/db";
 import { alerts } from "@/lib/db/schema";
 
 export async function GET() {
-  const { userId } = await auth();
+  const userId = await getApiUserId();
   if (!userId) return Response.json({ error: "Unauthorized" }, { status: 401 });
 
   const db = getDb();

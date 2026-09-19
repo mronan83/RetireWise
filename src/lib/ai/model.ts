@@ -1,10 +1,15 @@
 import type { LanguageModel } from "ai";
+import { resolveClaudeModel } from "./models";
 
 /**
  * Get the AI model for the given provider.
  * Uses user-provided API key if available, falls back to env var.
  */
-export function getModel(provider?: string, userApiKey?: string): LanguageModel {
+export function getModel(
+  provider?: string,
+  userApiKey?: string,
+  claudeModel?: string | null
+): LanguageModel {
   const p = provider || process.env.AI_PROVIDER || "anthropic";
 
   switch (p) {
@@ -16,7 +21,7 @@ export function getModel(provider?: string, userApiKey?: string): LanguageModel 
       // eslint-disable-next-line @typescript-eslint/no-require-imports
       const { createAnthropic } = require("@ai-sdk/anthropic");
       const client = createAnthropic({ apiKey });
-      return client("claude-sonnet-4-5-20250929");
+      return client(resolveClaudeModel(claudeModel));
     }
 
     case "google": {
@@ -47,7 +52,7 @@ export function getModel(provider?: string, userApiKey?: string): LanguageModel 
       }
       // eslint-disable-next-line @typescript-eslint/no-require-imports
       const { gateway } = require("ai");
-      return gateway("anthropic/claude-sonnet-4.5");
+      return gateway(`anthropic/${resolveClaudeModel(claudeModel)}`);
     }
 
     default:
@@ -60,7 +65,7 @@ export function getModel(provider?: string, userApiKey?: string): LanguageModel 
 export function getProviderLabel(provider: string): string {
   switch (provider) {
     case "anthropic":
-      return "Claude Sonnet 4.5 (Anthropic)";
+      return "Claude (Anthropic)";
     case "google":
       return "Gemini 2.0 Flash (Google)";
     case "openai":
@@ -75,7 +80,7 @@ export function getProviderLabel(provider: string): string {
 export const AVAILABLE_PROVIDERS = [
   {
     id: "anthropic",
-    name: "Claude Sonnet 4.5",
+    name: "Claude",
     company: "Anthropic",
     description: "Best for nuanced financial analysis and reasoning",
     configured: () => !!process.env.ANTHROPIC_API_KEY,

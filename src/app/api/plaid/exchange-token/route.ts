@@ -1,4 +1,4 @@
-import { auth } from "@/lib/auth";
+import { getApiUserId } from "@/lib/auth-helpers";
 import { revalidatePath } from "next/cache";
 import { getPlaidClient } from "@/lib/plaid/client";
 import { encryptToken } from "@/lib/plaid/encryption";
@@ -6,7 +6,8 @@ import { getDb } from "@/lib/db";
 import { plaidItems, accounts, holdings } from "@/lib/db/schema";
 
 export async function POST(request: Request) {
-  const { userId } = await auth();
+  // Linked accounts belong to the household, not the individual login.
+  const userId = await getApiUserId();
   if (!userId) {
     return Response.json({ error: "Unauthorized" }, { status: 401 });
   }

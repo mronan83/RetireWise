@@ -1,5 +1,5 @@
 import { streamText, stepCountIs, convertToModelMessages } from "ai";
-import { auth } from "@/lib/auth";
+import { getApiUserId } from "@/lib/auth-helpers";
 import { eq } from "drizzle-orm";
 import { getDb } from "@/lib/db";
 import { userPreferences } from "@/lib/db/schema";
@@ -63,7 +63,7 @@ Guidelines:
 Important: ${AI_DISCLAIMER}`;
 
 export async function POST(request: Request) {
-  const { userId } = await auth();
+  const userId = await getApiUserId();
   if (!userId) {
     return Response.json({ error: "Unauthorized" }, { status: 401 });
   }
@@ -84,6 +84,7 @@ export async function POST(request: Request) {
   const prefs = await db
     .select({
       aiProvider: userPreferences.aiProvider,
+      anthropicModel: userPreferences.anthropicModel,
       anthropicApiKey: userPreferences.anthropicApiKey,
       googleApiKey: userPreferences.googleApiKey,
       openaiApiKey: userPreferences.openaiApiKey,
@@ -111,7 +112,7 @@ export async function POST(request: Request) {
   const { messages } = await request.json();
 
   const result = streamText({
-    model: getModel(provider || undefined, userApiKey),
+    model: getModel(provider || undefined, userApiKey, prefs[0]?.anthropicModel),
     system: SYSTEM_PROMPT,
     messages: await convertToModelMessages(messages),
     tools: {

@@ -1,8 +1,8 @@
-import { auth } from "@/lib/auth";
+import { getApiUserId } from "@/lib/auth-helpers";
 import { getHoldingsByClerkId } from "@/lib/queries/holdings";
 
 export async function GET() {
-  const { userId } = await auth();
+  const userId = await getApiUserId();
   if (!userId) return Response.json({ error: "Unauthorized" }, { status: 401 });
 
   const holdings = await getHoldingsByClerkId(userId);

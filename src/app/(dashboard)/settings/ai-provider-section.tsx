@@ -10,7 +10,7 @@ import { cn } from "@/lib/utils";
 const providers = [
   {
     id: "anthropic",
-    name: "Claude Sonnet 4.5",
+    name: "Claude",
     company: "Anthropic",
     description: "Best for nuanced financial analysis and reasoning",
     keyPrefix: "sk-ant-",
@@ -34,6 +34,14 @@ const providers = [
   },
 ];
 
+type ClaudeModel = {
+  id: string;
+  name: string;
+  description: string;
+  inputPerM: number;
+  outputPerM: number;
+};
+
 type KeyInfo = {
   configured: boolean;
   masked: string | null;
@@ -53,6 +61,8 @@ export function AiProviderSection({ currentProvider }: Props) {
   const [keyInput, setKeyInput] = useState("");
   const [showKey, setShowKey] = useState(false);
   const [keyError, setKeyError] = useState<string | null>(null);
+  const [claudeModels, setClaudeModels] = useState<ClaudeModel[]>([]);
+  const [claudeModel, setClaudeModel] = useState<string>("");
 
   // Fetch current key status on mount
   useEffect(() => {
@@ -61,6 +71,8 @@ export function AiProviderSection({ currentProvider }: Props) {
       .then((data) => {
         if (data.keys) setKeys(data.keys);
         if (data.provider) setSelected(data.provider);
+        if (data.claudeModels) setClaudeModels(data.claudeModels);
+        if (data.claudeModel) setClaudeModel(data.claudeModel);
       })
       .catch(() => {});
   }, []);
@@ -83,6 +95,27 @@ export function AiProviderSection({ currentProvider }: Props) {
       setTimeout(() => setSaved(false), 3000);
     } catch {
       setSelected(currentProvider);
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const handleSelectModel = async (modelId: string) => {
+    const previous = claudeModel;
+    setClaudeModel(modelId);
+    setSaving(true);
+    setSaved(false);
+    try {
+      const res = await fetch("/api/settings/ai-provider", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ claudeModel: modelId }),
+      });
+      if (!res.ok) throw new Error("Failed to save");
+      setSaved(true);
+      setTimeout(() => setSaved(false), 3000);
+    } catch {
+      setClaudeModel(previous);
     } finally {
       setSaving(false);
     }
@@ -191,6 +224,51 @@ export function AiProviderSection({ currentProvider }: Props) {
                   {selected === p.id && <Check className="h-5 w-5 text-primary" />}
                 </div>
               </button>
+
+              {/* Which Claude model. Only meaningful for the Anthropic
+                  provider, so it is not rendered for the others. */}
+              {p.id === "anthropic" && claudeModels.length > 0 && (
+                <div className="ml-4 rounded-lg border border-dashed p-3 space-y-2">
+                  <div className="flex items-center justify-between gap-2">
+                    <span className="text-xs font-medium">Model</span>
+                    {saving && <Loader2 className="h-3 w-3 animate-spin text-muted-foreground" />}
+                  </div>
+                  <div className="grid gap-1.5">
+                    {claudeModels.map((m) => {
+                      const active = claudeModel === m.id;
+                      return (
+                        <button
+                          key={m.id}
+                          type="button"
+                          onClick={() => !active && handleSelectModel(m.id)}
+                          disabled={saving}
+                          aria-pressed={active}
+                          className={cn(
+                            "flex items-start justify-between gap-3 rounded-md border p-2.5 text-left transition-colors",
+                            active ? "border-primary bg-primary/5" : "hover:bg-accent/50"
+                          )}
+                        >
+                          <span className="min-w-0">
+                            <span className="flex items-center gap-2">
+                              <span className="text-xs font-medium">{m.name}</span>
+                              {active && <Check className="h-3.5 w-3.5 text-primary shrink-0" />}
+                            </span>
+                            <span className="block text-[11px] text-muted-foreground mt-0.5">
+                              {m.description}
+                            </span>
+                          </span>
+                          <span className="shrink-0 text-[10px] font-mono text-muted-foreground tabular-nums">
+                            ${m.inputPerM}/${m.outputPerM}
+                          </span>
+                        </button>
+                      );
+                    })}
+                  </div>
+                  <p className="text-[10px] text-muted-foreground">
+                    Input / output cost per million tokens.
+                  </p>
+                </div>
+              )}
 
               {/* API key management row */}
               <div className="flex items-center gap-2 pl-4">
