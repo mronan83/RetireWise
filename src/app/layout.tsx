@@ -1,4 +1,4 @@
-import type { Metadata } from "next";
+import type { Metadata, Viewport } from "next";
 import { Geist, Geist_Mono } from "next/font/google";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { ThemeProvider } from "@/components/theme-provider";
@@ -26,6 +26,22 @@ export const metadata: Metadata = {
   other: {
     "mobile-web-app-capable": "yes",
   },
+};
+
+/**
+ * The app declares `black-translucent` for standalone iOS, which puts the
+ * status bar over the page, so the viewport has to cover the whole screen and
+ * the layout has to respect the insets itself. Without `viewport-fit=cover`
+ * the two settings disagree and content sits in a dead band under the notch.
+ *
+ * No `maximumScale` or `userScalable`: pinch-zoom is how someone with poor
+ * eyesight reads a number on a phone, and iOS auto-zoom is already avoided by
+ * keeping form controls at 16px.
+ */
+export const viewport: Viewport = {
+  width: "device-width",
+  initialScale: 1,
+  viewportFit: "cover",
 };
 
 export default function RootLayout({

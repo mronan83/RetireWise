@@ -15,17 +15,19 @@ export default async function DashboardLayout({
   const user = isDemo ? null : await currentUser();
 
   return (
-    <div className="flex min-h-screen flex-col">
+    <div className="flex min-h-dvh flex-col">
       {isDemo && <DemoBanner />}
       <div className="flex flex-1">
         <aside className="hidden w-64 shrink-0 border-r bg-card lg:block">
-          <div className="sticky top-0 overflow-y-auto h-screen">
+          <div className="sticky top-0 h-dvh overflow-y-auto">
             <SidebarNav />
           </div>
         </aside>
         <div className="flex flex-1 flex-col">
           <DashboardHeader isDemo={isDemo} email={user?.email ?? null} />
-          <main className="flex-1 p-3 sm:p-4 lg:p-6 overflow-x-hidden">{children}</main>
+          <main className="safe-inset-bottom flex-1 overflow-x-hidden p-3 sm:p-4 lg:p-6">
+            {children}
+          </main>
         </div>
         {!isDemo && <ChatPanel />}
       </div>

@@ -128,3 +128,43 @@
     @apply font-sans;
   }
 }
+@layer components {
+  /*
+   * Cap an overlay at what the device is actually showing.
+   *
+   * A centred, fixed-position panel with no height limit grows past the
+   * viewport in both directions at once: the top half goes above y=0 where
+   * nothing can scroll it back, and the submit button goes below the fold.
+   * The panel looks fine on a laptop and is unusable on a phone.
+   *
+   * `dvh` rather than `vh` because iOS Safari resolves `vh` against the
+   * *large* viewport — the height with the toolbar hidden — so a panel sized
+   * in `vh` still runs underneath the toolbar. The safe-area insets keep it
+   * clear of the notch and the home indicator.
+   */
+  .overlay-max-h {
+    max-height: calc(
+      100dvh - env(safe-area-inset-top, 0px) - env(safe-area-inset-bottom, 0px) -
+        2rem
+    );
+  }
+
+  /* Same idea for a panel pinned to an edge, which owns its whole axis. */
+  .overlay-edge-h {
+    max-height: calc(
+      100dvh - env(safe-area-inset-top, 0px) - env(safe-area-inset-bottom, 0px)
+    );
+  }
+
+  /* Keep a panel's content clear of the notch and the home indicator. */
+  .safe-inset-y {
+    padding-top: env(safe-area-inset-top, 0px);
+    padding-bottom: env(safe-area-inset-bottom, 0px);
+  }
+  .safe-inset-bottom {
+    padding-bottom: env(safe-area-inset-bottom, 0px);
+  }
+  .safe-inset-top {
+    padding-top: env(safe-area-inset-top, 0px);
+  }
+}

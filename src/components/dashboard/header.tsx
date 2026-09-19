@@ -19,7 +19,7 @@ export function DashboardHeader({
   const [menuOpen, setMenuOpen] = useState(false);
 
   return (
-    <header className="sticky top-0 z-30 flex h-14 items-center gap-2 sm:gap-4 border-b bg-background/95 px-3 sm:px-4 backdrop-blur-sm lg:px-6">
+    <header className="safe-inset-top sticky top-0 z-30 flex min-h-14 items-center gap-2 border-b bg-background/95 px-3 backdrop-blur-sm sm:gap-4 sm:px-4 lg:px-6">
       <Button
         variant="ghost"
         size="icon"

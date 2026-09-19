@@ -9,7 +9,7 @@ export default async function SignInPage({
   const { error } = await searchParams;
 
   return (
-    <div className="flex min-h-screen items-center justify-center px-6">
+    <div className="flex min-h-dvh items-center justify-center px-6">
       <AuthForm mode="sign-in" action={signIn} initialError={error} />
     </div>
   );
