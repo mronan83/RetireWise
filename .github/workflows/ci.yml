@@ -56,6 +56,10 @@ jobs:
       # — which was the retirement-age row, labelled as age 73.
       - run: pnpm exec tsx scripts/test-rmd.ts
 
+      # The retirement analytics, and the eleven ways they were wrong — every
+      # one of them in the direction that made the plan look easier.
+      - run: pnpm exec tsx scripts/test-analytics.ts
+
   mobile:
     name: Mobile layout
     runs-on: ubuntu-latest

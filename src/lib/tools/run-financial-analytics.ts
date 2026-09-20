@@ -8,6 +8,7 @@ import { userPreferences, socialSecurityBenefits, contributions } from "../db/sc
 import { getHoldingsByClerkId } from "../queries/holdings";
 import {
   projectRMDs,
+  RMD_START_AGE,
   calculateRothConversionLadder,
   calculateSSBreakEven,
   calculateCatchUpImpact,
@@ -93,11 +94,24 @@ export const runFinancialAnalyticsTool = tool({
       c.owner === "self" ? selfSalary : spouseSalary
     ).total;
 
-    // Project balances forward accounting for contributions
-    const projectedTaxDeferred = taxDeferredBalance * Math.pow(1 + returnPct / 100, yearsToRetirement)
-      + totalAnnualContrib * 0.6 * ((Math.pow(1 + returnPct / 100, yearsToRetirement) - 1) / (returnPct / 100)); // ~60% of contribs go to tax-deferred
-    const projectedPortfolio = totalValue * Math.pow(1 + returnPct / 100, yearsToRetirement)
-      + totalAnnualContrib * ((Math.pow(1 + returnPct / 100, yearsToRetirement) - 1) / (returnPct / 100));
+    // Project balances forward accounting for contributions.
+    //
+    // The tax-deferred share used to be a flat 0.6 — "~60% of contribs go to
+    // tax-deferred" — which is a guess about a household whose actual split
+    // is recorded right here. Someone contributing only to a Roth had 60% of
+    // it counted as tax-deferred anyway, and every RMD figure downstream
+    // inherited that.
+    const TAX_DEFERRED_TYPES = new Set(["401k", "403b", "ira_traditional", "pension"]);
+    const taxDeferredContrib = totalAnnual(
+      contribs.filter((c) => TAX_DEFERRED_TYPES.has(c.accountType)),
+      (c) => (c.owner === "self" ? selfSalary : spouseSalary)
+    ).total;
+
+    const growthFactor = Math.pow(1 + returnPct / 100, yearsToRetirement);
+    const annuityFactor =
+      returnPct > 0 ? (growthFactor - 1) / (returnPct / 100) : yearsToRetirement;
+    const projectedTaxDeferred = taxDeferredBalance * growthFactor + taxDeferredContrib * annuityFactor;
+    const projectedPortfolio = totalValue * growthFactor + totalAnnualContrib * annuityFactor;
 
     const startYear = new Date().getFullYear();
 
@@ -109,13 +123,18 @@ export const runFinancialAnalyticsTool = tool({
           returnPct,
           yearsToProject: 25,
           startYear: startYear + yearsToRetirement,
+          otherTaxableIncome: (selfSSMonthly + spouseSSMonthly) * 12 * 0.85,
         });
         const totalRMDs = rmds.reduce((s, r) => s + r.rmdAmount, 0);
         const totalTax = rmds.reduce((s, r) => s + r.taxEstimate, 0);
+        // rmds[0] is the RETIREMENT-age row, where no distribution is
+        // required and the balance has not yet grown. The advisor was
+        // quoting both under an "at 73" label.
+        const firstRequired = rmds.find((r) => r.age >= RMD_START_AGE);
         return {
           analysis: "RMD Projections",
-          projectedTaxDeferredAt73: Math.round(rmds[0]?.beginningBalance || 0),
-          firstRMD: Math.round(rmds[0]?.rmdAmount || 0),
+          projectedTaxDeferredAt73: Math.round(firstRequired?.beginningBalance ?? 0),
+          firstRMD: Math.round(firstRequired?.rmdAmount ?? 0),
           totalRMDsOver25Years: Math.round(totalRMDs),
           totalTaxOnRMDs: Math.round(totalTax),
           yearByYear: rmds.slice(0, 15),
@@ -146,10 +165,16 @@ export const runFinancialAnalyticsTool = tool({
       }
 
       case "roth_conversion": {
+        // Projected balances, and Social Security counted only once it is
+        // claimed — the gap between retiring and claiming is when conversions
+        // are cheapest, and assuming income there hid the opportunity.
+        const ssAnnual = (selfSSMonthly + spouseSSMonthly) * 12 * 0.85;
+        const ssClaimAge = Math.max(selfSS[0]?.fullRetirementAge ?? 67, retirementAge);
         const ladder = calculateRothConversionLadder({
-          currentAge, retirementAge, rmdStartAge: 73,
-          taxDeferredBalance, rothBalance: taxFreeBalance,
-          otherTaxableIncome: (selfSSMonthly + spouseSSMonthly) * 12 * 0.85,
+          currentAge, retirementAge, rmdStartAge: RMD_START_AGE,
+          taxDeferredBalance: projectedTaxDeferred,
+          rothBalance: taxFreeBalance * growthFactor,
+          otherTaxableIncomeForAge: (age: number) => (age >= ssClaimAge ? ssAnnual : 0),
           returnPct, targetBracketRate: 0.22,
           startYear,
         });
@@ -157,7 +182,7 @@ export const runFinancialAnalyticsTool = tool({
         const totalTax = ladder.reduce((s, r) => s + r.taxOnConversion, 0);
         return {
           analysis: "Roth Conversion Ladder",
-          conversionWindow: `Age ${Math.max(currentAge, retirementAge)} to 73`,
+          conversionWindow: `Age ${Math.max(currentAge, retirementAge)} to ${RMD_START_AGE}`,
           totalConverted: Math.round(totalConverted),
           totalTaxOnConversions: Math.round(totalTax),
           remainingTraditionalAt73: Math.round(ladder[ladder.length - 1]?.remainingTraditional || 0),
@@ -238,6 +263,7 @@ export const runFinancialAnalyticsTool = tool({
           portfolioAtRetirement: projectedPortfolio,
           annualWithdrawal: Math.max(0, annualWithdrawal),
           years: 30,
+          inflationPct: 3,
         });
         return {
           analysis: "Sequence of Returns Risk",

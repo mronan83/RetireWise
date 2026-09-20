@@ -315,10 +315,30 @@ export function runDetailedProjection(params: {
       .reduce((s, ap) => s + ap.projectedValues[ap.projectedValues.length - 1], 0);
 
     if (isRetirement) {
-      const retirementYear = y - yearsToRetirement;
       const age = startAge + y + 1;
-      const inflatedExpenses = annualExpenses * Math.pow(1 + inflationPct / 100, retirementYear);
-      const inflatedSS = yearSS * Math.pow(1 + inflationPct / 100, retirementYear);
+
+      /**
+       * Inflated from TODAY, not from the first day of retirement.
+       *
+       * This used an exponent of (y - yearsToRetirement), which is zero in
+       * the first year of retirement — so spending grew once retirement
+       * began and not for any of the years before it. The model is nominal
+       * (MARKET_SCENARIOS describes 10% as "nominal, ~7% real" and carries
+       * inflationPct separately), so today's grocery bill was being met out
+       * of a portfolio grown for twenty years of nominal returns.
+       *
+       * At 3% over eighteen years that understated retirement spending by
+       * about 1.7x, and every "your money lasts" verdict inherited it.
+       *
+       * Year index y is (y + 1) years from now — see the ages array — so
+       * that is the exponent.
+       */
+      const yearsFromNow = y + 1;
+      const inflation = Math.pow(1 + inflationPct / 100, yearsFromNow);
+      const inflatedExpenses = annualExpenses * inflation;
+      // Social Security is quoted by the SSA in today's dollars and indexed
+      // by COLA, so it inflates from today on the same basis.
+      const inflatedSS = yearSS * inflation;
 
       // Calculate each withdrawal method
       const expenseBased = Math.max(0, inflatedExpenses - inflatedSS);

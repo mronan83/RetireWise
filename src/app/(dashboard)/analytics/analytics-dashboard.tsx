@@ -77,7 +77,10 @@ export function AnalyticsDashboard(props: Props) {
     returnPct,
     yearsToProject: 30,
     startYear: new Date().getFullYear() + yearsToRetirement,
-  }), [projectedTaxDeferred, retirementAge, returnPct, yearsToRetirement]);
+    // By 73 Social Security is being claimed, so the distribution stacks on
+    // top of it rather than being the household's only income.
+    otherTaxableIncome: (selfSSAtFRA + spouseSSAtFRA) * 12 * 0.85,
+  }), [projectedTaxDeferred, retirementAge, returnPct, yearsToRetirement, selfSSAtFRA, spouseSSAtFRA]);
 
   /**
    * The first year an RMD is actually required.
@@ -97,14 +100,35 @@ export function AnalyticsDashboard(props: Props) {
     [rmds]
   );
 
-  // 2. Roth Conversion Ladder
-  const rothLadder = useMemo(() => calculateRothConversionLadder({
-    currentAge, retirementAge, rmdStartAge: 73,
-    taxDeferredBalance, rothBalance: taxFreeBalance,
-    otherTaxableIncome: (selfSSAtFRA + spouseSSAtFRA) * 12 * 0.85,
-    returnPct, targetBracketRate: 0.22,
-    startYear: new Date().getFullYear(),
-  }), [currentAge, retirementAge, taxDeferredBalance, taxFreeBalance, selfSSAtFRA, spouseSSAtFRA, returnPct]);
+  /**
+   * 2. Roth Conversion Ladder
+   *
+   * Two corrections, both the same shape as the RMD one above.
+   *
+   * The balances are the PROJECTED ones. This passed today's figures while
+   * the conversion window does not open until retirement, so the ladder
+   * started from a balance missing every year of growth and contribution
+   * between now and then — and openly disagreed with the RMD tab beside it
+   * about the same account.
+   *
+   * And Social Security is counted only once it is actually being claimed.
+   * Treating it as income in every conversion year fills the bracket that
+   * the strategy exists to exploit: the gap between retiring and claiming is
+   * precisely when conversions are cheapest, and assuming income there
+   * understated the room in the years that matter most.
+   */
+  const rothLadder = useMemo(() => {
+    const ssAnnual = (selfSSAtFRA + spouseSSAtFRA) * 12 * 0.85;
+    const ssClaimAge = Math.max(selfFRA, retirementAge);
+    return calculateRothConversionLadder({
+      currentAge, retirementAge, rmdStartAge: RMD_START_AGE,
+      taxDeferredBalance: projectedTaxDeferred,
+      rothBalance: taxFreeBalance * growthFactor,
+      otherTaxableIncomeForAge: (age: number) => (age >= ssClaimAge ? ssAnnual : 0),
+      returnPct, targetBracketRate: 0.22,
+      startYear: new Date().getFullYear(),
+    });
+  }, [currentAge, retirementAge, projectedTaxDeferred, taxFreeBalance, growthFactor, selfSSAtFRA, spouseSSAtFRA, selfFRA, returnPct]);
 
   // 3. SS Break-Even
   const selfSSBreakEven = useMemo(() => calculateSSBreakEven(selfSSAtFRA, selfFRA), [selfSSAtFRA, selfFRA]);
@@ -130,8 +154,14 @@ export function AnalyticsDashboard(props: Props) {
   // 7. Sequence of Returns
   const sequenceRisk = useMemo(() => calculateSequenceRisk({
     portfolioAtRetirement: projectedPortfolio,
-    annualWithdrawal: monthlyExpenses * 12 - (selfSSAtFRA + spouseSSAtFRA) * 12,
+    // Floored at zero: Social Security larger than spending is a surplus,
+    // not a negative withdrawal that quietly grows the portfolio.
+    annualWithdrawal: Math.max(
+      0,
+      monthlyExpenses * 12 - (selfSSAtFRA + spouseSSAtFRA) * 12
+    ),
     years: 30,
+    inflationPct: 3,
   }), [projectedPortfolio, monthlyExpenses, selfSSAtFRA, spouseSSAtFRA]);
 
   // 8. Healthcare Costs

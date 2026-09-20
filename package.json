@@ -26,7 +26,8 @@
     "test:onboarding": "tsx scripts/test-onboarding.ts",
     "check:routes": "tsx scripts/check-protected-routes.ts",
     "test:freshness": "tsx scripts/test-freshness.ts",
-    "test:rmd": "tsx scripts/test-rmd.ts"
+    "test:rmd": "tsx scripts/test-rmd.ts",
+    "test:analytics": "tsx scripts/test-analytics.ts"
   },
   "dependencies": {
     "@ai-sdk/anthropic": "^3.0.71",
