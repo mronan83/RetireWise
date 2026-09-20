@@ -150,9 +150,64 @@ export const households = pgTable("households", {
   id: uuid("id").defaultRandom().primaryKey(),
   name: text("name").notNull().default("My Household"),
   primaryClerkId: text("primary_clerk_id").notNull(),
-  inviteCode: text("invite_code").unique(),
   createdAt: timestamp("created_at").defaultNow().notNull(),
 });
+
+/**
+ * One row per invitation issued, holding a hash rather than the code.
+ *
+ * This replaced a single `invite_code` column on the household that was
+ * generated with Math.random(), never expired, could be redeemed any number of
+ * times, and was the only thing standing between a stranger and a family's
+ * complete financial position. Math.random() is not a cryptographic generator:
+ * its internal state is recoverable from a handful of outputs, so codes from
+ * one household could be used to predict another's.
+ *
+ * Storing the hash means a copy of this table is not a set of working
+ * invitations. The plaintext is shown once, at creation, and never again.
+ */
+export const householdInvites = pgTable(
+  "household_invites",
+  {
+    id: uuid("id").defaultRandom().primaryKey(),
+    householdId: uuid("household_id")
+      .references(() => households.id, { onDelete: "cascade" })
+      .notNull(),
+    /** SHA-256 of the normalised code. */
+    codeHash: text("code_hash").unique().notNull(),
+    /** Last four characters, so two pending invites can be told apart. */
+    codeHint: text("code_hint").notNull(),
+    createdBy: text("created_by").notNull(),
+    /** Free-text note from the issuer, e.g. who it is for. */
+    label: text("label"),
+    expiresAt: timestamp("expires_at").notNull(),
+    usedAt: timestamp("used_at"),
+    usedBy: text("used_by"),
+    revokedAt: timestamp("revoked_at"),
+    createdAt: timestamp("created_at").defaultNow().notNull(),
+  },
+  (table) => [index("household_invites_household_idx").on(table.householdId)]
+);
+
+/**
+ * Every attempt to redeem an invite, successful or not.
+ *
+ * Backs a rate limit that does not depend on Redis being configured. Redis is
+ * optional in this app, and a limiter that silently disappears when its
+ * backing store is absent is not a limit — it is a comment.
+ */
+export const householdJoinAttempts = pgTable(
+  "household_join_attempts",
+  {
+    id: uuid("id").defaultRandom().primaryKey(),
+    clerkId: text("clerk_id").notNull(),
+    succeeded: boolean("succeeded").notNull().default(false),
+    attemptedAt: timestamp("attempted_at").defaultNow().notNull(),
+  },
+  (table) => [
+    index("household_join_attempts_clerk_idx").on(table.clerkId, table.attemptedAt),
+  ]
+);
 
 export const householdMembers = pgTable("household_members", {
   id: uuid("id").defaultRandom().primaryKey(),

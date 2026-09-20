@@ -19,7 +19,10 @@ import { IrsLimitsSection } from "./irs-limits-section";
 import { PlanSection } from "./plan-section";
 
 export default async function SettingsPage() {
-  const { dataClerkId: userId } = await getAuthContext();
+  // Two different ids. `userId` is the household's primary id, which every
+  // row is keyed by; `accountId` is who is actually signed in. Only the
+  // second one can answer whether this person owns the household.
+  const { dataClerkId: userId, userId: accountId } = await getAuthContext();
 
   const db = getDb();
   const [prefs, selfSS, spouseSS, contributionsList, householdData, accountsList] = await Promise.all([
@@ -58,7 +61,6 @@ export default async function SettingsPage() {
       const membership = await db
         .select({
           householdId: householdMembers.householdId,
-          inviteCode: households.inviteCode,
           primaryClerkId: households.primaryClerkId,
         })
         .from(householdMembers)
@@ -79,7 +81,7 @@ export default async function SettingsPage() {
 
       return {
         id: membership[0].householdId,
-        inviteCode: membership[0].inviteCode,
+        isPrimary: membership[0].primaryClerkId === accountId,
         members,
       };
     })(),

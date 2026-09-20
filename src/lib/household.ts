@@ -2,7 +2,8 @@ import { eq } from "drizzle-orm";
 import { getDb } from "./db";
 import { households, householdMembers } from "./db/schema";
 import { auth } from "./auth";
-import { compHousehold, getEntitlements } from "./billing/entitlements";
+import { compHousehold } from "./billing/entitlements";
+import { redeemInvite, type RedeemResult } from "./invites";
 
 /**
  * Get the household clerkId for data queries.
@@ -38,29 +39,23 @@ export async function getHouseholdClerkId(): Promise<string> {
 }
 
 /**
- * Create a household for the current user (primary) and generate an invite code.
+ * Create a household for the current user, as its primary member.
+ *
+ * No invite code is issued here. Invitations are separate, expiring,
+ * single-use objects created on demand — see src/lib/invites.ts — so a
+ * household does not carry a permanently valid credential just by existing.
  */
-export async function createHousehold(): Promise<{
-  householdId: string;
-  inviteCode: string;
-}> {
+export async function createHousehold(): Promise<{ householdId: string }> {
   const { userId } = await auth();
   if (!userId) throw new Error("Unauthorized");
 
   const db = getDb();
 
-  // Generate a simple invite code
-  const inviteCode = Math.random().toString(36).substring(2, 10).toUpperCase();
-
   const [household] = await db
     .insert(households)
-    .values({
-      primaryClerkId: userId,
-      inviteCode,
-    })
+    .values({ primaryClerkId: userId })
     .returning({ id: households.id });
 
-  // Add the primary user as a member
   await db.insert(householdMembers).values({
     householdId: household.id,
     clerkId: userId,
@@ -72,56 +67,19 @@ export async function createHousehold(): Promise<{
   // using it. Cheap to record now; impossible to reconstruct afterwards.
   await compHousehold(userId, "friends-and-family");
 
-  return { householdId: household.id, inviteCode };
+  return { householdId: household.id };
 }
 
 /**
  * Join a household using an invite code.
+ *
+ * Everything that decides the answer — the code check, the rate limit, the
+ * single-use claim and the household's member limit — lives in
+ * src/lib/invites.ts, so there is one place where redemption can be reasoned
+ * about rather than a check here and a check there.
  */
-export async function joinHousehold(inviteCode: string): Promise<boolean> {
+export async function joinHousehold(inviteCode: string): Promise<RedeemResult> {
   const { userId } = await auth();
   if (!userId) throw new Error("Unauthorized");
-
-  const db = getDb();
-
-  const household = await db
-    .select({ id: households.id, primaryClerkId: households.primaryClerkId })
-    .from(households)
-    .where(eq(households.inviteCode, inviteCode.toUpperCase()))
-    .limit(1);
-
-  if (household.length === 0) return false;
-
-  // Check if already a member
-  const existing = await db
-    .select({ id: householdMembers.id })
-    .from(householdMembers)
-    .where(eq(householdMembers.clerkId, userId))
-    .limit(1);
-
-  if (existing.length > 0) return true; // Already in a household
-
-  // Household size is a plan limit. It is unlimited on the free tier, so this
-  // never refuses today — but the check runs on every join, which is the only
-  // way to know it still works on the day a limit is set.
-  // The limit belongs to the household being joined, not to the joiner.
-  const { limits } = await getEntitlements(household[0].primaryClerkId);
-  const maxMembers = limits.householdMembers;
-  if (maxMembers !== null) {
-    const members = await db
-      .select({ id: householdMembers.id })
-      .from(householdMembers)
-      .where(eq(householdMembers.householdId, household[0].id));
-    if (members.length >= maxMembers) {
-      throw new Error(`This household is limited to ${maxMembers} members.`);
-    }
-  }
-
-  await db.insert(householdMembers).values({
-    householdId: household[0].id,
-    clerkId: userId,
-    role: "member",
-  });
-
-  return true;
+  return redeemInvite(inviteCode, userId);
 }

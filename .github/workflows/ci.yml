@@ -77,6 +77,13 @@ jobs:
       - name: Seed the demo household
         run: pnpm db:seed-demo:ci
 
+      # Runs before the build because it needs no server and fails in seconds.
+      # These are the properties that made the old invite code a way into
+      # someone else's finances, so a regression here should not wait behind a
+      # two-minute browser suite to be noticed.
+      - name: Check invite redemption
+        run: pnpm test:invites
+
       - name: Build
         run: pnpm build
 
