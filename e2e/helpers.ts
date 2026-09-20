@@ -10,6 +10,7 @@ export const PUBLIC_ROUTES = [
 ] as const;
 
 export const DASHBOARD_ROUTES = [
+  "/onboarding",
   "/dashboard",
   "/accounts",
   "/holdings",

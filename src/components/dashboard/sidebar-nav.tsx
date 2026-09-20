@@ -3,23 +3,25 @@
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import {
-  LayoutDashboard,
-  Wallet,
-  BarChart3,
   ArrowRightLeft,
+  BarChart3,
   Brain,
-  LineChart,
-  Settings,
-  Upload,
-  TrendingUp,
-  Landmark,
-  UserCircle,
   Calculator,
   HelpCircle,
+  Landmark,
+  LayoutDashboard,
+  LineChart,
+  ListChecks,
+  Settings,
+  TrendingUp,
+  Upload,
+  UserCircle,
+  Wallet,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 
 const navItems = [
+  { href: "/onboarding", label: "Getting set up", icon: ListChecks },
   { href: "/dashboard", label: "Dashboard", icon: LayoutDashboard },
   { href: "/accounts", label: "Accounts", icon: Wallet },
   { href: "/holdings", label: "Holdings", icon: BarChart3 },

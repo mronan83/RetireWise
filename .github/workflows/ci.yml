@@ -106,6 +106,11 @@ jobs:
       - name: Check export and deletion
         run: pnpm test:account-data
 
+      # The setup checklist exists to stop a projection being believed before
+      # its inputs exist, so what it gates is worth asserting.
+      - name: Check the setup checklist
+        run: pnpm test:onboarding
+
       - name: Build
         run: pnpm build
 

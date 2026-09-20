@@ -18,9 +18,18 @@ import { eq } from "drizzle-orm";
 import { getDb } from "@/lib/db";
 import { goals as goalsTable, realEstate, cashReserves, debts, vehicles } from "@/lib/db/schema";
 import { withHousehold } from "@/lib/auth-helpers";
+import { redirect } from "next/navigation";
+import { getOnboardingState } from "@/lib/onboarding";
+import { SetupBanner } from "./setup-banner";
 
 async function DashboardContentScoped() {
   const { dataClerkId: userId } = await getAuthContext();
+
+  // A household that has entered nothing gets a dashboard of zeros, which
+  // reads as "you have no money" rather than "you have not started". Send
+  // them to the checklist instead; every other state stays here.
+  const setup = await getOnboardingState(userId);
+  if (setup.empty) redirect("/onboarding");
 
   const db = getDb();
   const [accountsList, holdingsWithAccounts, snapshots, userGoals, properties, cashAccounts, debtsList, vehiclesList, periodReturnsMap] = await Promise.all([
@@ -96,6 +105,7 @@ async function DashboardContentScoped() {
 
   return (
     <div className="flex flex-col gap-4">
+      <SetupBanner state={setup} />
       <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
         <div>
           <h1 className="text-2xl font-bold tracking-tight">Dashboard</h1>

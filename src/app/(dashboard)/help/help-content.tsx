@@ -4,9 +4,21 @@ import { useState } from "react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { cn } from "@/lib/utils";
 import {
-  LayoutDashboard, Wallet, LineChart, Calculator, Brain, Landmark,
-  Upload, Settings, BookOpen, PiggyBank, TrendingDown, ShieldCheck,
-  HelpCircle, ArrowRight,
+  ArrowRight,
+  BookOpen,
+  Brain,
+  Calculator,
+  HelpCircle,
+  Landmark,
+  LayoutDashboard,
+  LifeBuoy,
+  LineChart,
+  PiggyBank,
+  Settings,
+  ShieldCheck,
+  TrendingDown,
+  Upload,
+  Wallet,
 } from "lucide-react";
 
 const SECTIONS = [
@@ -24,6 +36,7 @@ const SECTIONS = [
   { id: "ai", label: "AI Analysis", icon: Brain },
   { id: "importing", label: "Importing Data", icon: Upload },
   { id: "settings", label: "Settings", icon: Settings },
+  { id: "troubleshooting", label: "When something is wrong", icon: LifeBuoy },
   { id: "glossary", label: "Glossary", icon: BookOpen },
 ] as const;
 
@@ -679,6 +692,89 @@ export function HelpContent() {
         </Section>
 
         {/* GLOSSARY */}
+        <Section id="troubleshooting" title="When something is wrong">
+          <p>
+            Most of what goes wrong here goes wrong quietly — a figure that is
+            stale looks exactly like a figure that has not changed. These are the
+            ones worth knowing how to spot.
+          </p>
+
+          <h4 className="font-medium mt-4">An institution will not link</h4>
+          <ul className="list-disc pl-5 space-y-1">
+            <li>
+              <strong>&ldquo;No accounts to add&rdquo;</strong> — you probably picked
+              the wrong kind. Use <em>Link a bank</em> for checking, savings, loans
+              and credit cards; use <em>Link an investment account</em> for
+              brokerages and retirement accounts. They ask the provider for
+              different things, and asking for the wrong one hides the institution.
+            </li>
+            <li>
+              <strong>&ldquo;Connected but could not be imported&rdquo;</strong> —
+              usually harmless. A bank has balances and no holdings; a brokerage is
+              the other way round. The link is fine.
+            </li>
+            <li>
+              <strong>It asks you to sign in again</strong> — institutions expire
+              their consent, some every 90 days. Reconnect from Accounts. Nothing is
+              lost; history stays.
+            </li>
+            <li>
+              <strong>Your institution is not listed</strong> — not every provider
+              is reachable. Add the account by hand, or import a CSV. Everything
+              downstream treats a manual account exactly the same.
+            </li>
+          </ul>
+
+          <h4 className="font-medium mt-4">A balance looks out of date</h4>
+          <p>
+            Linked accounts refresh once a day. A failure is retried with a
+            widening gap rather than given up on, so a single bad day corrects
+            itself. If an account has stopped refreshing entirely it will say so on
+            Accounts and ask you to reconnect it.
+          </p>
+          <p>
+            Your institution&rsquo;s own statement is the authority. RetireWise
+            shows what it was last told.
+          </p>
+
+          <h4 className="font-medium mt-4">The projection looks wrong</h4>
+          <p>Work through these in order — it is nearly always one of them:</p>
+          <ol className="list-decimal pl-5 space-y-1">
+            <li>
+              <strong>Contributions missing or paused.</strong> With none recorded,
+              the projection assumes you never save another dollar. A contribution
+              you paused during a job change should have a pause date on it, or the
+              model keeps crediting money you did not put in.
+            </li>
+            <li>
+              <strong>Salary out of date.</strong> Percentage-of-salary
+              contributions are computed from it.
+            </li>
+            <li>
+              <strong>Retirement age.</strong> A couple of years either way moves the
+              end figure more than almost anything else.
+            </li>
+            <li>
+              <strong>Return assumptions.</strong> Compare scenarios rather than
+              trusting one. The gap between them is the honest answer.
+            </li>
+          </ol>
+
+          <h4 className="font-medium mt-4">The AI will not answer</h4>
+          <p>
+            It needs your own API key, added in Settings under AI provider. Usage is
+            billed by the provider to whoever&rsquo;s key makes the request, so
+            RetireWise does not run it on anyone else&rsquo;s account. Everything
+            except the AI features works without one.
+          </p>
+
+          <h4 className="font-medium mt-4">Still stuck</h4>
+          <p>
+            Ask the person who gave you access. You can also export everything held
+            about your household from Settings, at any time, without asking anyone.
+          </p>
+        </Section>
+
         <Section id="glossary" title="Glossary">
           <div className="grid gap-2">
             <Term term="401(k)">Employer-sponsored retirement account. Contributions are pre-tax (reduces your taxable income now). Withdrawals in retirement are taxed as income.</Term>
