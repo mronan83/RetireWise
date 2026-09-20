@@ -1,5 +1,6 @@
 import { and, eq, isNull } from "drizzle-orm";
 import type { PlaidApi } from "plaid";
+import { recordAudit } from "@/lib/audit";
 import { getDb } from "@/lib/db";
 import { accounts, cashReserves, debts, holdings } from "@/lib/db/schema";
 
@@ -93,7 +94,7 @@ export async function syncPlaidItem(options: {
       securities
     );
 
-    const reconciled = await reconcileHoldings(db, accountId, incoming);
+    const reconciled = await reconcileHoldings(db, accountId, incoming, clerkId);
     counts.holdingsUpdated += reconciled.updated;
     counts.holdingsAdded += reconciled.added;
     counts.holdingsRemoved += reconciled.removed;
@@ -288,7 +289,8 @@ export function aggregateHoldings(
 async function reconcileHoldings(
   db: Db,
   accountId: string,
-  incoming: IncomingHolding[]
+  incoming: IncomingHolding[],
+  clerkId: string
 ) {
   const existing = await db
     .select()
@@ -354,11 +356,57 @@ async function reconcileHoldings(
   // far more often a permissions or timing problem than a liquidated account,
   // and emptying the account on that signal loses data the user typed in.
   if (incoming.length > 0) {
-    for (const [ticker, holding] of existingByTicker) {
-      if (!incomingTickers.has(ticker)) {
-        await db.delete(holdings).where(eq(holdings.id, holding.id));
-        removed++;
-      }
+    const doomed = [...existingByTicker.entries()].filter(
+      ([ticker]) => !incomingTickers.has(ticker)
+    );
+
+    /**
+     * Write down what is about to be deleted, before deleting it.
+     *
+     * Positions are matched to Plaid by ticker, and Plaid spells an employer
+     * plan's funds in its own way — `VG.IS.TL.INTL.STK.MK`,
+     * `PUTN.LARGE.CP.VAL.R1`, `NYL.ANCHOR.ACCOUNT`. When a manual account is
+     * adopted, the rows a person typed by hand match none of those, so they
+     * are not updated in place: they are deleted and replaced by Plaid's.
+     * Everything hand-entered on them goes with them, cost basis first, and
+     * the only trace left is that the account's gain silently changed.
+     *
+     * That happened to a Slalom 401(k) here: thirteen positions entered in
+     * April, carrying a real basis of $56,213.97, deleted on the first sync
+     * after linking. Nothing recorded them, so nothing could give them back.
+     *
+     * The deletion itself is still right — Plaid is authoritative for an
+     * account it feeds, and keeping both copies would double the account's
+     * value. What was wrong was doing it irreversibly. The row now lands in
+     * the audit log with every field intact, so a mistaken prune is a query
+     * away from being undone.
+     */
+    if (doomed.length > 0) {
+      await recordAudit({
+        clerkId,
+        action: "holdings.replaced_by_sync",
+        entity: "account",
+        entityId: accountId,
+        detail: {
+          reason: "Plaid did not report these tickers; replaced by its own",
+          removed: doomed.map(([ticker, h]) => ({
+            ticker,
+            name: h.name,
+            shares: h.shares,
+            costBasisPerShare: h.costBasisPerShare,
+            currentPrice: h.currentPrice,
+            currentValue: h.currentValue,
+            dataSource: h.dataSource,
+            createdAt: h.createdAt,
+          })),
+          incomingTickers: [...incomingTickers],
+        },
+      });
+    }
+
+    for (const [, holding] of doomed) {
+      await db.delete(holdings).where(eq(holdings.id, holding.id));
+      removed++;
     }
   }
 
