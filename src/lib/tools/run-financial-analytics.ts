@@ -21,6 +21,7 @@ import {
   getRemainingInBracket,
 } from "../utils/financial-analytics";
 import { RETURN_BY_RISK } from "@/lib/utils/risk";
+import { loadTaxTable } from "@/lib/tax/load";
 
 
 export const runFinancialAnalyticsTool = tool({
@@ -48,7 +49,7 @@ export const runFinancialAnalyticsTool = tool({
     if (!userId) return { error: "Not authenticated" };
 
     const db = getDb();
-    const [holdings, prefs, selfSS, spouseSS, contribs] = await Promise.all([
+    const [holdings, prefs, selfSS, spouseSS, contribs, taxTable] = await Promise.all([
       getHoldingsByClerkId(userId),
       db.select().from(userPreferences).where(eq(userPreferences.clerkId, userId)).limit(1),
       db.select().from(socialSecurityBenefits).where(
@@ -58,6 +59,10 @@ export const runFinancialAnalyticsTool = tool({
         and(eq(socialSecurityBenefits.clerkId, userId), eq(socialSecurityBenefits.owner, "spouse"))
       ).limit(1),
       db.select().from(contributions).where(eq(contributions.clerkId, userId)),
+      // The same brackets and Medicare figures the analytics page uses. The
+      // advisor quoting a different year than the screen would be worse
+      // than either being stale.
+      loadTaxTable(),
     ]);
 
     const pref = prefs[0];
@@ -124,6 +129,7 @@ export const runFinancialAnalyticsTool = tool({
           yearsToProject: 25,
           startYear: startYear + yearsToRetirement,
           otherTaxableIncome: (selfSSMonthly + spouseSSMonthly) * 12 * 0.85,
+          taxTable,
         });
         const totalRMDs = rmds.reduce((s, r) => s + r.rmdAmount, 0);
         const totalTax = rmds.reduce((s, r) => s + r.taxEstimate, 0);
@@ -133,6 +139,7 @@ export const runFinancialAnalyticsTool = tool({
         const firstRequired = rmds.find((r) => r.age >= RMD_START_AGE);
         return {
           analysis: "RMD Projections",
+          taxYear: taxTable.taxYear,
           projectedTaxDeferredAt73: Math.round(firstRequired?.beginningBalance ?? 0),
           firstRMD: Math.round(firstRequired?.rmdAmount ?? 0),
           totalRMDsOver25Years: Math.round(totalRMDs),
@@ -146,11 +153,13 @@ export const runFinancialAnalyticsTool = tool({
         const portfolioWithdrawal = projectedPortfolio * (withdrawalRate / 100);
         const ssAnnual = (selfSSMonthly + spouseSSMonthly) * 12;
         const totalIncome = portfolioWithdrawal + ssAnnual * 0.85;
-        const tax = estimateTaxMFJ(totalIncome);
-        const marginal = getMarginalRate(totalIncome);
-        const bracket = getRemainingInBracket(totalIncome);
+        const tax = estimateTaxMFJ(totalIncome, taxTable);
+        const marginal = getMarginalRate(totalIncome, taxTable);
+        const bracket = getRemainingInBracket(totalIncome, taxTable);
         return {
           analysis: "Retirement Income Tax Projection",
+          taxYear: taxTable.taxYear,
+          taxTableSource: taxTable.source,
           portfolioWithdrawal: Math.round(portfolioWithdrawal),
           ssIncome: Math.round(ssAnnual),
           ssTaxablePortion: Math.round(ssAnnual * 0.85),
@@ -177,11 +186,13 @@ export const runFinancialAnalyticsTool = tool({
           otherTaxableIncomeForAge: (age: number) => (age >= ssClaimAge ? ssAnnual : 0),
           returnPct, targetBracketRate: 0.22,
           startYear,
+          taxTable,
         });
         const totalConverted = ladder[ladder.length - 1]?.cumulativeConverted || 0;
         const totalTax = ladder.reduce((s, r) => s + r.taxOnConversion, 0);
         return {
           analysis: "Roth Conversion Ladder",
+          taxYear: taxTable.taxYear,
           conversionWindow: `Age ${Math.max(currentAge, retirementAge)} to ${RMD_START_AGE}`,
           totalConverted: Math.round(totalConverted),
           totalTaxOnConversions: Math.round(totalTax),
@@ -282,6 +293,7 @@ export const runFinancialAnalyticsTool = tool({
           currentAge, retirementAge, yearsToProject: 30,
           annualRetirementIncome: projectedPortfolio * (withdrawalRate / 100) + (selfSSMonthly + spouseSSMonthly) * 12,
           inflationPct: 3,
+          taxTable,
         });
         const totalLifetime = costs.reduce((s, c) => s + c.totalAnnual, 0);
         return {
@@ -291,20 +303,27 @@ export const runFinancialAnalyticsTool = tool({
           thirtyYearTotal: Math.round(totalLifetime),
           preMedicareCost: costs.filter((c) => c.phase === "pre-medicare").reduce((s, c) => s + c.totalAnnual, 0),
           medicareCost: costs.filter((c) => c.phase === "medicare").reduce((s, c) => s + c.totalAnnual, 0),
-          tip: "Pre-Medicare healthcare (before 65) is expensive. Budget $1,000-1,500/mo per person. IRMAA surcharges apply above $206k income.",
+          taxYear: taxTable.taxYear,
+          // Was a hard-coded "$206k", which was not the 2025 threshold and
+          // would not have been any year's for long. The first tier's top
+          // IS the threshold, so read it rather than restate it.
+          tip: `Pre-Medicare healthcare (before 65) is expensive. Budget $1,000-1,500/mo per person. IRMAA surcharges apply above $${Math.round(
+            (taxTable.irmaaTiers[0]?.upTo ?? 0) / 1000
+          )}k of MAGI (${taxTable.taxYear} MFJ).`,
         };
       }
 
       case "all_summary": {
         const portfolioWithdrawal = projectedPortfolio * (withdrawalRate / 100);
         const ssAnnual = (selfSSMonthly + spouseSSMonthly) * 12;
-        const tax = estimateTaxMFJ(portfolioWithdrawal + ssAnnual * 0.85);
+        const tax = estimateTaxMFJ(portfolioWithdrawal + ssAnnual * 0.85, taxTable);
         const fees = calculateFeeImpact(
           holdings.map((h) => ({ ticker: h.ticker, currentValue: Number(h.currentValue) })), returnPct
         );
         const healthCosts = projectHealthcareCosts({
           currentAge, retirementAge, yearsToProject: 30,
           annualRetirementIncome: portfolioWithdrawal + ssAnnual, inflationPct: 3,
+          taxTable,
         });
         const replacement = calculateIncomeReplacement({
           selfSalary, spouseSalary, portfolioAtRetirement: projectedPortfolio,

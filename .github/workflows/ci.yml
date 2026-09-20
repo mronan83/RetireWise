@@ -60,6 +60,11 @@ jobs:
       # one of them in the direction that made the plan look easier.
       - run: pnpm exec tsx scripts/test-analytics.ts
 
+      # The tax reference table. Every assertion is a way a half-loaded year
+      # could return a believable number instead of an error — which is the
+      # only reason moving these figures out of source is an improvement.
+      - run: pnpm exec tsx scripts/test-tax-reference.ts
+
   mobile:
     name: Mobile layout
     runs-on: ubuntu-latest

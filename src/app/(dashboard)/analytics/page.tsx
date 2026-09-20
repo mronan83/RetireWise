@@ -10,6 +10,8 @@ import type { SalaryGrowthConfig } from "@/lib/utils/salary-growth";
 import { RETURN_BY_RISK } from "@/lib/utils/risk";
 import { runDetailedProjection } from "@/lib/utils/projection-scenarios";
 import { buildProjectionAccounts } from "@/lib/projections/build-accounts";
+import { loadTaxTable } from "@/lib/tax/load";
+import { TaxYearBadge } from "@/components/ui/tax-year-badge";
 
 export default async function AnalyticsPage() {
   return withHousehold(() => AnalyticsPageContent());
@@ -19,7 +21,7 @@ async function AnalyticsPageContent() {
   const { dataClerkId: userId } = await getAuthContext();
 
   const db = getDb();
-  const [holdings, accountsList, prefs, selfSS, spouseSS, contribs] = await Promise.all([
+  const [holdings, accountsList, prefs, selfSS, spouseSS, contribs, taxTable] = await Promise.all([
     getHoldingsByClerkId(userId),
     getAccounts(userId),
     db.select().from(userPreferences).where(eq(userPreferences.clerkId, userId)).limit(1),
@@ -30,6 +32,9 @@ async function AnalyticsPageContent() {
       and(eq(socialSecurityBenefits.clerkId, userId), eq(socialSecurityBenefits.owner, "spouse"))
     ).limit(1),
     db.select().from(contributions).where(eq(contributions.clerkId, userId)),
+    // Federal brackets, IRMAA tiers, and Medicare base costs, from
+    // tax_reference rather than from constants in the analytics engine.
+    loadTaxTable(),
   ]);
 
   const pref = prefs[0];
@@ -142,6 +147,11 @@ async function AnalyticsPageContent() {
         </p>
       </div>
 
+      {/* Every tax figure below is computed with one year's schedule. Which
+          year that is, and how old it is, is not something the reader should
+          have to guess — or read the source to find out. */}
+      <TaxYearBadge table={taxTable} />
+
       <AnalyticsDashboard
         currentAge={currentAge}
         retirementAge={retirementAge}
@@ -165,6 +175,7 @@ async function AnalyticsPageContent() {
         }))}
         riskTolerance={pref?.riskTolerance || "moderate"}
         monthlyExpenses={pref?.monthlyExpensesRetirement ? Number(pref.monthlyExpensesRetirement) : 7000}
+        taxTable={taxTable}
       />
     </div>
   );

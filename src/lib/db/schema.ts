@@ -9,6 +9,7 @@ import {
   date,
   jsonb,
   index,
+  uniqueIndex,
   pgEnum,
 } from "drizzle-orm/pg-core";
 
@@ -643,6 +644,44 @@ export const irsLimits = pgTable("irs_limits", {
   notes: text("notes"),
   updatedAt: timestamp("updated_at").defaultNow().notNull(),
 });
+
+/**
+ * Federal tax brackets, IRMAA tiers, and the Medicare/healthcare base costs.
+ *
+ * Shared reference data like irs_limits: the same figures for every
+ * household, owned by none of them. Kept out of irs_limits because that
+ * table is shaped around contribution limits — limit_under_50 /
+ * limit_over_50 / limit_age_60_to_63 keyed by account type — which fits a
+ * 401(k) cap and fits nothing here.
+ *
+ * Tiered kinds (bracket_mfj, irmaa_part_b_mfj, irmaa_part_d_mfj) use
+ * `ordinal` for position and `threshold` for the top of the tier, where
+ * NULL means unbounded. Scalar kinds (standard_deduction_mfj, the monthly
+ * premiums) use ordinal 0 and leave `threshold` NULL, where it means
+ * nothing. See src/lib/tax/table.ts.
+ */
+export const taxReference = pgTable(
+  "tax_reference",
+  {
+    id: uuid("id").defaultRandom().primaryKey(),
+    taxYear: integer("tax_year").notNull(),
+    kind: text("kind").notNull(),
+    ordinal: integer("ordinal").default(0).notNull(),
+    // NULL = unbounded for a tiered kind, meaningless for a scalar kind.
+    threshold: decimal("threshold", { precision: 14, scale: 2 }),
+    // A rate as a fraction (0.22) or an amount in dollars, per `kind`.
+    value: decimal("value", { precision: 14, scale: 4 }).notNull(),
+    notes: text("notes"),
+    updatedAt: timestamp("updated_at").defaultNow().notNull(),
+  },
+  (table) => [
+    uniqueIndex("tax_reference_year_kind_ordinal_idx").on(
+      table.taxYear,
+      table.kind,
+      table.ordinal
+    ),
+  ]
+);
 
 // Net Worth: Real Estate
 export const realEstate = pgTable("real_estate", {

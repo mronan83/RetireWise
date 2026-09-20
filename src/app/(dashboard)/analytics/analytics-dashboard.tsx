@@ -26,6 +26,7 @@ import {
   estimateTaxMFJ,
   getMarginalRate,
 } from "@/lib/utils/financial-analytics";
+import type { TaxTable } from "@/lib/tax/table";
 import { cn } from "@/lib/utils";
 import { RETURN_BY_RISK } from "@/lib/utils/risk";
 
@@ -57,6 +58,15 @@ type Props = {
   projectedTaxDeferred: number;
   projectedTaxFree: number;
   projectedPortfolio: number;
+  /**
+   * The federal figures every tax number below is computed with, loaded
+   * from tax_reference on the server.
+   *
+   * Passed in rather than imported, so this component cannot silently keep
+   * computing with last year's brackets after the table is refreshed — and
+   * so the year shown in the badge above is provably the year used here.
+   */
+  taxTable: TaxTable;
 };
 
 export function AnalyticsDashboard(props: Props) {
@@ -65,7 +75,7 @@ export function AnalyticsDashboard(props: Props) {
     selfSSAtFRA, spouseSSAtFRA, selfFRA, spouseFRA,
     taxDeferredBalance, taxFreeBalance, taxableBalance,
     holdings, riskTolerance, monthlyExpenses,
-    projectedTaxDeferred, projectedTaxFree, projectedPortfolio,
+    projectedTaxDeferred, projectedTaxFree, projectedPortfolio, taxTable,
   } = props;
 
   const returnPct = RETURN_BY_RISK[riskTolerance] ?? 7;
@@ -81,7 +91,8 @@ export function AnalyticsDashboard(props: Props) {
     // By 73 Social Security is being claimed, so the distribution stacks on
     // top of it rather than being the household's only income.
     otherTaxableIncome: (selfSSAtFRA + spouseSSAtFRA) * 12 * 0.85,
-  }), [projectedTaxDeferred, retirementAge, returnPct, yearsToRetirement, selfSSAtFRA, spouseSSAtFRA]);
+    taxTable,
+  }), [projectedTaxDeferred, retirementAge, returnPct, yearsToRetirement, selfSSAtFRA, spouseSSAtFRA, taxTable]);
 
   /**
    * The first year an RMD is actually required.
@@ -134,7 +145,8 @@ export function AnalyticsDashboard(props: Props) {
     otherTaxableIncomeForAge: otherIncomeAtAge,
     returnPct, targetBracketRate: 0.22,
     startYear: new Date().getFullYear(),
-  }), [currentAge, retirementAge, projectedTaxDeferred, projectedTaxFree, otherIncomeAtAge, returnPct]);
+    taxTable,
+  }), [currentAge, retirementAge, projectedTaxDeferred, projectedTaxFree, otherIncomeAtAge, returnPct, taxTable]);
 
   // 3. SS Break-Even
   const selfSSBreakEven = useMemo(() => calculateSSBreakEven(selfSSAtFRA, selfFRA), [selfSSAtFRA, selfFRA]);
@@ -175,7 +187,8 @@ export function AnalyticsDashboard(props: Props) {
     currentAge, retirementAge, yearsToProject: 30,
     annualRetirementIncome: projectedPortfolio * 0.04 + (selfSSAtFRA + spouseSSAtFRA) * 12,
     inflationPct: 3,
-  }), [currentAge, retirementAge, projectedPortfolio, selfSSAtFRA, spouseSSAtFRA]);
+    taxTable,
+  }), [currentAge, retirementAge, projectedPortfolio, selfSSAtFRA, spouseSSAtFRA, taxTable]);
 
   const totalLifetimeHealthcare = healthcareCosts.reduce((s, h) => s + h.totalAnnual, 0);
 
@@ -250,7 +263,7 @@ export function AnalyticsDashboard(props: Props) {
           <CardHeader>
             <CardTitle>Retirement Income Tax Projections</CardTitle>
             <p className="text-sm text-muted-foreground">
-              Estimated federal tax based on your withdrawal sources, Social Security taxation (up to 85% is taxable for higher earners), and current MFJ brackets.
+              Estimated federal tax based on your withdrawal sources, Social Security taxation (up to 85% is taxable for higher earners), and the {taxTable.taxYear} MFJ brackets.
             </p>
           </CardHeader>
           <CardContent className="space-y-4">
@@ -258,8 +271,8 @@ export function AnalyticsDashboard(props: Props) {
               const ssAnnual = (selfSSAtFRA + spouseSSAtFRA) * 12;
               const portfolioWithdrawal = projectedPortfolio * 0.04;
               const totalIncome = portfolioWithdrawal + ssAnnual * 0.85;
-              const tax = estimateTaxMFJ(totalIncome);
-              const marginal = getMarginalRate(totalIncome);
+              const tax = estimateTaxMFJ(totalIncome, taxTable);
+              const marginal = getMarginalRate(totalIncome, taxTable);
               const effective = totalIncome > 0 ? tax / totalIncome : 0;
               return (
                 <div className="grid gap-4 sm:grid-cols-4">
