@@ -1,6 +1,6 @@
 "use server";
 
-import { requireWriteClerkId } from "@/lib/auth-helpers";
+import { requireWriteClerkId, withWriteHousehold } from "@/lib/auth-helpers";
 import { revalidatePath } from "next/cache";
 import { eq, and } from "drizzle-orm";
 import { z } from "zod";
@@ -28,7 +28,13 @@ const accountSchema = z.object({
   isActivelyContributing: z.coerce.boolean().optional(),
 });
 
-export async function createAccount(formData: FormData) {
+export async function createAccount(
+  ...args: Parameters<typeof createAccountImpl>
+) {
+  return withWriteHousehold(() => createAccountImpl(...args));
+}
+
+async function createAccountImpl(formData: FormData) {
   // Rows are keyed by the household id, not the signed-in account's own id.
   const userId = await requireWriteClerkId();
 
@@ -52,7 +58,13 @@ export async function createAccount(formData: FormData) {
   revalidatePath("/accounts");
 }
 
-export async function updateAccount(id: string, formData: FormData) {
+export async function updateAccount(
+  ...args: Parameters<typeof updateAccountImpl>
+) {
+  return withWriteHousehold(() => updateAccountImpl(...args));
+}
+
+async function updateAccountImpl(id: string, formData: FormData) {
   // Rows are keyed by the household id, not the signed-in account's own id.
   const userId = await requireWriteClerkId();
 
@@ -76,7 +88,13 @@ export async function updateAccount(id: string, formData: FormData) {
   revalidatePath(`/accounts/${id}`);
 }
 
-export async function deleteAccount(id: string) {
+export async function deleteAccount(
+  ...args: Parameters<typeof deleteAccountImpl>
+) {
+  return withWriteHousehold(() => deleteAccountImpl(...args));
+}
+
+async function deleteAccountImpl(id: string) {
   // Rows are keyed by the household id, not the signed-in account's own id.
   const userId = await requireWriteClerkId();
 

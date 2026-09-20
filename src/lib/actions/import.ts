@@ -1,6 +1,6 @@
 "use server";
 
-import { requireWriteClerkId } from "@/lib/auth-helpers";
+import { requireWriteClerkId, withWriteHousehold } from "@/lib/auth-helpers";
 import { revalidatePath } from "next/cache";
 import { eq, and } from "drizzle-orm";
 import { getDb } from "../db";
@@ -8,6 +8,12 @@ import { holdings, accounts } from "../db/schema";
 import type { ParsedHolding } from "../utils/csv-parser";
 
 export async function importHoldings(
+  ...args: Parameters<typeof importHoldingsImpl>
+) {
+  return withWriteHousehold(() => importHoldingsImpl(...args));
+}
+
+async function importHoldingsImpl(
   accountId: string,
   parsedHoldings: ParsedHolding[]
 ) {
@@ -63,6 +69,12 @@ export async function importHoldings(
  * removes holdings that are no longer in the CSV (sold positions).
  */
 export async function refreshHoldings(
+  ...args: Parameters<typeof refreshHoldingsImpl>
+) {
+  return withWriteHousehold(() => refreshHoldingsImpl(...args));
+}
+
+async function refreshHoldingsImpl(
   accountId: string,
   parsedHoldings: ParsedHolding[]
 ) {

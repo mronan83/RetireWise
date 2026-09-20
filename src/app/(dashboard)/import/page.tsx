@@ -1,8 +1,12 @@
-import { getAuthContext } from "@/lib/auth-helpers";
+import { getAuthContext, withHousehold } from "@/lib/auth-helpers";
 import { getAccounts } from "@/lib/queries/accounts";
 import { CsvImportForm } from "./csv-import-form";
 
 export default async function ImportPage() {
+  return withHousehold(() => ImportPageContent());
+}
+
+async function ImportPageContent() {
   const { dataClerkId: userId } = await getAuthContext();
 
   const accountsList = await getAccounts(userId);

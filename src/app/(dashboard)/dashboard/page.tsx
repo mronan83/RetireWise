@@ -17,8 +17,9 @@ import { NetWorthCard } from "@/components/dashboard/net-worth-card";
 import { eq } from "drizzle-orm";
 import { getDb } from "@/lib/db";
 import { goals as goalsTable, realEstate, cashReserves, debts, vehicles } from "@/lib/db/schema";
+import { withHousehold } from "@/lib/auth-helpers";
 
-async function DashboardContent() {
+async function DashboardContentScoped() {
   const { dataClerkId: userId } = await getAuthContext();
 
   const db = getDb();
@@ -192,6 +193,13 @@ function DashboardSkeleton() {
       <Skeleton className="h-[300px]" />
     </div>
   );
+}
+
+// The scope wraps the content rather than the page: the page itself renders a
+// Suspense boundary synchronously and touches no data, while everything that
+// queries lives under it.
+async function DashboardContent() {
+  return withHousehold(() => DashboardContentScoped());
 }
 
 export default function DashboardPage() {

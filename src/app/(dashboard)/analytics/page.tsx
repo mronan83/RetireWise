@@ -1,4 +1,4 @@
-import { getAuthContext } from "@/lib/auth-helpers";
+import { getAuthContext, withHousehold } from "@/lib/auth-helpers";
 import { eq, and } from "drizzle-orm";
 import { getDb } from "@/lib/db";
 import { userPreferences, socialSecurityBenefits, contributions } from "@/lib/db/schema";
@@ -8,6 +8,10 @@ import { totalAnnual } from "@/lib/utils/contributions";
 import { AnalyticsDashboard } from "./analytics-dashboard";
 
 export default async function AnalyticsPage() {
+  return withHousehold(() => AnalyticsPageContent());
+}
+
+async function AnalyticsPageContent() {
   const { dataClerkId: userId } = await getAuthContext();
 
   const db = getDb();

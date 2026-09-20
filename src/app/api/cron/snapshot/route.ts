@@ -6,8 +6,16 @@ import { getLatestSnapshot } from "@/lib/queries/snapshots";
 import { updateAllPrices } from "@/lib/utils/price-feed";
 import { generateAlerts } from "@/lib/utils/alert-generator";
 import { snapshotNetWorth } from "@/lib/utils/net-worth-snapshot";
+import { withSystemRole } from "@/lib/db/tenant";
 
 export async function GET(request: Request) {
+  return withSystemRole(
+    "snapshots every household",
+    () => handleGet(request)
+  );
+}
+
+async function handleGet(request: Request) {
   const authHeader = request.headers.get("authorization");
   if (authHeader !== `Bearer ${process.env.CRON_SECRET}`) {
     return Response.json({ error: "Unauthorized" }, { status: 401 });

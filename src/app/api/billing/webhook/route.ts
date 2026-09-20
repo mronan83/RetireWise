@@ -4,6 +4,7 @@ import { getDb } from "@/lib/db";
 import { billingEvents, subscriptions } from "@/lib/db/schema";
 import { DEFAULT_PLAN_ID, isPlanId, planIdForStripePrice } from "@/lib/billing/plans";
 import { getStripe } from "@/lib/billing/stripe";
+import { withSystemRole } from "@/lib/db/tenant";
 
 /**
  * Stripe's period end moved off the subscription and onto its items in the
@@ -81,6 +82,13 @@ async function applySubscription(sub: Stripe.Subscription, eventAt: Date) {
 }
 
 export async function POST(request: Request) {
+  return withSystemRole(
+    "signature-authenticated; acts on whichever household Stripe names",
+    () => handlePost(request)
+  );
+}
+
+async function handlePost(request: Request) {
   const stripe = getStripe();
   const secret = process.env.STRIPE_WEBHOOK_SECRET;
   if (!stripe || !secret) {

@@ -1,6 +1,6 @@
 "use server";
 
-import { requireWriteClerkId } from "@/lib/auth-helpers";
+import { requireWriteClerkId, withWriteHousehold } from "@/lib/auth-helpers";
 import { revalidatePath } from "next/cache";
 import { eq, and } from "drizzle-orm";
 import { z } from "zod";
@@ -22,7 +22,13 @@ const ssSchema = z.object({
   assumedCOLAPct: z.coerce.number().min(0).max(10).optional(),
 });
 
-export async function updateSocialSecurity(formData: FormData) {
+export async function updateSocialSecurity(
+  ...args: Parameters<typeof updateSocialSecurityImpl>
+) {
+  return withWriteHousehold(() => updateSocialSecurityImpl(...args));
+}
+
+async function updateSocialSecurityImpl(formData: FormData) {
   // Rows are keyed by the household id, not the signed-in account's own id.
   const userId = await requireWriteClerkId();
 

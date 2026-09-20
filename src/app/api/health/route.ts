@@ -1,5 +1,6 @@
 import { sql } from "drizzle-orm";
 import { getDb } from "@/lib/db";
+import { withSystemRole } from "@/lib/db/tenant";
 
 /**
  * Unauthenticated liveness check, for an external uptime monitor.
@@ -18,6 +19,13 @@ import { getDb } from "@/lib/db";
 export const dynamic = "force-dynamic";
 
 export async function GET() {
+  return withSystemRole(
+    "liveness probe, no session",
+    () => handleGet()
+  );
+}
+
+async function handleGet() {
   const startedAt = Date.now();
 
   let database = false;

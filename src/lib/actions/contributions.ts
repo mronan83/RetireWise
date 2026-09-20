@@ -1,6 +1,6 @@
 "use server";
 
-import { requireWriteClerkId } from "@/lib/auth-helpers";
+import { requireWriteClerkId, withWriteHousehold } from "@/lib/auth-helpers";
 import { revalidatePath } from "next/cache";
 import { eq, and } from "drizzle-orm";
 import { z } from "zod";
@@ -115,7 +115,13 @@ function revalidateAll() {
   revalidatePath("/analytics");
 }
 
-export async function createContribution(formData: FormData) {
+export async function createContribution(
+  ...args: Parameters<typeof createContributionImpl>
+) {
+  return withWriteHousehold(() => createContributionImpl(...args));
+}
+
+async function createContributionImpl(formData: FormData) {
   // Rows are keyed by the household id, not the signed-in account's own id.
   const userId = await requireWriteClerkId();
   const parsed = readForm(formData);
@@ -126,7 +132,13 @@ export async function createContribution(formData: FormData) {
   revalidateAll();
 }
 
-export async function updateContribution(id: string, formData: FormData) {
+export async function updateContribution(
+  ...args: Parameters<typeof updateContributionImpl>
+) {
+  return withWriteHousehold(() => updateContributionImpl(...args));
+}
+
+async function updateContributionImpl(id: string, formData: FormData) {
   // Rows are keyed by the household id, not the signed-in account's own id.
   const userId = await requireWriteClerkId();
   const parsed = readForm(formData);
@@ -148,7 +160,13 @@ export async function updateContribution(id: string, formData: FormData) {
  * with the forecast, so it is marked ended instead and every forward-looking
  * calculation skips it.
  */
-export async function setContributionActive(id: string, active: boolean) {
+export async function setContributionActive(
+  ...args: Parameters<typeof setContributionActiveImpl>
+) {
+  return withWriteHousehold(() => setContributionActiveImpl(...args));
+}
+
+async function setContributionActiveImpl(id: string, active: boolean) {
   const userId = await requireWriteClerkId();
 
   const db = getDb();
@@ -172,6 +190,12 @@ export async function setContributionActive(id: string, active: boolean) {
  * clears the pause, which is how resuming early works.
  */
 export async function setContributionPause(
+  ...args: Parameters<typeof setContributionPauseImpl>
+) {
+  return withWriteHousehold(() => setContributionPauseImpl(...args));
+}
+
+async function setContributionPauseImpl(
   id: string,
   from: string | null,
   until: string | null
@@ -191,7 +215,13 @@ export async function setContributionPause(
   revalidateAll();
 }
 
-export async function deleteContribution(id: string) {
+export async function deleteContribution(
+  ...args: Parameters<typeof deleteContributionImpl>
+) {
+  return withWriteHousehold(() => deleteContributionImpl(...args));
+}
+
+async function deleteContributionImpl(id: string) {
   // Rows are keyed by the household id, not the signed-in account's own id.
   const userId = await requireWriteClerkId();
 

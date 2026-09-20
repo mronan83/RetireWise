@@ -1,4 +1,4 @@
-import { getAuthContext } from "@/lib/auth-helpers";
+import { getAuthContext, withHousehold } from "@/lib/auth-helpers";
 import { Link2 } from "lucide-react";
 import { getAccounts } from "@/lib/queries/accounts";
 import { getHoldingsByClerkId } from "@/lib/queries/holdings";
@@ -10,6 +10,10 @@ import { DuplicateReview, type ReviewPair } from "./duplicate-review";
 import { findDuplicateCandidates } from "@/lib/accounts/duplicates";
 
 export default async function AccountsPage() {
+  return withHousehold(() => AccountsPageContent());
+}
+
+async function AccountsPageContent() {
   const { dataClerkId: userId } = await getAuthContext();
 
   const [accountsList, allHoldings, periodReturnsMap] = await Promise.all([

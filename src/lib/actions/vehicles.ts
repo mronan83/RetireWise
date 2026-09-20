@@ -1,6 +1,6 @@
 "use server";
 
-import { requireWriteClerkId } from "@/lib/auth-helpers";
+import { requireWriteClerkId, withWriteHousehold } from "@/lib/auth-helpers";
 import { revalidatePath } from "next/cache";
 import { eq, and } from "drizzle-orm";
 import { getDb } from "../db";
@@ -31,7 +31,13 @@ type VehicleInput = {
   notes?: string;
 };
 
-export async function addVehicle(input: VehicleInput) {
+export async function addVehicle(
+  ...args: Parameters<typeof addVehicleImpl>
+) {
+  return withWriteHousehold(() => addVehicleImpl(...args));
+}
+
+async function addVehicleImpl(input: VehicleInput) {
   // Rows are keyed by the household id, not the signed-in account's own id.
   const userId = await requireWriteClerkId();
 
@@ -70,7 +76,13 @@ export async function addVehicle(input: VehicleInput) {
   return { success: true };
 }
 
-export async function updateVehicle(id: string, input: Partial<VehicleInput>) {
+export async function updateVehicle(
+  ...args: Parameters<typeof updateVehicleImpl>
+) {
+  return withWriteHousehold(() => updateVehicleImpl(...args));
+}
+
+async function updateVehicleImpl(id: string, input: Partial<VehicleInput>) {
   // Rows are keyed by the household id, not the signed-in account's own id.
   const userId = await requireWriteClerkId();
 
@@ -127,7 +139,13 @@ export async function updateVehicle(id: string, input: Partial<VehicleInput>) {
   return { success: true };
 }
 
-export async function deleteVehicle(id: string) {
+export async function deleteVehicle(
+  ...args: Parameters<typeof deleteVehicleImpl>
+) {
+  return withWriteHousehold(() => deleteVehicleImpl(...args));
+}
+
+async function deleteVehicleImpl(id: string) {
   // Rows are keyed by the household id, not the signed-in account's own id.
   const userId = await requireWriteClerkId();
 
@@ -143,7 +161,13 @@ export async function deleteVehicle(id: string) {
  * Decode a VIN using the free NHTSA API.
  * Returns year, make, model, trim, and vehicle type.
  */
-export async function decodeVIN(vin: string) {
+export async function decodeVIN(
+  ...args: Parameters<typeof decodeVINImpl>
+) {
+  return withWriteHousehold(() => decodeVINImpl(...args));
+}
+
+async function decodeVINImpl(vin: string) {
   const resp = await fetch(
     `https://vpic.nhtsa.dot.gov/api/vehicles/decodevin/${encodeURIComponent(vin)}?format=json`
   );

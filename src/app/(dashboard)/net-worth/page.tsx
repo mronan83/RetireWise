@@ -1,4 +1,4 @@
-import { getAuthContext } from "@/lib/auth-helpers";
+import { getAuthContext, withHousehold } from "@/lib/auth-helpers";
 import { eq } from "drizzle-orm";
 import { getDb } from "@/lib/db";
 import { realEstate, cashReserves, debts, vehicles } from "@/lib/db/schema";
@@ -22,6 +22,10 @@ import { NetWorthHistoryChart } from "./net-worth-history-chart";
 import { cn } from "@/lib/utils";
 
 export default async function NetWorthPage() {
+  return withHousehold(() => NetWorthPageContent());
+}
+
+async function NetWorthPageContent() {
   const { dataClerkId: userId } = await getAuthContext();
 
   const db = getDb();

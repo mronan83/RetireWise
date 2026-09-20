@@ -3,8 +3,16 @@ import { revalidatePath } from "next/cache";
 import { getDb } from "@/lib/db";
 import { plaidItems } from "@/lib/db/schema";
 import { verifyPlaidWebhook } from "@/lib/plaid/webhook-verify";
+import { withSystemRole } from "@/lib/db/tenant";
 
 export async function POST(request: Request) {
+  return withSystemRole(
+    "signature-authenticated; acts on whichever item the payload names",
+    () => handlePost(request)
+  );
+}
+
+async function handlePost(request: Request) {
   // The raw body, before parsing: the signature covers these exact bytes, and
   // JSON.parse followed by JSON.stringify does not reproduce them.
   const rawBody = await request.text();

@@ -1,4 +1,4 @@
-import { getAuthContext } from "@/lib/auth-helpers";
+import { getAuthContext, withHousehold } from "@/lib/auth-helpers";
 import { eq, desc } from "drizzle-orm";
 import { getDb } from "@/lib/db";
 import { transactions, accounts } from "@/lib/db/schema";
@@ -31,6 +31,10 @@ function TransactionIcon({ type }: { type: string }) {
 }
 
 export default async function TransactionsPage() {
+  return withHousehold(() => TransactionsPageContent());
+}
+
+async function TransactionsPageContent() {
   const { dataClerkId: userId } = await getAuthContext();
 
   const db = getDb();

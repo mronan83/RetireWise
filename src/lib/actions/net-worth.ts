@@ -1,6 +1,6 @@
 "use server";
 
-import { requireWriteClerkId } from "@/lib/auth-helpers";
+import { requireWriteClerkId, withWriteHousehold } from "@/lib/auth-helpers";
 import { revalidatePath } from "next/cache";
 import { eq, and } from "drizzle-orm";
 import { z } from "zod";
@@ -23,7 +23,13 @@ const realEstateSchema = z.object({
   notes: z.string().optional(),
 });
 
-export async function createRealEstate(formData: FormData) {
+export async function createRealEstate(
+  ...args: Parameters<typeof createRealEstateImpl>
+) {
+  return withWriteHousehold(() => createRealEstateImpl(...args));
+}
+
+async function createRealEstateImpl(formData: FormData) {
   // Rows are keyed by the household id, not the signed-in account's own id.
   const userId = await requireWriteClerkId();
   const parsed = realEstateSchema.parse({
@@ -59,7 +65,13 @@ export async function createRealEstate(formData: FormData) {
   revalidatePath("/net-worth");
 }
 
-export async function updateRealEstate(id: string, formData: FormData) {
+export async function updateRealEstate(
+  ...args: Parameters<typeof updateRealEstateImpl>
+) {
+  return withWriteHousehold(() => updateRealEstateImpl(...args));
+}
+
+async function updateRealEstateImpl(id: string, formData: FormData) {
   // Rows are keyed by the household id, not the signed-in account's own id.
   const userId = await requireWriteClerkId();
   const parsed = realEstateSchema.parse({
@@ -94,7 +106,13 @@ export async function updateRealEstate(id: string, formData: FormData) {
   revalidatePath("/dashboard");
 }
 
-export async function deleteRealEstate(id: string) {
+export async function deleteRealEstate(
+  ...args: Parameters<typeof deleteRealEstateImpl>
+) {
+  return withWriteHousehold(() => deleteRealEstateImpl(...args));
+}
+
+async function deleteRealEstateImpl(id: string) {
   // Rows are keyed by the household id, not the signed-in account's own id.
   const userId = await requireWriteClerkId();
   const db = getDb();
@@ -113,7 +131,13 @@ const cashSchema = z.object({
   notes: z.string().optional(),
 });
 
-export async function createCashReserve(formData: FormData) {
+export async function createCashReserve(
+  ...args: Parameters<typeof createCashReserveImpl>
+) {
+  return withWriteHousehold(() => createCashReserveImpl(...args));
+}
+
+async function createCashReserveImpl(formData: FormData) {
   // Rows are keyed by the household id, not the signed-in account's own id.
   const userId = await requireWriteClerkId();
   const parsed = cashSchema.parse({
@@ -142,7 +166,13 @@ export async function createCashReserve(formData: FormData) {
   revalidatePath("/net-worth");
 }
 
-export async function updateCashReserve(id: string, formData: FormData) {
+export async function updateCashReserve(
+  ...args: Parameters<typeof updateCashReserveImpl>
+) {
+  return withWriteHousehold(() => updateCashReserveImpl(...args));
+}
+
+async function updateCashReserveImpl(id: string, formData: FormData) {
   // Rows are keyed by the household id, not the signed-in account's own id.
   const userId = await requireWriteClerkId();
   const parsed = cashSchema.parse({
@@ -170,7 +200,13 @@ export async function updateCashReserve(id: string, formData: FormData) {
   revalidatePath("/dashboard");
 }
 
-export async function deleteCashReserve(id: string) {
+export async function deleteCashReserve(
+  ...args: Parameters<typeof deleteCashReserveImpl>
+) {
+  return withWriteHousehold(() => deleteCashReserveImpl(...args));
+}
+
+async function deleteCashReserveImpl(id: string) {
   // Rows are keyed by the household id, not the signed-in account's own id.
   const userId = await requireWriteClerkId();
   const db = getDb();
@@ -190,7 +226,13 @@ const debtSchema = z.object({
   notes: z.string().optional(),
 });
 
-export async function createDebt(formData: FormData) {
+export async function createDebt(
+  ...args: Parameters<typeof createDebtImpl>
+) {
+  return withWriteHousehold(() => createDebtImpl(...args));
+}
+
+async function createDebtImpl(formData: FormData) {
   // Rows are keyed by the household id, not the signed-in account's own id.
   const userId = await requireWriteClerkId();
   const parsed = debtSchema.parse({
@@ -221,7 +263,13 @@ export async function createDebt(formData: FormData) {
   revalidatePath("/net-worth");
 }
 
-export async function updateDebt(id: string, formData: FormData) {
+export async function updateDebt(
+  ...args: Parameters<typeof updateDebtImpl>
+) {
+  return withWriteHousehold(() => updateDebtImpl(...args));
+}
+
+async function updateDebtImpl(id: string, formData: FormData) {
   // Rows are keyed by the household id, not the signed-in account's own id.
   const userId = await requireWriteClerkId();
   const parsed = debtSchema.parse({
@@ -251,7 +299,13 @@ export async function updateDebt(id: string, formData: FormData) {
   revalidatePath("/dashboard");
 }
 
-export async function deleteDebt(id: string) {
+export async function deleteDebt(
+  ...args: Parameters<typeof deleteDebtImpl>
+) {
+  return withWriteHousehold(() => deleteDebtImpl(...args));
+}
+
+async function deleteDebtImpl(id: string) {
   // Rows are keyed by the household id, not the signed-in account's own id.
   const userId = await requireWriteClerkId();
   const db = getDb();

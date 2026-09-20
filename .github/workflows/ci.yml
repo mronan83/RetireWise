@@ -35,6 +35,11 @@ jobs:
       - run: pnpm lint
       - run: pnpm exec tsc --noEmit
 
+      # Fails when a new entry point reaches the database without declaring
+      # which household it is acting for. Static, so it belongs here rather
+      # than behind the database job.
+      - run: pnpm exec tsx scripts/check-tenant-scope.ts
+
   mobile:
     name: Mobile layout
     runs-on: ubuntu-latest
@@ -83,6 +88,12 @@ jobs:
       # two-minute browser suite to be noticed.
       - name: Check invite redemption
         run: pnpm test:invites
+
+      # Proves one household cannot reach another's rows. Every assertion is
+      # written the way the bug would be written — a query with no clerk_id
+      # filter, or with the wrong one.
+      - name: Check tenant isolation
+        run: pnpm test:rls
 
       - name: Build
         run: pnpm build

@@ -1,6 +1,6 @@
 "use server";
 
-import { requireWriteClerkId } from "@/lib/auth-helpers";
+import { requireWriteClerkId, withWriteHousehold } from "@/lib/auth-helpers";
 import { revalidatePath } from "next/cache";
 import { eq, and } from "drizzle-orm";
 import { z } from "zod";
@@ -26,7 +26,13 @@ const holdingSchema = z.object({
   currentPrice: z.coerce.number().min(0, "Price must be non-negative"),
 });
 
-export async function createHolding(formData: FormData) {
+export async function createHolding(
+  ...args: Parameters<typeof createHoldingImpl>
+) {
+  return withWriteHousehold(() => createHoldingImpl(...args));
+}
+
+async function createHoldingImpl(formData: FormData) {
   // Rows are keyed by the household id, not the signed-in account's own id.
   const userId = await requireWriteClerkId();
 
@@ -69,7 +75,13 @@ export async function createHolding(formData: FormData) {
   revalidatePath(`/accounts/${parsed.accountId}`);
 }
 
-export async function updateHolding(id: string, formData: FormData) {
+export async function updateHolding(
+  ...args: Parameters<typeof updateHoldingImpl>
+) {
+  return withWriteHousehold(() => updateHoldingImpl(...args));
+}
+
+async function updateHoldingImpl(id: string, formData: FormData) {
   // Rows are keyed by the household id, not the signed-in account's own id.
   const userId = await requireWriteClerkId();
 
@@ -115,7 +127,13 @@ export async function updateHolding(id: string, formData: FormData) {
   revalidatePath(`/accounts/${parsed.accountId}`);
 }
 
-export async function deleteHolding(id: string, accountId: string) {
+export async function deleteHolding(
+  ...args: Parameters<typeof deleteHoldingImpl>
+) {
+  return withWriteHousehold(() => deleteHoldingImpl(...args));
+}
+
+async function deleteHoldingImpl(id: string, accountId: string) {
   // Rows are keyed by the household id, not the signed-in account's own id.
   const userId = await requireWriteClerkId();
 

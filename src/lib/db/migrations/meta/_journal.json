@@ -64,6 +64,13 @@
       "when": 1789910919786,
       "tag": "0008_invites",
       "breakpoints": true
+    },
+    {
+      "idx": 9,
+      "version": "7",
+      "when": 1789910979786,
+      "tag": "0009_row_level_security",
+      "breakpoints": true
     }
   ]
 }

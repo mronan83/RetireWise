@@ -1,6 +1,6 @@
 import { and, eq } from "drizzle-orm";
 import { revalidatePath } from "next/cache";
-import { getApiUserId } from "@/lib/auth-helpers";
+import { getApiUserId, withApiHousehold } from "@/lib/auth-helpers";
 import { getPlaidClient } from "@/lib/plaid/client";
 import { encryptToken } from "@/lib/plaid/encryption";
 import { syncPlaidBalances, syncPlaidItem } from "@/lib/plaid/sync";
@@ -8,6 +8,10 @@ import { getDb } from "@/lib/db";
 import { plaidItems } from "@/lib/db/schema";
 
 export async function POST(request: Request) {
+  return withApiHousehold(() => handlePost(request));
+}
+
+async function handlePost(request: Request) {
   // Linked accounts belong to the household, not the individual login.
   const userId = await getApiUserId();
   if (!userId) {

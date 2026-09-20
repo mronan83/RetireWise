@@ -1,6 +1,6 @@
 "use server";
 
-import { requireWriteClerkId } from "@/lib/auth-helpers";
+import { requireWriteClerkId, withWriteHousehold } from "@/lib/auth-helpers";
 import { revalidatePath } from "next/cache";
 import { eq } from "drizzle-orm";
 import { z } from "zod";
@@ -28,7 +28,13 @@ const preferencesSchema = z.object({
   spouseAnnualContribution: z.coerce.number().min(0).optional(),
 });
 
-export async function updatePreferences(formData: FormData) {
+export async function updatePreferences(
+  ...args: Parameters<typeof updatePreferencesImpl>
+) {
+  return withWriteHousehold(() => updatePreferencesImpl(...args));
+}
+
+async function updatePreferencesImpl(formData: FormData) {
   // Rows are keyed by the household id, not the signed-in account's own id.
   const userId = await requireWriteClerkId();
 

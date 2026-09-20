@@ -1,5 +1,5 @@
 import { eq } from "drizzle-orm";
-import { requireWriteClerkId } from "@/lib/auth-helpers";
+import { requireWriteClerkId, withApiHousehold } from "@/lib/auth-helpers";
 import { currentUser } from "@/lib/auth";
 import { getDb } from "@/lib/db";
 import { subscriptions } from "@/lib/db/schema";
@@ -17,15 +17,21 @@ export async function POST(request: Request) {
   // Deployment configuration, checked before the caller: whether this
   // deployment sells anything is not a property of who is asking, and a
   // dormant billing system should say so plainly rather than answering 401
-  // and leaving the reason ambiguous. Nothing here touches user data or
-  // Stripe, so there is nothing to protect behind the session check.
-  const stripe = getStripe();
-  if (!billingEnabled() || !stripe) {
+  // and leaving the reason ambiguous. It sits outside withApiHousehold for
+  // that reason — a session check first would turn "billing is off" into
+  // "who are you", which is the less useful of the two answers.
+  if (!billingEnabled() || !getStripe()) {
     return Response.json(
       { error: "Billing is not enabled on this deployment.", code: "billing_disabled" },
       { status: 503 }
     );
   }
+
+  return withApiHousehold(() => handlePost(request));
+}
+
+async function handlePost(request: Request) {
+  const stripe = getStripe()!;
 
   let clerkId: string;
   try {

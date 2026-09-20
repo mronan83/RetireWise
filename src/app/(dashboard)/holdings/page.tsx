@@ -1,4 +1,4 @@
-import { getAuthContext } from "@/lib/auth-helpers";
+import { getAuthContext, withHousehold } from "@/lib/auth-helpers";
 import { getHoldingsByClerkId } from "@/lib/queries/holdings";
 import { getAccounts } from "@/lib/queries/accounts";
 import { HoldingsTable } from "@/components/dashboard/holdings-table";
@@ -6,6 +6,10 @@ import { calculateGainLoss } from "@/lib/utils/calculations";
 import { AddHoldingPageButton } from "./add-holding-button";
 
 export default async function HoldingsPage() {
+  return withHousehold(() => HoldingsPageContent());
+}
+
+async function HoldingsPageContent() {
   const { dataClerkId: userId } = await getAuthContext();
 
   const [holdingsWithAccounts, accountsList] = await Promise.all([

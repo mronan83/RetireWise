@@ -1,5 +1,5 @@
 import { and, eq } from "drizzle-orm";
-import { getApiUserId } from "@/lib/auth-helpers";
+import { getApiUserId, withApiHousehold } from "@/lib/auth-helpers";
 import { getDb } from "@/lib/db";
 import { plaidItems } from "@/lib/db/schema";
 import { guardFeature, guardLimit } from "@/lib/billing/entitlements";
@@ -7,6 +7,10 @@ import { CountryCode, Products } from "plaid";
 import { getPlaidClient } from "@/lib/plaid/client";
 
 export async function POST(request: Request) {
+  return withApiHousehold(() => handlePost(request));
+}
+
+async function handlePost(request: Request) {
   // The Plaid user is the household, matching what exchange-token keys items by.
   const userId = await getApiUserId();
   if (!userId) {

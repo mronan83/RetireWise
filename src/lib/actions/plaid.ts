@@ -2,7 +2,7 @@
 
 import { and, eq } from "drizzle-orm";
 import { revalidatePath } from "next/cache";
-import { requireWriteClerkId } from "@/lib/auth-helpers";
+import { requireWriteClerkId, withWriteHousehold } from "@/lib/auth-helpers";
 import { getDb } from "../db";
 import { accounts, holdings, plaidItems } from "../db/schema";
 
@@ -17,6 +17,12 @@ import { accounts, holdings, plaidItems } from "../db/schema";
  * holdings move onto it.
  */
 export async function mergeLinkedAccount(
+  ...args: Parameters<typeof mergeLinkedAccountImpl>
+) {
+  return withWriteHousehold(() => mergeLinkedAccountImpl(...args));
+}
+
+async function mergeLinkedAccountImpl(
   linkedAccountId: string,
   manualAccountId: string
 ) {
@@ -76,7 +82,13 @@ export async function mergeLinkedAccount(
  * The figures already imported stay and become editable again, so the account
  * simply reverts to being maintained by hand.
  */
-export async function disconnectAccount(accountId: string) {
+export async function disconnectAccount(
+  ...args: Parameters<typeof disconnectAccountImpl>
+) {
+  return withWriteHousehold(() => disconnectAccountImpl(...args));
+}
+
+async function disconnectAccountImpl(accountId: string) {
   const clerkId = await requireWriteClerkId();
   const db = getDb();
 

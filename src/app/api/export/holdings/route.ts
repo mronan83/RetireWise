@@ -1,7 +1,11 @@
-import { getApiUserId } from "@/lib/auth-helpers";
+import { getApiUserId, withApiHousehold } from "@/lib/auth-helpers";
 import { getHoldingsByClerkId } from "@/lib/queries/holdings";
 
 export async function GET() {
+  return withApiHousehold(() => handleGet());
+}
+
+async function handleGet() {
   const userId = await getApiUserId();
   if (!userId) return Response.json({ error: "Unauthorized" }, { status: 401 });
 

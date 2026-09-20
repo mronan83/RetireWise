@@ -1,9 +1,13 @@
-import { getApiUserId } from "@/lib/auth-helpers";
+import { getApiUserId, withApiHousehold } from "@/lib/auth-helpers";
 import { eq } from "drizzle-orm";
 import { getDb } from "@/lib/db";
 import { userPreferences } from "@/lib/db/schema";
 
 export async function POST(request: Request) {
+  return withApiHousehold(() => handlePost(request));
+}
+
+async function handlePost(request: Request) {
   const userId = await getApiUserId();
   if (!userId) return Response.json({ error: "Unauthorized" }, { status: 401 });
 
@@ -48,6 +52,10 @@ export async function POST(request: Request) {
 }
 
 export async function GET() {
+  return withApiHousehold(() => handleGet());
+}
+
+async function handleGet() {
   const userId = await getApiUserId();
   if (!userId) return Response.json({ error: "Unauthorized" }, { status: 401 });
 

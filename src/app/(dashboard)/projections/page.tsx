@@ -1,4 +1,4 @@
-import { getAuthContext } from "@/lib/auth-helpers";
+import { getAuthContext, withHousehold } from "@/lib/auth-helpers";
 import { eq, and } from "drizzle-orm";
 import { getDb } from "@/lib/db";
 import { userPreferences, socialSecurityBenefits, contributions } from "@/lib/db/schema";
@@ -8,6 +8,10 @@ import { InteractiveProjections } from "./interactive-controls";
 import { getAccounts } from "@/lib/queries/accounts";
 
 export default async function ProjectionsPage() {
+  return withHousehold(() => ProjectionsPageContent());
+}
+
+async function ProjectionsPageContent() {
   const { dataClerkId: userId } = await getAuthContext();
 
   const db = getDb();

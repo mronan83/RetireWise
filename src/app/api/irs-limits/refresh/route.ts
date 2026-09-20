@@ -2,6 +2,7 @@ import { getApiUserId } from "@/lib/auth-helpers";
 import { eq, and } from "drizzle-orm";
 import { getDb } from "@/lib/db";
 import { irsLimits } from "@/lib/db/schema";
+import { withSystemRole } from "@/lib/db/tenant";
 
 // Known IRS limits — updated manually when IRS announces new numbers
 // Source: irs.gov retirement plan contribution limits
@@ -21,6 +22,13 @@ const KNOWN_LIMITS = [
 ];
 
 export async function POST() {
+  return withSystemRole(
+    "shared reference data, owned by no household",
+    () => handlePost()
+  );
+}
+
+async function handlePost() {
   const userId = await getApiUserId();
   if (!userId) return Response.json({ error: "Unauthorized" }, { status: 401 });
 
@@ -68,6 +76,13 @@ export async function POST() {
 }
 
 export async function GET() {
+  return withSystemRole(
+    "shared reference data, owned by no household",
+    () => handleGet()
+  );
+}
+
+async function handleGet() {
   const userId = await getApiUserId();
   if (!userId) return Response.json({ error: "Unauthorized" }, { status: 401 });
 

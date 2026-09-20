@@ -5,8 +5,16 @@ import { plaidItems } from "@/lib/db/schema";
 import { getPlaidClient } from "@/lib/plaid/client";
 import { decryptToken } from "@/lib/plaid/encryption";
 import { syncPlaidBalances, syncPlaidItem } from "@/lib/plaid/sync";
+import { withSystemRole } from "@/lib/db/tenant";
 
 export async function GET(request: Request) {
+  return withSystemRole(
+    "iterates every household's Plaid items",
+    () => handleGet(request)
+  );
+}
+
+async function handleGet(request: Request) {
   const authHeader = request.headers.get("authorization");
   if (authHeader !== `Bearer ${process.env.CRON_SECRET}`) {
     return Response.json({ error: "Unauthorized" }, { status: 401 });

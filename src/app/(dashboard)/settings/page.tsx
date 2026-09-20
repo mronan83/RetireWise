@@ -1,4 +1,4 @@
-import { getAuthContext } from "@/lib/auth-helpers";
+import { getAuthContext, withHousehold } from "@/lib/auth-helpers";
 import { eq, and } from "drizzle-orm";
 import { getDb } from "@/lib/db";
 import { getAccounts } from "@/lib/queries/accounts";
@@ -19,6 +19,10 @@ import { IrsLimitsSection } from "./irs-limits-section";
 import { PlanSection } from "./plan-section";
 
 export default async function SettingsPage() {
+  return withHousehold(() => SettingsPageContent());
+}
+
+async function SettingsPageContent() {
   // Two different ids. `userId` is the household's primary id, which every
   // row is keyed by; `accountId` is who is actually signed in. Only the
   // second one can answer whether this person owns the household.

@@ -1,4 +1,4 @@
-import { getAuthContext } from "@/lib/auth-helpers";
+import { getAuthContext, withHousehold } from "@/lib/auth-helpers";
 import { notFound } from "next/navigation";
 import { eq } from "drizzle-orm";
 import { getDb } from "@/lib/db";
@@ -19,7 +19,13 @@ import { AccountActions } from "./account-actions";
 import { AddHoldingButton } from "./add-holding-button";
 import { LinkedContributions } from "./linked-contributions";
 
-export default async function AccountDetailPage({
+export default async function AccountDetailPage(
+  props: Parameters<typeof AccountDetailPageContent>[0]
+) {
+  return withHousehold(() => AccountDetailPageContent(props));
+}
+
+async function AccountDetailPageContent({
   params,
 }: {
   params: Promise<{ accountId: string }>;

@@ -27,18 +27,41 @@ function createDb() {
     // prepared statements across queries. Harmless on a direct connection, so
     // it is safe to leave off unconditionally.
     prepare: false,
-    // One connection per serverless instance: postgres.js keeps a TCP pool,
-    // unlike the stateless HTTP driver this replaced.
-    max: 1,
+    // Room for a few concurrent transactions. Tenant-scoped work runs inside
+    // an explicit transaction (see tenant.ts), which holds a connection for
+    // its duration, so a single-connection pool would serialise every request
+    // on an instance and deadlock any that fans out.
+    max: 5,
     idle_timeout: 20,
   });
 
   return drizzle(sql, { schema });
 }
 
-let _db: ReturnType<typeof createDb> | null = null;
+type FullDb = ReturnType<typeof createDb>;
 
-export function getDb() {
+/**
+ * What query code is handed.
+ *
+ * `$client` is omitted because a transaction does not carry one, and the
+ * tenant-scoped handle in ./tenant is a transaction. Everything the app
+ * actually calls — select, insert, update, delete, execute, query — is
+ * present on both.
+ */
+export type Db = Omit<FullDb, "$client">;
+
+let _db: FullDb | null = null;
+
+/**
+ * The unscoped connection, as the table owner.
+ *
+ * Not for general use — call `getDb()` from ./tenant instead, which returns
+ * the row-level-security-scoped handle when one is in scope. This is exported
+ * for that module, for migrations, and for the seeder.
+ */
+export function getBaseDb(): FullDb {
   if (!_db) _db = createDb();
   return _db;
 }
+
+export { getDb } from "./tenant";

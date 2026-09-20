@@ -1,0 +1,3 @@
+# Entry points that still reach the database without a declared tenant scope.
+#
+# This list may only shrink. See scripts/check-tenant-scope.ts.

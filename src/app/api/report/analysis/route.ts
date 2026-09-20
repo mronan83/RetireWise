@@ -1,4 +1,4 @@
-import { getApiUserId } from "@/lib/auth-helpers";
+import { getApiUserId, withApiHousehold } from "@/lib/auth-helpers";
 import { eq, and } from "drizzle-orm";
 import { generateText } from "ai";
 import { getDb } from "@/lib/db";
@@ -121,6 +121,10 @@ type DataContext = {
 };
 
 export async function GET(request: Request) {
+  return withApiHousehold(() => handleGet(request));
+}
+
+async function handleGet(request: Request) {
   const userId = await getApiUserId();
   if (!userId)
     return Response.json({ error: "Unauthorized" }, { status: 401 });
