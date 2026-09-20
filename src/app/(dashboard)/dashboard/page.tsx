@@ -10,6 +10,7 @@ import { getAccountsWithFreshness } from "@/lib/queries/accounts";
 import { getHoldingsByClerkId } from "@/lib/queries/holdings";
 import { getSnapshots, getAccountPerformanceMap } from "@/lib/queries/snapshots";
 import { calculatePortfolioSummary, calculateGainLoss } from "@/lib/utils/calculations";
+import { gainLossFor, missingBasisNote, rollupBasis } from "@/lib/utils/cost-basis";
 import { RefreshPricesButton } from "@/components/dashboard/refresh-prices-button";
 import { GoalsPanel } from "@/components/dashboard/goals-panel";
 import { ExportButtons } from "@/components/dashboard/export-buttons";
@@ -66,7 +67,7 @@ async function DashboardContentScoped() {
     : 0;
 
   const holdingsTableData = holdingsWithAccounts.map((h) => {
-    const { gainLoss, gainLossPct } = calculateGainLoss(h);
+    const gl = calculateGainLoss(h);
     return {
       id: h.id,
       ticker: h.ticker,
@@ -77,8 +78,8 @@ async function DashboardContentScoped() {
       currentPrice: h.currentPrice,
       currentValue: h.currentValue,
       accountName: h.accountName,
-      gainLoss,
-      gainLossPct,
+      gainLoss: gl?.gainLoss ?? null,
+      gainLossPct: gl?.gainLossPct ?? null,
       lastPriceUpdate: h.lastPriceUpdate,
     };
   });
@@ -91,17 +92,19 @@ async function DashboardContentScoped() {
     .reverse();
 
   // Calculate total value + cost basis per account, and per owner
-  const accountData: Record<string, { value: number; costBasis: number }> = {};
+  // Holdings are kept per account rather than a running cost total: an
+  // unreported basis is null, Number(null) is 0, and a summed 0 is
+  // indistinguishable from a position that cost nothing. See cost-basis.ts.
+  const accountData: Record<string, { value: number; holdings: typeof holdingsWithAccounts }> = {};
   const accountValues: Record<string, number> = {};
   let selfValue = 0;
   let spouseValue = 0;
   for (const h of holdingsWithAccounts) {
     const val = Number(h.currentValue);
-    const cb = Number(h.costBasisPerShare) * Number(h.shares);
     accountValues[h.accountId] = (accountValues[h.accountId] || 0) + val;
-    const entry = accountData[h.accountId] || { value: 0, costBasis: 0 };
+    const entry = accountData[h.accountId] || { value: 0, holdings: [] };
     entry.value += val;
-    entry.costBasis += cb;
+    entry.holdings.push(h);
     accountData[h.accountId] = entry;
     if (h.accountOwner === "spouse") {
       spouseValue += val;
@@ -144,6 +147,7 @@ async function DashboardContentScoped() {
         spouseValue={spouseValue}
         totalGainLoss={summary.totalGainLoss}
         totalGainLossPct={summary.totalGainLossPct}
+        positionsWithoutBasis={summary.positionsWithoutBasis}
         dailyChange={dailyChange}
         dailyChangePct={dailyChangePct}
         accountCount={accountsList.length}
@@ -165,17 +169,17 @@ async function DashboardContentScoped() {
             {accountsList.map((account) => {
               const data = accountData[account.id];
               const value = data?.value ?? 0;
-              const costBasis = data?.costBasis ?? 0;
-              const gainLoss = costBasis > 0 ? value - costBasis : undefined;
-              const gainLossPct = costBasis > 0 ? ((value - costBasis) / costBasis) * 100 : undefined;
+              const rollup = rollupBasis(data?.holdings ?? []);
+              const gl = gainLossFor(value, rollup.basis);
               return (
                 <AccountCard
                   key={account.id}
                   account={account}
                   totalValue={value}
-                  costBasis={costBasis > 0 ? costBasis : undefined}
-                  gainLoss={gainLoss}
-                  gainLossPct={gainLossPct}
+                  costBasis={gl?.costBasis}
+                  gainLoss={gl?.gainLoss}
+                  gainLossPct={gl?.gainLossPct}
+                  missingBasisNote={missingBasisNote(rollup)}
                   periodReturns={periodReturnsMap.get(account.id)}
                   connection={account.connection}
                   valueAsOf={account.valueAsOf}

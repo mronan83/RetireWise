@@ -2,6 +2,7 @@ import { eq } from "drizzle-orm";
 import { getDb } from "@/lib/db";
 import { accounts, holdings, portfolioSnapshots, accountSnapshots, cronRuns } from "@/lib/db/schema";
 import { calculateAllocation } from "@/lib/utils/calculations";
+import { gainLossFor, rollupBasis } from "@/lib/utils/cost-basis";
 import { getLatestSnapshot } from "@/lib/queries/snapshots";
 import { updateAllPrices } from "@/lib/utils/price-feed";
 import { generateAlerts } from "@/lib/utils/alert-generator";
@@ -116,26 +117,35 @@ async function handleGet(request: Request) {
     });
 
     // Per-account snapshots (for time-period performance on account cards)
-    const accountValueMap = new Map<string, { value: number; costBasis: number }>();
+    const byAccount = new Map<string, { value: number; holdings: typeof userHoldings[number]["holdings"][] }>();
     for (const row of userHoldings) {
       const acctId = row.accounts.id;
-      const entry = accountValueMap.get(acctId) || { value: 0, costBasis: 0 };
+      const entry = byAccount.get(acctId) || { value: 0, holdings: [] };
       entry.value += Number(row.holdings.currentValue);
-      entry.costBasis += Number(row.holdings.costBasisPerShare) * Number(row.holdings.shares);
-      accountValueMap.set(acctId, entry);
+      entry.holdings.push(row.holdings);
+      byAccount.set(acctId, entry);
     }
 
-    for (const [acctId, data] of accountValueMap) {
-      const gl = data.value - data.costBasis;
-      const glPct = data.costBasis > 0 ? (gl / data.costBasis) * 100 : 0;
+    for (const [acctId, data] of byAccount) {
+      /**
+       * A snapshot with no basis records no basis.
+       *
+       * `Number(costBasisPerShare) * shares` turned an unreported basis into
+       * zero and wrote it down as history — so the recorded gain for an
+       * employer plan was the account's whole value, or, once the sync had
+       * fabricated a basis equal to market value, exactly nothing. Either
+       * way a year of snapshots would carry a number nobody measured.
+       */
+      const rollup = rollupBasis(data.holdings);
+      const gl = gainLossFor(data.value, rollup.basis);
       await db.insert(accountSnapshots).values({
         clerkId,
         accountId: acctId,
         snapshotDate: today,
         value: String(data.value),
-        costBasis: String(data.costBasis),
-        gainLoss: String(gl),
-        gainLossPct: String(glPct),
+        costBasis: rollup.basis === null ? null : String(rollup.basis),
+        gainLoss: gl ? String(gl.gainLoss) : null,
+        gainLossPct: gl ? String(gl.gainLossPct) : null,
       });
     }
 

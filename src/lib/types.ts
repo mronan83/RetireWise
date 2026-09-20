@@ -33,9 +33,10 @@ export type PortfolioSummary = {
   totalValue: number;
   selfValue: number;
   spouseValue: number;
-  totalCostBasis: number;
-  totalGainLoss: number;
-  totalGainLossPct: number;
+  // Null when any position's basis is unknown — see lib/utils/cost-basis.
+  totalCostBasis: number | null;
+  totalGainLoss: number | null;
+  totalGainLossPct: number | null;
   dailyChange: number;
   dailyChangePct: number;
   accountCount: number;

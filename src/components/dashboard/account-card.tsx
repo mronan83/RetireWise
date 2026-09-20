@@ -31,6 +31,13 @@ type Props = {
   costBasis?: number;
   gainLoss?: number;
   gainLossPct?: number;
+  /**
+   * Why there is no gain figure, when there isn't one.
+   *
+   * Absent this, an account whose institution reports no cost basis is
+   * indistinguishable from one that has genuinely not moved.
+   */
+  missingBasisNote?: string | null;
   periodReturns?: Record<string, number | null>;
   /** Link health. Absent on callers that have not loaded it yet. */
   connection?: ConnectionState;
@@ -46,12 +53,22 @@ export function AccountCard({
   costBasis,
   gainLoss,
   gainLossPct,
+  missingBasisNote,
   periodReturns,
   connection,
   valueAsOf,
   unpricedHoldings = 0,
 }: Props) {
-  const hasGainLoss = gainLoss !== undefined && costBasis !== undefined && costBasis > 0;
+  /**
+   * A gain needs a cost that somebody actually reported.
+   *
+   * This was `costBasis > 0`, which a fabricated basis passed: the Plaid
+   * sync filled an unreported basis with `shares * currentPrice`, so the
+   * card printed "+$0.00 (+0.00%)" — a confident statement of no gain about
+   * a 401(k) that was up thousands. Unknown now renders as unknown.
+   */
+  const hasGainLoss =
+    gainLoss !== undefined && gainLossPct !== undefined && costBasis !== undefined && costBasis > 0;
   const isPositive = (gainLoss ?? 0) >= 0;
   const hasPeriodData = periodReturns && Object.values(periodReturns).some((v) => v !== null);
   const isLinked = account.plaidAccountId !== null;
@@ -70,7 +87,10 @@ export function AccountCard({
             {formatCurrency(totalValue)}
           </div>
 
-          {/* Total gain/loss */}
+          {/* Total gain/loss, or why there isn't one */}
+          {!hasGainLoss && missingBasisNote && (
+            <p className="mt-1 text-xs text-muted-foreground">{missingBasisNote}</p>
+          )}
           {hasGainLoss && (
             <div className={cn(
               "flex items-center gap-1.5 mt-1",

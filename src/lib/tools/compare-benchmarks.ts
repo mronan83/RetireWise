@@ -1,5 +1,6 @@
 import { tool } from "ai";
 import { z } from "zod";
+import { rollupBasis } from "../utils/cost-basis";
 import { getApiUserId } from "@/lib/auth-helpers";
 import { getHoldingsByClerkId } from "../queries/holdings";
 import { getSnapshots } from "../queries/snapshots";
@@ -28,16 +29,19 @@ export const compareBenchmarksTool = tool({
       (sum, h) => sum + Number(h.currentValue),
       0
     );
-    const totalCostBasis = holdings.reduce(
-      (sum, h) => sum + Number(h.shares) * Number(h.costBasisPerShare),
-      0
-    );
-
-    // Portfolio return
+    /**
+     * Null when any position's basis is unreported.
+     *
+     * This summed Number(null) as 0, so a portfolio with employer plans in
+     * it had a cost well below the truth — and the return it was compared
+     * against the S&P with came out far too high. Beating the benchmark for
+     * arithmetic reasons is the worst kind of wrong this tool can be.
+     */
+    const rollup = rollupBasis(holdings);
     const portfolioReturn =
-      totalCostBasis > 0
-        ? ((totalValue - totalCostBasis) / totalCostBasis) * 100
-        : 0;
+      rollup.basis !== null && rollup.basis > 0
+        ? ((totalValue - rollup.basis) / rollup.basis) * 100
+        : null;
 
     // Fetch benchmark performance
     const benchmarks = [
@@ -135,16 +139,27 @@ export const compareBenchmarksTool = tool({
       }
     }
 
+    const notes: string[] = [];
+    if (portfolioPeriodReturn === null) {
+      notes.push(
+        "Portfolio period return requires daily snapshot history. Check back after a few days of snapshots accumulate."
+      );
+    }
+    if (portfolioReturn === null) {
+      notes.push(
+        `Total return since purchase cannot be computed: ${rollup.unknown} position(s) have no cost basis reported by the institution.`
+      );
+    }
+
     return {
       period,
       portfolioValue: Math.round(totalValue * 100) / 100,
-      portfolioTotalReturn: Math.round(portfolioReturn * 100) / 100,
+      portfolioTotalReturn:
+        portfolioReturn === null ? null : Math.round(portfolioReturn * 100) / 100,
+      positionsWithoutCostBasis: rollup.unknown,
       portfolioPeriodReturn,
       benchmarks: benchmarkResults,
-      note:
-        portfolioPeriodReturn === null
-          ? "Portfolio period return requires daily snapshot history. Check back after a few days of snapshots accumulate."
-          : undefined,
+      note: notes.length > 0 ? notes.join(" ") : undefined,
     };
   },
 });

@@ -13,8 +13,11 @@ type Props = {
   totalValue: number;
   selfValue: number;
   spouseValue: number;
-  totalGainLoss: number;
-  totalGainLossPct: number;
+  /** Null when any position has no reported cost basis. */
+  totalGainLoss: number | null;
+  totalGainLossPct: number | null;
+  /** How many positions the institution gave no cost basis for. */
+  positionsWithoutBasis?: number;
   dailyChange: number;
   dailyChangePct: number;
   accountCount: number;
@@ -36,12 +39,18 @@ export function PortfolioSummaryCards({
   spouseValue,
   totalGainLoss,
   totalGainLossPct,
+  positionsWithoutBasis = 0,
   dailyChange,
   dailyChangePct,
   accountCount,
   holdingCount,
   pricesAsOf,
 }: Props) {
+  // A portfolio-wide gain needs a portfolio-wide cost. With any position's
+  // basis missing, the sum of the rest is below the true cost and the gain
+  // comes out too high — so there is no figure here rather than a flattering
+  // one.
+  const hasGain = totalGainLoss !== null && totalGainLossPct !== null;
   return (
     <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
       <Card>
@@ -81,29 +90,45 @@ export function PortfolioSummaryCards({
           <CardTitle className="text-sm font-medium text-muted-foreground flex items-center gap-1">
             Total Gain/Loss <HelpTip text="Unrealized gain or loss across all holdings. Calculated as (current value - cost basis). You only realize this gain/loss when you sell." />
           </CardTitle>
-          {totalGainLoss >= 0 ? (
-            <TrendingUp className="h-4 w-4 text-green-500" />
-          ) : (
-            <TrendingDown className="h-4 w-4 text-red-500" />
-          )}
+          {hasGain &&
+            (totalGainLoss! >= 0 ? (
+              <TrendingUp className="h-4 w-4 text-green-500" />
+            ) : (
+              <TrendingDown className="h-4 w-4 text-red-500" />
+            ))}
         </CardHeader>
         <CardContent>
-          <div
-            className={cn(
-              "text-2xl font-bold font-mono",
-              totalGainLoss >= 0 ? "text-green-500" : "text-red-500"
-            )}
-          >
-            {formatGainLoss(totalGainLoss)}
-          </div>
-          <p
-            className={cn(
-              "text-xs mt-1",
-              totalGainLoss >= 0 ? "text-green-500" : "text-red-500"
-            )}
-          >
-            {formatGainLossPct(totalGainLossPct)}
-          </p>
+          {hasGain ? (
+            <>
+              <div
+                className={cn(
+                  "text-2xl font-bold font-mono",
+                  totalGainLoss! >= 0 ? "text-green-500" : "text-red-500"
+                )}
+              >
+                {formatGainLoss(totalGainLoss!)}
+              </div>
+              <p
+                className={cn(
+                  "text-xs mt-1",
+                  totalGainLoss! >= 0 ? "text-green-500" : "text-red-500"
+                )}
+              >
+                {formatGainLossPct(totalGainLossPct!)}
+              </p>
+            </>
+          ) : (
+            <>
+              <div className="text-2xl font-bold font-mono text-muted-foreground">
+                &mdash;
+              </div>
+              <p className="text-xs mt-1 text-muted-foreground">
+                {positionsWithoutBasis > 0
+                  ? `${positionsWithoutBasis} position${positionsWithoutBasis === 1 ? "" : "s"} without a reported cost basis`
+                  : "No cost basis recorded"}
+              </p>
+            </>
+          )}
         </CardContent>
       </Card>
 

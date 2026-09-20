@@ -18,7 +18,7 @@ async function HoldingsPageContent() {
   ]);
 
   const holdingsTableData = holdingsWithAccounts.map((h) => {
-    const { gainLoss, gainLossPct } = calculateGainLoss(h);
+    const gl = calculateGainLoss(h);
     return {
       id: h.id,
       ticker: h.ticker,
@@ -29,8 +29,8 @@ async function HoldingsPageContent() {
       currentPrice: h.currentPrice,
       currentValue: h.currentValue,
       accountName: h.accountName,
-      gainLoss,
-      gainLossPct,
+      gainLoss: gl?.gainLoss ?? null,
+      gainLossPct: gl?.gainLossPct ?? null,
       lastPriceUpdate: h.lastPriceUpdate,
     };
   });

@@ -1,15 +1,19 @@
 import type { Holding } from "../types";
+import { gainLossFor, positionBasis, rollupBasis } from "./cost-basis";
 
+/**
+ * Gain and loss for one position, or null when the basis is unknown.
+ *
+ * It used to return `{ gainLoss: currentValue, gainLossPct: 0 }` for an
+ * unknown basis, because an absent basis read as Number(null) === 0: the
+ * whole position counted as profit, at a stated 0%. Two wrong numbers that
+ * happened to look like a rounding artefact.
+ */
 export function calculateGainLoss(holding: Holding): {
   gainLoss: number;
   gainLossPct: number;
-} {
-  const currentValue = Number(holding.currentValue);
-  const costBasis =
-    Number(holding.shares) * Number(holding.costBasisPerShare);
-  const gainLoss = currentValue - costBasis;
-  const gainLossPct = costBasis > 0 ? (gainLoss / costBasis) * 100 : 0;
-  return { gainLoss, gainLossPct };
+} | null {
+  return gainLossFor(Number(holding.currentValue), positionBasis(holding));
 }
 
 export function calculateAllocation(
@@ -41,20 +45,20 @@ export function calculatePortfolioSummary(holdings: Holding[]) {
     (sum, h) => sum + Number(h.currentValue),
     0
   );
-  const totalCostBasis = holdings.reduce(
-    (sum, h) => sum + Number(h.shares) * Number(h.costBasisPerShare),
-    0
-  );
-  const totalGainLoss = totalValue - totalCostBasis;
-  const totalGainLossPct =
-    totalCostBasis > 0 ? (totalGainLoss / totalCostBasis) * 100 : 0;
+  // All-or-nothing: see rollupBasis. Summing only the positions that report
+  // a basis gives a cost below the truth against a value that includes every
+  // position, so the gain comes out too high — and the more basis is missing,
+  // the better the portfolio looks.
+  const rollup = rollupBasis(holdings);
+  const gl = gainLossFor(totalValue, rollup.basis);
   const allocation = calculateAllocation(holdings);
 
   return {
     totalValue,
-    totalCostBasis,
-    totalGainLoss,
-    totalGainLossPct,
+    totalCostBasis: rollup.basis,
+    totalGainLoss: gl?.gainLoss ?? null,
+    totalGainLossPct: gl?.gainLossPct ?? null,
+    positionsWithoutBasis: rollup.unknown,
     allocation,
   };
 }

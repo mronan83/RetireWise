@@ -247,10 +247,21 @@ export const holdings = pgTable("holdings", {
   name: text("name").notNull(),
   assetClass: assetClassEnum("asset_class").notNull(),
   shares: decimal("shares", { precision: 20, scale: 8 }).notNull(),
+  /**
+   * NULL means the provider did not report one, not that it is zero.
+   *
+   * It was NOT NULL, and the Plaid sync filled the gap with
+   * `shares * currentPrice`. That is a number the app invented and then
+   * stored as fact: every 401(k) position came back showing exactly $0.00
+   * of gain, and a later sync that lacked cost basis overwrote a real one
+   * that an earlier sync had recorded. Three accounts lost their true
+   * basis that way. There is no value in this column that can mean
+   * "unknown" — so the column has to allow none at all.
+   */
   costBasisPerShare: decimal("cost_basis_per_share", {
     precision: 20,
     scale: 4,
-  }).notNull(),
+  }),
   currentPrice: decimal("current_price", {
     precision: 20,
     scale: 4,
@@ -624,7 +635,9 @@ export const accountSnapshots = pgTable("account_snapshots", {
   accountId: uuid("account_id").notNull(),
   snapshotDate: date("snapshot_date").notNull(),
   value: decimal("value", { precision: 20, scale: 2 }).notNull(),
-  costBasis: decimal("cost_basis", { precision: 20, scale: 2 }).notNull(),
+  // NULL when any holding in the account had no reported basis. A partial
+  // sum understates cost and overstates gain, which reads as a good day.
+  costBasis: decimal("cost_basis", { precision: 20, scale: 2 }),
   gainLoss: decimal("gain_loss", { precision: 20, scale: 2 }),
   gainLossPct: decimal("gain_loss_pct", { precision: 10, scale: 4 }),
   createdAt: timestamp("created_at").defaultNow().notNull(),

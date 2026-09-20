@@ -116,6 +116,20 @@ export async function getLatestAccountSnapshots(clerkId: string) {
  * Build per-account performance data for time periods.
  * Returns a map of accountId -> { daily, ytd, 1yr, 3yr, 5yr, 10yr } return percentages.
  */
+/**
+ * How late a boundary snapshot may be and still count.
+ *
+ * A period boundary can fall on a weekend or a market holiday, when no
+ * snapshot is taken. This covers that gap and not a missing year.
+ */
+const GRACE_DAYS = 7;
+
+function addDays(isoDate: string, days: number): string {
+  const d = new Date(`${isoDate}T00:00:00Z`);
+  d.setUTCDate(d.getUTCDate() + days);
+  return d.toISOString().split("T")[0];
+}
+
 export async function getAccountPerformanceMap(clerkId: string): Promise<
   Map<string, Record<string, number | null>>
 > {
@@ -162,9 +176,25 @@ export async function getAccountPerformanceMap(clerkId: string): Promise<
     if (snaps.length === 0) continue;
     const latest = snaps[snaps.length - 1];
     const latestVal = latest.value;
+    const earliest = snaps[0];
 
-    function findClosest(targetDate: string): number | null {
-      // Find the first snapshot on or after the target date
+    /**
+     * The value at a date, or null when the history does not reach it.
+     *
+     * This returned "the first snapshot on or after the target", with no
+     * check that any snapshot preceded the target at all. An account with
+     * five months of history therefore answered the 10-year question with
+     * its oldest row — so "10Y", "5Y", "3Y" and "1Y" all showed the same
+     * five-month number, each under a label claiming a period the app had
+     * never observed. Nothing looked broken: the figures were small,
+     * plausible, and identical to one another.
+     *
+     * GRACE_DAYS exists because a target date can land on a weekend or a
+     * market holiday, when no snapshot is taken. It absorbs that and
+     * nothing more.
+     */
+    function valueAt(targetDate: string): number | null {
+      if (earliest.date > addDays(targetDate, GRACE_DAYS)) return null;
       const snap = snaps.find((s) => s.date >= targetDate);
       return snap ? snap.value : null;
     }
@@ -174,19 +204,26 @@ export async function getAccountPerformanceMap(clerkId: string): Promise<
       return ((latestVal - startVal) / startVal) * 100;
     }
 
-    // Daily: compare to second-to-last snapshot
+    /**
+     * Daily change, only when the previous snapshot is actually recent.
+     *
+     * snaps[length - 2] is the previous ROW, not the previous day. After a
+     * weekend, an outage, or a spell of failed cron runs it can be weeks
+     * back, and the move over those weeks was being labelled "Day".
+     */
     const prevSnap = snaps.length >= 2 ? snaps[snaps.length - 2] : null;
-    const daily = prevSnap && prevSnap.value > 0
-      ? ((latestVal - prevSnap.value) / prevSnap.value) * 100
-      : null;
+    const daily =
+      prevSnap && prevSnap.value > 0 && latest.date <= addDays(prevSnap.date, GRACE_DAYS)
+        ? ((latestVal - prevSnap.value) / prevSnap.value) * 100
+        : null;
 
     result.set(accountId, {
       daily,
-      ytd: calcReturn(findClosest(ytdStart)),
-      "1yr": calcReturn(findClosest(oneYearAgo.toISOString().split("T")[0])),
-      "3yr": calcReturn(findClosest(threeYearsAgo.toISOString().split("T")[0])),
-      "5yr": calcReturn(findClosest(fiveYearsAgo.toISOString().split("T")[0])),
-      "10yr": calcReturn(findClosest(tenYearsAgo.toISOString().split("T")[0])),
+      ytd: calcReturn(valueAt(ytdStart)),
+      "1yr": calcReturn(valueAt(oneYearAgo.toISOString().split("T")[0])),
+      "3yr": calcReturn(valueAt(threeYearsAgo.toISOString().split("T")[0])),
+      "5yr": calcReturn(valueAt(fiveYearsAgo.toISOString().split("T")[0])),
+      "10yr": calcReturn(valueAt(tenYearsAgo.toISOString().split("T")[0])),
     });
   }
 

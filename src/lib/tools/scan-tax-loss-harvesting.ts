@@ -2,6 +2,7 @@ import { tool } from "ai";
 import { z } from "zod";
 import { getApiUserId } from "@/lib/auth-helpers";
 import { getHoldingsByClerkId } from "../queries/holdings";
+import { positionBasis } from "../utils/cost-basis";
 import { ASSET_CLASS_LABELS, ACCOUNT_TYPE_LABELS } from "../constants";
 
 // Common replacement funds to maintain market exposure while harvesting losses
@@ -68,9 +69,24 @@ export const scanTaxLossHarvestingTool = tool({
 
     let totalHarvestable = 0;
 
+    let skippedNoBasis = 0;
+
     for (const h of taxableHoldings) {
       const shares = Number(h.shares);
-      const costBasis = shares * Number(h.costBasisPerShare);
+      /**
+       * No basis, no knowable loss.
+       *
+       * `Number(h.costBasisPerShare)` turned an unreported basis into a cost
+       * of zero, which made every such position a large unrealised GAIN —
+       * so they were silently excluded from harvesting rather than flagged
+       * as unmeasurable. Both the old outcome and the reason for it were
+       * invisible; the count now comes back with the result.
+       */
+      const costBasis = positionBasis(h);
+      if (costBasis === null) {
+        skippedNoBasis++;
+        continue;
+      }
       const currentValue = Number(h.currentValue);
       const unrealizedLoss = currentValue - costBasis;
 

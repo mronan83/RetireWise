@@ -206,7 +206,8 @@ type IncomingHolding = {
   name: string;
   assetClass: ReturnType<typeof mapPlaidSecurityType>;
   shares: number;
-  costBasisPerShare: number;
+  /** null when Plaid did not report cost basis. Never a stand-in figure. */
+  costBasisPerShare: number | null;
   currentPrice: number;
 };
 
@@ -217,11 +218,11 @@ type IncomingHolding = {
  * each one would show the same fund two or three times, so shares are summed
  * and cost basis is averaged across them.
  */
-function aggregateHoldings(
+export function aggregateHoldings(
   plaidHoldings: { security_id: string; quantity: number; institution_price?: number | null; cost_basis?: number | null }[],
   securities: Map<string, { ticker_symbol?: string | null; cusip?: string | null; name?: string | null; type?: string | null }>
 ): IncomingHolding[] {
-  const byTicker = new Map<string, IncomingHolding & { totalCost: number }>();
+  const byTicker = new Map<string, IncomingHolding & { totalCost: number | null }>();
 
   for (const ph of plaidHoldings) {
     const security = securities.get(ph.security_id);
@@ -231,12 +232,28 @@ function aggregateHoldings(
       security.ticker_symbol || security.cusip || security.name || "UNKNOWN";
     const shares = ph.quantity ?? 0;
     const currentPrice = ph.institution_price ?? 0;
-    const totalCost = ph.cost_basis ?? shares * currentPrice;
+
+    /**
+     * No stand-in when Plaid does not report cost basis.
+     *
+     * This was `ph.cost_basis ?? shares * currentPrice`, which makes cost
+     * equal to market value — so the position shows exactly zero gain, and
+     * the zero is stored as though the institution had said so. Plaid omits
+     * cost basis for most employer plans, so every 401(k) position in the
+     * app read "+$0.00 (+0.00%)" while actually being up thousands.
+     */
+    const totalCost = ph.cost_basis ?? null;
 
     const existing = byTicker.get(ticker);
     if (existing) {
       existing.shares += shares;
-      existing.totalCost += totalCost;
+      // One lot without a basis makes the position's basis unknown: adding
+      // the lots that do have one gives a cost lower than the truth, and a
+      // gain correspondingly higher.
+      existing.totalCost =
+        existing.totalCost === null || totalCost === null
+          ? null
+          : existing.totalCost + totalCost;
       existing.currentPrice = currentPrice || existing.currentPrice;
     } else {
       byTicker.set(ticker, {
@@ -244,7 +261,7 @@ function aggregateHoldings(
         name: security.name || ticker,
         assetClass: mapPlaidSecurityType(security.type ?? null),
         shares,
-        costBasisPerShare: 0,
+        costBasisPerShare: null,
         currentPrice,
         totalCost,
       });
@@ -256,7 +273,8 @@ function aggregateHoldings(
     name: h.name,
     assetClass: h.assetClass,
     shares: h.shares,
-    costBasisPerShare: h.shares > 0 ? h.totalCost / h.shares : h.currentPrice,
+    costBasisPerShare:
+      h.totalCost === null || !(h.shares > 0) ? null : h.totalCost / h.shares,
     currentPrice: h.currentPrice,
   }));
 }
@@ -286,15 +304,38 @@ async function reconcileHoldings(
 
   for (const h of incoming) {
     const match = existingByTicker.get(h.ticker);
+
+    /**
+     * A sync that learns nothing about cost basis must not unlearn what is
+     * already known.
+     *
+     * Plaid's coverage is not stable: the same position can come back with
+     * cost basis one day and without it the next. This wrote whatever the
+     * latest response held, so a single silent response permanently replaced
+     * a real basis — recorded by an earlier sync, and by then the only copy
+     * — with a fabricated one. Three accounts here lost their true basis
+     * that way, together with several years of recorded gain.
+     *
+     * So an absent basis leaves the stored one alone. A basis the user typed
+     * in by hand survives for the same reason: Plaid never reported it, and
+     * Plaid saying nothing is not Plaid disagreeing.
+     */
+    const basis =
+      h.costBasisPerShare !== null
+        ? { costBasisPerShare: String(h.costBasisPerShare) }
+        : match
+          ? {}
+          : { costBasisPerShare: null };
+
     const values = {
       name: h.name,
       assetClass: h.assetClass,
       shares: String(h.shares),
-      costBasisPerShare: String(h.costBasisPerShare),
       currentPrice: String(h.currentPrice),
       currentValue: String(h.shares * h.currentPrice),
       dataSource: "plaid" as const,
       lastPriceUpdate: new Date(),
+      ...basis,
     };
 
     if (match) {

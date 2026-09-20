@@ -28,7 +28,8 @@
     "test:freshness": "tsx scripts/test-freshness.ts",
     "test:rmd": "tsx scripts/test-rmd.ts",
     "test:analytics": "tsx scripts/test-analytics.ts",
-    "test:tax-reference": "tsx scripts/test-tax-reference.ts"
+    "test:tax-reference": "tsx scripts/test-tax-reference.ts",
+    "test:cost-basis": "tsx scripts/test-cost-basis.ts"
   },
   "dependencies": {
     "@ai-sdk/anthropic": "^3.0.71",

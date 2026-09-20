@@ -25,12 +25,14 @@ type HoldingRow = {
   name: string;
   assetClass: string;
   shares: string;
-  costBasisPerShare: string;
+  /** Null when the institution did not report one. Not zero. */
+  costBasisPerShare: string | null;
   currentPrice: string;
   currentValue: string;
   accountName: string;
-  gainLoss: number;
-  gainLossPct: number;
+  /** Null when there is no basis to measure against. */
+  gainLoss: number | null;
+  gainLossPct: number | null;
   /** When this price was last fetched. Null means it never was. */
   lastPriceUpdate?: Date | string | null;
 };
@@ -107,17 +109,27 @@ export function HoldingsTable({ holdings }: { holdings: HoldingRow[] }) {
               <TableCell className="text-right font-mono font-medium">
                 {formatCurrency(Number(holding.currentValue))}
               </TableCell>
-              <TableCell
-                className={cn(
-                  "text-right font-mono",
-                  holding.gainLoss >= 0 ? "text-green-500" : "text-red-500"
-                )}
-              >
-                <div>{formatGainLoss(holding.gainLoss)}</div>
-                <div className="text-xs">
-                  {formatGainLossPct(holding.gainLossPct)}
-                </div>
-              </TableCell>
+              {/* An unknown basis is shown as unknown. This cell used to
+                  render the whole position as profit at a stated 0%, because
+                  a missing basis arrived as Number(null) === 0. */}
+              {holding.gainLoss === null || holding.gainLossPct === null ? (
+                <TableCell className="text-right font-mono text-muted-foreground">
+                  <div>&mdash;</div>
+                  <div className="text-xs">no cost basis</div>
+                </TableCell>
+              ) : (
+                <TableCell
+                  className={cn(
+                    "text-right font-mono",
+                    holding.gainLoss >= 0 ? "text-green-500" : "text-red-500"
+                  )}
+                >
+                  <div>{formatGainLoss(holding.gainLoss)}</div>
+                  <div className="text-xs">
+                    {formatGainLossPct(holding.gainLossPct)}
+                  </div>
+                </TableCell>
+              )}
               <TableCell className="hidden lg:table-cell text-muted-foreground">
                 {holding.accountName}
               </TableCell>

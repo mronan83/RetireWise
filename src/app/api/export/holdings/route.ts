@@ -1,3 +1,4 @@
+import { positionBasis } from "@/lib/utils/cost-basis";
 import { getApiUserId, withApiHousehold } from "@/lib/auth-helpers";
 import { getHoldingsByClerkId } from "@/lib/queries/holdings";
 
@@ -11,20 +12,24 @@ async function handleGet() {
 
   const holdings = await getHoldingsByClerkId(userId);
 
+
   const header = "Ticker,Name,Asset Class,Shares,Cost Basis/Share,Current Price,Current Value,Gain/Loss,Account,Owner\n";
   const rows = holdings.map((h) => {
-    const costBasis = Number(h.shares) * Number(h.costBasisPerShare);
+    // An empty cell, not 0.00. Number(null) is 0, so a position whose
+    // institution reported no cost basis exported as though it had cost
+    // nothing — and the gain column claimed the entire position as profit.
+    const costBasis = positionBasis(h);
     const value = Number(h.currentValue);
-    const gainLoss = value - costBasis;
+    const gainLoss = costBasis === null ? null : value - costBasis;
     return [
       h.ticker,
       `"${h.name}"`,
       h.assetClass,
       h.shares,
-      h.costBasisPerShare,
+      h.costBasisPerShare ?? "",
       h.currentPrice,
       h.currentValue,
-      gainLoss.toFixed(2),
+      gainLoss === null ? "" : gainLoss.toFixed(2),
       `"${h.accountName}"`,
       h.accountOwner,
     ].join(",");

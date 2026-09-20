@@ -3,6 +3,7 @@ import { z } from "zod";
 import { getApiUserId } from "@/lib/auth-helpers";
 import { getHoldingsByClerkId } from "../queries/holdings";
 import { calculateGainLoss } from "../utils/calculations";
+import { positionBasis } from "../utils/cost-basis";
 import { ASSET_CLASS_LABELS } from "../constants";
 
 export const getHoldingsDetailTool = tool({
@@ -23,7 +24,15 @@ export const getHoldingsDetailTool = tool({
     const holdings = await getHoldingsByClerkId(userId);
 
     const detailed = holdings.map((h) => {
-      const { gainLoss, gainLossPct } = calculateGainLoss(h);
+      /**
+       * null, not zero, when the institution reported no cost basis.
+       *
+       * The advisor reads these figures straight out and quotes them. A
+       * fabricated basis made every employer-plan position look like a
+       * position with no gain, and the advisor said so in as many words.
+       */
+      const gl = calculateGainLoss(h);
+      const basis = positionBasis(h);
       return {
         ticker: h.ticker,
         name: h.name,
@@ -31,10 +40,12 @@ export const getHoldingsDetailTool = tool({
         shares: Number(h.shares),
         currentPrice: Number(h.currentPrice),
         currentValue: Number(h.currentValue),
-        costBasisPerShare: Number(h.costBasisPerShare),
-        totalCostBasis: Number(h.shares) * Number(h.costBasisPerShare),
-        gainLoss: Math.round(gainLoss * 100) / 100,
-        gainLossPct: Math.round(gainLossPct * 100) / 100,
+        costBasisPerShare:
+          h.costBasisPerShare === null ? null : Number(h.costBasisPerShare),
+        totalCostBasis: basis === null ? null : Math.round(basis * 100) / 100,
+        gainLoss: gl ? Math.round(gl.gainLoss * 100) / 100 : null,
+        gainLossPct: gl ? Math.round(gl.gainLossPct * 100) / 100 : null,
+        costBasisReported: gl !== null,
         account: h.accountName,
       };
     });
@@ -42,7 +53,8 @@ export const getHoldingsDetailTool = tool({
     if (sortBy === "value") {
       detailed.sort((a, b) => b.currentValue - a.currentValue);
     } else if (sortBy === "gainLoss") {
-      detailed.sort((a, b) => b.gainLoss - a.gainLoss);
+      // Positions with no knowable gain sort last rather than as zero.
+      detailed.sort((a, b) => (b.gainLoss ?? -Infinity) - (a.gainLoss ?? -Infinity));
     } else {
       detailed.sort((a, b) => a.ticker.localeCompare(b.ticker));
     }

@@ -41,9 +41,16 @@ export const getPortfolioSummaryTool = tool({
 
     return {
       totalValue: Math.round(summary.totalValue * 100) / 100,
-      totalCostBasis: Math.round(summary.totalCostBasis * 100) / 100,
-      totalGainLoss: Math.round(summary.totalGainLoss * 100) / 100,
-      totalGainLossPct: Math.round(summary.totalGainLossPct * 100) / 100,
+      // null rather than a figure built from the positions that happen to
+      // report a basis, which would be a cost below the truth and a gain
+      // above it — and the advisor would quote the flattering version.
+      totalCostBasis:
+        summary.totalCostBasis === null ? null : Math.round(summary.totalCostBasis * 100) / 100,
+      totalGainLoss:
+        summary.totalGainLoss === null ? null : Math.round(summary.totalGainLoss * 100) / 100,
+      totalGainLossPct:
+        summary.totalGainLossPct === null ? null : Math.round(summary.totalGainLossPct * 100) / 100,
+      positionsWithoutCostBasis: summary.positionsWithoutBasis,
       holdingCount: holdings.length,
       accountCount: accountsList.length,
       allocationByAssetClass: allocationLabeled,

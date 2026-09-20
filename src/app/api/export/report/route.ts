@@ -5,6 +5,7 @@ import { userPreferences, socialSecurityBenefits } from "@/lib/db/schema";
 import { getHoldingsByClerkId } from "@/lib/queries/holdings";
 import { getAccounts } from "@/lib/queries/accounts";
 import { calculatePortfolioSummary, calculateGainLoss } from "@/lib/utils/calculations";
+import { NO_BASIS, orNoBasis } from "@/lib/utils/cost-basis";
 import { formatCurrency, formatPercent } from "@/lib/utils/format";
 import { ASSET_CLASS_LABELS, ACCOUNT_TYPE_LABELS, ACCOUNT_OWNER_LABELS } from "@/lib/constants";
 
@@ -59,8 +60,15 @@ async function handleGet() {
   report += "PORTFOLIO SUMMARY\n";
   report += "─────────────────────────────────────────────────\n";
   report += `  Total Value:       ${formatCurrency(summary.totalValue)}\n`;
-  report += `  Cost Basis:        ${formatCurrency(summary.totalCostBasis)}\n`;
-  report += `  Total Gain/Loss:   ${formatCurrency(summary.totalGainLoss)} (${formatPercent(summary.totalGainLossPct)})\n`;
+  // "not reported" rather than a figure assembled from the positions that
+  // happen to have a basis, which would be a cost below the truth and a gain
+  // above it.
+  report += `  Cost Basis:        ${orNoBasis(summary.totalCostBasis, formatCurrency)}\n`;
+  report += `  Total Gain/Loss:   ${
+    summary.totalGainLoss === null
+      ? `${NO_BASIS} (${summary.positionsWithoutBasis} position(s) without cost basis)`
+      : `${formatCurrency(summary.totalGainLoss)} (${formatPercent(summary.totalGainLossPct!)})`
+  }\n`;
   report += `  Accounts:          ${accountsList.length}\n`;
   report += `  Holdings:          ${holdings.length}\n\n`;
 
@@ -101,8 +109,11 @@ async function handleGet() {
   report += "  Ticker    Shares       Price        Value       Gain/Loss\n";
   const sorted = [...holdings].sort((a, b) => Number(b.currentValue) - Number(a.currentValue));
   for (const h of sorted) {
-    const { gainLoss, gainLossPct } = calculateGainLoss(h);
-    report += `  ${h.ticker.padEnd(9)} ${Number(h.shares).toFixed(2).padStart(10)}  ${formatCurrency(Number(h.currentPrice)).padStart(10)}  ${formatCurrency(Number(h.currentValue)).padStart(12)}  ${formatCurrency(gainLoss).padStart(10)} (${formatPercent(gainLossPct)})\n`;
+    const gl = calculateGainLoss(h);
+    const glText = gl
+      ? `${formatCurrency(gl.gainLoss).padStart(10)} (${formatPercent(gl.gainLossPct)})`
+      : NO_BASIS.padStart(10);
+    report += `  ${h.ticker.padEnd(9)} ${Number(h.shares).toFixed(2).padStart(10)}  ${formatCurrency(Number(h.currentPrice)).padStart(10)}  ${formatCurrency(Number(h.currentValue)).padStart(12)}  ${glText}\n`;
   }
   report += "\n";
 

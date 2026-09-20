@@ -16,6 +16,7 @@ import {
   calculatePortfolioSummary,
   calculateGainLoss,
 } from "@/lib/utils/calculations";
+import { NO_BASIS, orNoBasis } from "@/lib/utils/cost-basis";
 import { formatCurrency, formatPercent } from "@/lib/utils/format";
 import {
   ASSET_CLASS_LABELS,
@@ -173,7 +174,7 @@ async function handleGet() {
       model,
       prompt: `You are a concise financial analyst writing for a portfolio report infographic. Given this household portfolio data, provide 4-5 short actionable insights. Each insight should be 1-2 sentences max. Use plain language, no jargon. Format as bullet points.
 
-Portfolio: ${formatCurrency(summary.totalValue)} | Gain/Loss: ${formatCurrency(summary.totalGainLoss)} (${formatPercent(summary.totalGainLossPct)})
+Portfolio: ${formatCurrency(summary.totalValue)} | Gain/Loss: ${summary.totalGainLoss === null ? NO_BASIS : `${formatCurrency(summary.totalGainLoss)} (${formatPercent(summary.totalGainLossPct!)})`}
 Net Worth: ${formatCurrency(netWorth)}
 Allocation: ${allocSummary}
 Top Holdings:
@@ -350,8 +351,8 @@ Focus on: concentration risk, allocation balance, actionable improvements, and a
       </div>
       <div class="stat-card">
         <div class="stat-label">Total Gain/Loss</div>
-        <div class="stat-value ${summary.totalGainLoss >= 0 ? "green" : "red"}">${formatCurrency(summary.totalGainLoss)}</div>
-        <div class="stat-sub">${formatPercent(summary.totalGainLossPct)}</div>
+        <div class="stat-value ${summary.totalGainLoss === null ? "" : summary.totalGainLoss >= 0 ? "green" : "red"}">${orNoBasis(summary.totalGainLoss, formatCurrency)}</div>
+        <div class="stat-sub">${orNoBasis(summary.totalGainLossPct, formatPercent)}</div>
       </div>
       <div class="stat-card">
         <div class="stat-label">Daily Change</div>
@@ -407,14 +408,14 @@ Focus on: concentration risk, allocation balance, actionable improvements, and a
         </thead>
         <tbody>
           ${sortedHoldings.map((h) => {
-            const { gainLoss, gainLossPct } = calculateGainLoss(h);
+            const gl = calculateGainLoss(h);
             const weight = summary.totalValue > 0 ? (Number(h.currentValue) / summary.totalValue) * 100 : 0;
             return `<tr>
               <td class="ticker">${h.ticker}</td>
               <td style="color:#a3a3a3;max-width:200px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${h.name}</td>
               <td class="right mono">${formatCurrency(Number(h.currentValue))}</td>
               <td class="right mono" style="color:#737373">${weight.toFixed(1)}%</td>
-              <td class="right mono ${gainLoss >= 0 ? "green" : "red"}">${formatCurrency(gainLoss)} <span class="badge ${gainLoss >= 0 ? "badge-green" : "badge-red"}">${formatPercent(gainLossPct)}</span></td>
+              <td class="right mono ${gl === null ? "" : gl.gainLoss >= 0 ? "green" : "red"}">${gl === null ? NO_BASIS : `${formatCurrency(gl.gainLoss)} <span class="badge ${gl.gainLoss >= 0 ? "badge-green" : "badge-red"}">${formatPercent(gl.gainLossPct)}</span>`}</td>
             </tr>`;
           }).join("\n          ")}
         </tbody>

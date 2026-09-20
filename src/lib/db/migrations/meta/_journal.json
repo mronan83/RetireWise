@@ -85,6 +85,13 @@
       "when": 1789936288631,
       "tag": "0011_tax_reference",
       "breakpoints": true
+    },
+    {
+      "idx": 12,
+      "version": "7",
+      "when": 1789943351437,
+      "tag": "0012_cost_basis_nullable",
+      "breakpoints": true
     }
   ]
 }

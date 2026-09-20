@@ -16,6 +16,7 @@ import {
   calculateAllocation,
   calculateAllocationDrift,
 } from "@/lib/utils/calculations";
+import { NO_BASIS, orNoBasis } from "@/lib/utils/cost-basis";
 import { formatCurrency, formatPercent } from "@/lib/utils/format";
 import {
   ASSET_CLASS_LABELS,
@@ -200,10 +201,14 @@ async function handleGet(request: Request) {
   const taxableLosses = holdings
     .filter((h) => (acctTaxMap.get(h.accountId) || "taxable") === "taxable")
     .map((h) => {
-      const { gainLoss, gainLossPct } = calculateGainLoss(h);
-      return { ticker: h.ticker, value: Number(h.currentValue), gainLoss, gainLossPct };
+      // A position with no reported basis has no knowable loss, so it is
+      // dropped rather than counted. It used to survive by accident: a
+      // missing basis read as zero, which made the whole position a gain.
+      const gl = calculateGainLoss(h);
+      return gl ? { ticker: h.ticker, value: Number(h.currentValue), ...gl } : null;
     })
-    .filter((h) => h.gainLoss < 0)
+    .filter((h): h is { ticker: string; value: number; gainLoss: number; gainLossPct: number } =>
+      h !== null && h.gainLoss < 0)
     .sort((a, b) => a.gainLoss - b.gainLoss);
 
   // Top holdings
@@ -233,7 +238,7 @@ async function handleGet(request: Request) {
 
   const ctx: DataContext = {
     portfolioSummaryText: [
-      `Portfolio: ${formatCurrency(summary.totalValue)} | Gain/Loss: ${formatCurrency(summary.totalGainLoss)} (${formatPercent(summary.totalGainLossPct)})`,
+      `Portfolio: ${formatCurrency(summary.totalValue)} | Gain/Loss: ${summary.totalGainLoss === null ? NO_BASIS : `${formatCurrency(summary.totalGainLoss)} (${formatPercent(summary.totalGainLossPct!)})`}`,
       `Self: ${formatCurrency(selfVal)} | Spouse: ${formatCurrency(spouseVal)}`,
       `Allocation: ${allocSummary}`,
       `Holdings:\n${holdingSummary}`,
@@ -347,8 +352,8 @@ async function handleGet(request: Request) {
         </div>
         <div class="stat-card">
           <div class="stat-label">Total Gain/Loss</div>
-          <div class="stat-value ${summary.totalGainLoss >= 0 ? "green" : "red"}">${formatCurrency(summary.totalGainLoss)}</div>
-          <div class="stat-sub">${formatPercent(summary.totalGainLossPct)}</div>
+          <div class="stat-value ${summary.totalGainLoss === null ? "" : summary.totalGainLoss >= 0 ? "green" : "red"}">${orNoBasis(summary.totalGainLoss, formatCurrency)}</div>
+          <div class="stat-sub">${orNoBasis(summary.totalGainLossPct, formatPercent)}</div>
         </div>
         <div class="stat-card">
           <div class="stat-label">Daily Change</div>
@@ -490,14 +495,14 @@ async function handleGet(request: Request) {
           <thead><tr><th>Ticker</th><th>Name</th><th class="right">Value</th><th class="right">Weight</th><th class="right">Gain/Loss</th></tr></thead>
           <tbody>
             ${sortedHoldings.map((h) => {
-              const { gainLoss, gainLossPct } = calculateGainLoss(h);
+              const gl = calculateGainLoss(h);
               const weight = summary.totalValue > 0 ? (Number(h.currentValue) / summary.totalValue) * 100 : 0;
               return `<tr>
                 <td class="ticker">${h.ticker}</td>
                 <td style="color:#a3a3a3;max-width:180px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${h.name}</td>
                 <td class="right mono">${formatCurrency(Number(h.currentValue))}</td>
                 <td class="right mono" style="color:#737373">${weight.toFixed(1)}%</td>
-                <td class="right mono ${gainLoss >= 0 ? "green" : "red"}">${formatCurrency(gainLoss)} <span class="badge ${gainLoss >= 0 ? "badge-green" : "badge-red"}">${formatPercent(gainLossPct)}</span></td>
+                <td class="right mono ${gl === null ? "" : gl.gainLoss >= 0 ? "green" : "red"}">${gl === null ? NO_BASIS : `${formatCurrency(gl.gainLoss)} <span class="badge ${gl.gainLoss >= 0 ? "badge-green" : "badge-red"}">${formatPercent(gl.gainLossPct)}</span>`}</td>
               </tr>`;
             }).join("")}
           </tbody>

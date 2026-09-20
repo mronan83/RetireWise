@@ -65,6 +65,11 @@ jobs:
       # only reason moving these figures out of source is an improvement.
       - run: pnpm exec tsx scripts/test-tax-reference.ts
 
+      # Cost basis, and the two ways "we don't know" was rendered as a
+      # number: a fabricated basis equal to market value, and a ten-year
+      # return computed from five months of snapshots.
+      - run: pnpm exec tsx scripts/test-cost-basis.ts
+
   mobile:
     name: Mobile layout
     runs-on: ubuntu-latest

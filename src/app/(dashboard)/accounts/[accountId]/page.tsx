@@ -55,7 +55,7 @@ async function AccountDetailPageContent({
   );
 
   const holdingsTableData = holdingsList.map((h) => {
-    const { gainLoss, gainLossPct } = calculateGainLoss(h);
+    const gl = calculateGainLoss(h);
     return {
       id: h.id,
       ticker: h.ticker,
@@ -66,8 +66,8 @@ async function AccountDetailPageContent({
       currentPrice: h.currentPrice,
       currentValue: h.currentValue,
       accountName: account.name,
-      gainLoss,
-      gainLossPct,
+      gainLoss: gl?.gainLoss ?? null,
+      gainLossPct: gl?.gainLossPct ?? null,
     };
   });
 

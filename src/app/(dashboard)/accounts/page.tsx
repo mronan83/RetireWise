@@ -8,6 +8,7 @@ import { FidelityImport } from "@/components/forms/fidelity-import";
 import { AddAccountButton } from "./add-account-button";
 import { DuplicateReview, type ReviewPair } from "./duplicate-review";
 import { findDuplicateCandidates } from "@/lib/accounts/duplicates";
+import { gainLossFor, missingBasisNote, rollupBasis } from "@/lib/utils/cost-basis";
 
 export default async function AccountsPage() {
   return withHousehold(() => AccountsPageContent());
@@ -22,12 +23,20 @@ async function AccountsPageContent() {
     getAccountPerformanceMap(userId),
   ]);
 
-  // Compute per-account value, cost basis, and gain/loss from holdings
-  const accountData: Record<string, { value: number; costBasis: number }> = {};
+  /**
+   * Per-account value and basis.
+   *
+   * The basis line was `Number(h.costBasisPerShare) * shares`, and an
+   * unreported basis arrives as null — which Number() turns into 0 without
+   * complaint. Every employer-plan account therefore reported a cost of
+   * zero, or, after the sync started writing a basis equal to market value,
+   * a gain of exactly $0.00. rollupBasis keeps unknown as unknown.
+   */
+  const accountData: Record<string, { value: number; holdings: typeof allHoldings }> = {};
   for (const h of allHoldings) {
-    const entry = accountData[h.accountId] || { value: 0, costBasis: 0 };
+    const entry = accountData[h.accountId] || { value: 0, holdings: [] };
     entry.value += Number(h.currentValue);
-    entry.costBasis += Number(h.costBasisPerShare) * Number(h.shares);
+    entry.holdings.push(h);
     accountData[h.accountId] = entry;
   }
 
@@ -80,9 +89,8 @@ async function AccountsPageContent() {
           {accountsList.map((account) => {
             const data = accountData[account.id];
             const value = data?.value ?? 0;
-            const costBasis = data?.costBasis ?? 0;
-            const gainLoss = costBasis > 0 ? value - costBasis : undefined;
-            const gainLossPct = costBasis > 0 ? ((value - costBasis) / costBasis) * 100 : undefined;
+            const rollup = rollupBasis(data?.holdings ?? []);
+            const gl = gainLossFor(value, rollup.basis);
             const periodReturns = periodReturnsMap.get(account.id);
 
             return (
@@ -90,9 +98,10 @@ async function AccountsPageContent() {
                 key={account.id}
                 account={account}
                 totalValue={value}
-                costBasis={costBasis > 0 ? costBasis : undefined}
-                gainLoss={gainLoss}
-                gainLossPct={gainLossPct}
+                costBasis={gl?.costBasis}
+                gainLoss={gl?.gainLoss}
+                gainLossPct={gl?.gainLossPct}
+                missingBasisNote={missingBasisNote(rollup)}
                 periodReturns={periodReturns}
                 connection={account.connection}
                 valueAsOf={account.valueAsOf}
