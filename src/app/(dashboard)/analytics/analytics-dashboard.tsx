@@ -15,6 +15,7 @@ import {
 import { formatCurrency, formatPercent, formatCompactCurrency } from "@/lib/utils/format";
 import {
   projectRMDs,
+  RMD_START_AGE,
   calculateRothConversionLadder,
   calculateSSBreakEven,
   calculateCatchUpImpact,
@@ -78,6 +79,24 @@ export function AnalyticsDashboard(props: Props) {
     startYear: new Date().getFullYear() + yearsToRetirement,
   }), [projectedTaxDeferred, retirementAge, returnPct, yearsToRetirement]);
 
+  /**
+   * The first year an RMD is actually required.
+   *
+   * The three figures below used rmds[0], which is the row at RETIREMENT age
+   * — the age the projection starts from, not the age RMDs begin. So "First
+   * RMD (Age 73)" read $0 because at 62 no distribution is required, and
+   * "Projected Tax-Deferred at 73" showed the balance at retirement,
+   * understated by however many years of growth sit between the two.
+   *
+   * Both were labelled with an age they did not describe, which is the kind
+   * of wrong that looks right: the number is real, it is just from a
+   * different year.
+   */
+  const firstRmd = useMemo(
+    () => rmds.find((r) => r.age >= RMD_START_AGE) ?? null,
+    [rmds]
+  );
+
   // 2. Roth Conversion Ladder
   const rothLadder = useMemo(() => calculateRothConversionLadder({
     currentAge, retirementAge, rmdStartAge: 73,
@@ -126,16 +145,24 @@ export function AnalyticsDashboard(props: Props) {
 
   return (
     <Tabs defaultValue="rmd">
-      <TabsList className="grid grid-cols-3 sm:flex sm:flex-wrap h-auto gap-1 mb-4">
-        <TabsTrigger value="rmd" className="text-xs">RMDs</TabsTrigger>
-        <TabsTrigger value="tax" className="text-xs">Tax</TabsTrigger>
-        <TabsTrigger value="roth" className="text-xs">Roth</TabsTrigger>
-        <TabsTrigger value="ss" className="text-xs">SS Break-Even</TabsTrigger>
-        <TabsTrigger value="catchup" className="text-xs">Catch-Up</TabsTrigger>
-        <TabsTrigger value="income" className="text-xs">Income</TabsTrigger>
-        <TabsTrigger value="fees" className="text-xs">Fees</TabsTrigger>
-        <TabsTrigger value="sequence" className="text-xs">Sequence</TabsTrigger>
-        <TabsTrigger value="healthcare" className="text-xs">Healthcare</TabsTrigger>
+      {/* Nine tools, and the question here is which analysis to run — so all
+          nine stay visible rather than hiding behind a horizontal swipe.
+
+          Three columns at every phone width: the longest label wraps to two
+          lines on a narrow screen rather than forcing two columns, which
+          would make the list five rows tall and push the answer off screen.
+          w-full because the list is w-fit by default, which would size the
+          grid to its content instead of the screen. */}
+      <TabsList className="mb-4 grid h-auto w-full auto-rows-fr grid-cols-3 gap-1 sm:flex sm:flex-wrap">
+        <TabsTrigger value="rmd" className="min-h-9 px-2 text-center text-xs leading-tight whitespace-normal">RMDs</TabsTrigger>
+        <TabsTrigger value="tax" className="min-h-9 px-2 text-center text-xs leading-tight whitespace-normal">Tax</TabsTrigger>
+        <TabsTrigger value="roth" className="min-h-9 px-2 text-center text-xs leading-tight whitespace-normal">Roth</TabsTrigger>
+        <TabsTrigger value="ss" className="min-h-9 px-2 text-center text-xs leading-tight whitespace-normal">SS Break-Even</TabsTrigger>
+        <TabsTrigger value="catchup" className="min-h-9 px-2 text-center text-xs leading-tight whitespace-normal">Catch-Up</TabsTrigger>
+        <TabsTrigger value="income" className="min-h-9 px-2 text-center text-xs leading-tight whitespace-normal">Income</TabsTrigger>
+        <TabsTrigger value="fees" className="min-h-9 px-2 text-center text-xs leading-tight whitespace-normal">Fees</TabsTrigger>
+        <TabsTrigger value="sequence" className="min-h-9 px-2 text-center text-xs leading-tight whitespace-normal">Sequence</TabsTrigger>
+        <TabsTrigger value="healthcare" className="min-h-9 px-2 text-center text-xs leading-tight whitespace-normal">Healthcare</TabsTrigger>
       </TabsList>
 
       {/* 1. RMD Projections */}
@@ -151,16 +178,16 @@ export function AnalyticsDashboard(props: Props) {
           <CardContent className="space-y-4">
             <div className="grid gap-4 sm:grid-cols-3">
               <div className="rounded-lg border p-3 text-center">
-                <p className="text-xs text-muted-foreground">Projected Tax-Deferred at 73</p>
-                <p className="font-mono font-bold text-lg">{formatCurrency(rmds[0]?.beginningBalance || 0)}</p>
+                <p className="text-xs text-muted-foreground">Projected Tax-Deferred at {RMD_START_AGE}</p>
+                <p className="font-mono font-bold text-lg">{formatCurrency(firstRmd?.beginningBalance ?? 0)}</p>
               </div>
               <div className="rounded-lg border p-3 text-center">
-                <p className="text-xs text-muted-foreground">First RMD (Age 73)</p>
-                <p className="font-mono font-bold text-lg text-red-500">{formatCurrency(rmds[0]?.rmdAmount || 0)}</p>
+                <p className="text-xs text-muted-foreground">First RMD (Age {RMD_START_AGE})</p>
+                <p className="font-mono font-bold text-lg text-red-500">{formatCurrency(firstRmd?.rmdAmount ?? 0)}</p>
               </div>
               <div className="rounded-lg border p-3 text-center">
                 <p className="text-xs text-muted-foreground">Tax on First RMD</p>
-                <p className="font-mono font-bold text-lg">{formatCurrency(rmds[0]?.taxEstimate || 0)}</p>
+                <p className="font-mono font-bold text-lg">{formatCurrency(firstRmd?.taxEstimate ?? 0)}</p>
               </div>
             </div>
             <p className="text-xs text-muted-foreground">

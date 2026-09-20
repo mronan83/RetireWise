@@ -8,6 +8,16 @@
 // 1. RMD (Required Minimum Distribution) Projections
 // ============================================================
 
+/**
+ * The age required minimum distributions begin, under SECURE 2.0.
+ *
+ * Exported and used everywhere rather than written as a literal: the label on
+ * the analytics page said "Age 73" while the figure beside it came from a
+ * different year entirely, and a shared constant is what keeps a caption and
+ * the number under it describing the same thing.
+ */
+export const RMD_START_AGE = 73;
+
 // IRS Uniform Lifetime Table (simplified — distribution periods by age)
 const RMD_TABLE: Record<number, number> = {
   73: 26.5, 74: 25.5, 75: 24.6, 76: 23.7, 77: 22.9, 78: 22.0,
@@ -17,7 +27,7 @@ const RMD_TABLE: Record<number, number> = {
 };
 
 export function calculateRMD(balance: number, age: number): number {
-  if (age < 73) return 0;
+  if (age < RMD_START_AGE) return 0;
   const divisor = RMD_TABLE[age] || Math.max(5, 95 - age + 8.9);
   return balance / divisor;
 }
@@ -50,7 +60,7 @@ export function projectRMDs(params: {
     const growth = (balance - rmd) * (returnPct / 100);
     const endBalance = balance - rmd + growth;
 
-    if (age >= 73 || balance > 0) {
+    if (age >= RMD_START_AGE || balance > 0) {
       results.push({
         age,
         year,
