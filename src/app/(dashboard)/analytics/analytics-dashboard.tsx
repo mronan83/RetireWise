@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo } from "react";
+import { useCallback, useMemo } from "react";
 import {
   BarChart, Bar, AreaChart, Area, LineChart, Line,
   XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer,
@@ -27,6 +27,7 @@ import {
   getMarginalRate,
 } from "@/lib/utils/financial-analytics";
 import { cn } from "@/lib/utils";
+import { RETURN_BY_RISK } from "@/lib/utils/risk";
 
 type Props = {
   currentAge: number;
@@ -42,33 +43,33 @@ type Props = {
   taxDeferredBalance: number;
   taxFreeBalance: number;
   taxableBalance: number;
-  totalPortfolio: number;
   holdings: { ticker: string; currentValue: number }[];
   riskTolerance: string;
   monthlyExpenses: number;
-  totalAnnualContributions: number;
-  taxDeferredContributions: number;
+  /**
+   * Balances at retirement, from the projection engine on the server.
+   *
+   * This component used to derive them itself with a flat annuity — no
+   * salary growth, no contribution pauses, no employer non-elective money,
+   * no IRS deferral cap — so it disagreed with the projections page about
+   * the same household. They now come from one place.
+   */
+  projectedTaxDeferred: number;
+  projectedTaxFree: number;
+  projectedPortfolio: number;
 };
-
-const returnByRisk: Record<string, number> = { conservative: 5, moderate: 7, aggressive: 9 };
 
 export function AnalyticsDashboard(props: Props) {
   const {
     currentAge, retirementAge, spouseAge, selfSalary, spouseSalary,
     selfSSAtFRA, spouseSSAtFRA, selfFRA, spouseFRA,
-    taxDeferredBalance, taxFreeBalance, taxableBalance, totalPortfolio,
+    taxDeferredBalance, taxFreeBalance, taxableBalance,
     holdings, riskTolerance, monthlyExpenses,
-    totalAnnualContributions, taxDeferredContributions,
+    projectedTaxDeferred, projectedTaxFree, projectedPortfolio,
   } = props;
 
-  const returnPct = returnByRisk[riskTolerance] || 7;
+  const returnPct = RETURN_BY_RISK[riskTolerance] ?? 7;
   const yearsToRetirement = Math.max(0, retirementAge - currentAge);
-  const r = returnPct / 100;
-  // Future value with contributions: FV = PV*(1+r)^n + C*((1+r)^n - 1)/r
-  const growthFactor = Math.pow(1 + r, yearsToRetirement);
-  const annuityFactor = r > 0 ? (growthFactor - 1) / r : yearsToRetirement;
-  const projectedTaxDeferred = taxDeferredBalance * growthFactor + taxDeferredContributions * annuityFactor;
-  const projectedPortfolio = totalPortfolio * growthFactor + totalAnnualContributions * annuityFactor;
 
   // 1. RMD Projections
   const rmds = useMemo(() => projectRMDs({
@@ -117,18 +118,23 @@ export function AnalyticsDashboard(props: Props) {
    * precisely when conversions are cheapest, and assuming income there
    * understated the room in the years that matter most.
    */
-  const rothLadder = useMemo(() => {
-    const ssAnnual = (selfSSAtFRA + spouseSSAtFRA) * 12 * 0.85;
-    const ssClaimAge = Math.max(selfFRA, retirementAge);
-    return calculateRothConversionLadder({
-      currentAge, retirementAge, rmdStartAge: RMD_START_AGE,
-      taxDeferredBalance: projectedTaxDeferred,
-      rothBalance: taxFreeBalance * growthFactor,
-      otherTaxableIncomeForAge: (age: number) => (age >= ssClaimAge ? ssAnnual : 0),
-      returnPct, targetBracketRate: 0.22,
-      startYear: new Date().getFullYear(),
-    });
-  }, [currentAge, retirementAge, projectedTaxDeferred, taxFreeBalance, growthFactor, selfSSAtFRA, spouseSSAtFRA, selfFRA, returnPct]);
+  // Hoisted out of the memo: a closure built inside one cannot be memoised,
+  // and the two values it needs are a multiply and a max.
+  const ssAnnualTaxable = (selfSSAtFRA + spouseSSAtFRA) * 12 * 0.85;
+  const ssClaimAge = Math.max(selfFRA, retirementAge);
+  const otherIncomeAtAge = useCallback(
+    (age: number) => (age >= ssClaimAge ? ssAnnualTaxable : 0),
+    [ssClaimAge, ssAnnualTaxable]
+  );
+
+  const rothLadder = useMemo(() => calculateRothConversionLadder({
+    currentAge, retirementAge, rmdStartAge: RMD_START_AGE,
+    taxDeferredBalance: projectedTaxDeferred,
+    rothBalance: projectedTaxFree,
+    otherTaxableIncomeForAge: otherIncomeAtAge,
+    returnPct, targetBracketRate: 0.22,
+    startYear: new Date().getFullYear(),
+  }), [currentAge, retirementAge, projectedTaxDeferred, projectedTaxFree, otherIncomeAtAge, returnPct]);
 
   // 3. SS Break-Even
   const selfSSBreakEven = useMemo(() => calculateSSBreakEven(selfSSAtFRA, selfFRA), [selfSSAtFRA, selfFRA]);

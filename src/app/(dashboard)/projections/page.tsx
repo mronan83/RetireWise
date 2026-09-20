@@ -6,6 +6,8 @@ import { getHoldingsByClerkId } from "@/lib/queries/holdings";
 import { fundedFractionOfYear, totalAnnual } from "@/lib/utils/contributions";
 import { InteractiveProjections } from "./interactive-controls";
 import { getAccounts } from "@/lib/queries/accounts";
+import { buildProjectionAccounts } from "@/lib/projections/build-accounts";
+import type { SalaryGrowthConfig } from "@/lib/utils/salary-growth";
 
 export default async function ProjectionsPage() {
   return withHousehold(() => ProjectionsPageContent());
@@ -85,79 +87,19 @@ async function ProjectionsPageContent() {
       </div>
 
       <InteractiveProjections
-        accounts={accountsList.map((a) => {
-          const acctHoldings = holdings.filter((h) => h.accountId === a.id);
-          const value = acctHoldings.reduce((s, h) => s + Number(h.currentValue), 0);
-
-          // Match contributions: prefer direct accountId link, fall back to owner+type
-          // Retired entries are excluded by totalAnnual, so a contribution
-          // left over from a previous job stops inflating this account.
-          const matchingContribs = contribs.filter(
-            (c) => c.accountId ? c.accountId === a.id : (c.owner === a.owner && c.accountType === a.accountType)
-          );
-          const acctAnnualContribution = a.isActivelyContributing
-            ? totalAnnual(matchingContribs, salaryFor).total
-            : 0;
-
-          // Get escalation from matching contributions
-          const escalationContrib = matchingContribs.find((c) => c.hasAnnualEscalation);
-          const annualEscalation = escalationContrib
-            ? Number(escalationContrib.annualEscalationAmount || 0)
-            : 0;
-          const maxAnnual = escalationContrib?.maxAnnualContribution
-            ? Number(escalationContrib.maxAnnualContribution)
-            : 0;
-          const contribMethod = matchingContribs[0]?.contributionMethod || "fixed_amount";
-          const salary = a.owner === "self" ? selfSalary : spouseSalary;
-
-          // Get contribution details for salary-growth-aware projections
-          const mainContrib = matchingContribs.filter((c) => c.isActive)[0];
-          const contribPct = mainContrib?.contributionMethod === "percent_of_salary"
-            ? Number(mainContrib.contributionPercent || 0) : 0;
-          const matchRate = mainContrib?.hasEmployerMatch
-            ? Number(mainContrib.employerMatchRate || 0) : 0;
-          const matchMaxPct = mainContrib?.hasEmployerMatch
-            ? Number(mainContrib.employerMatchMaxPercent || 0) : 0;
-          // Employer money that is paid regardless of what you defer. Carried
-          // separately so it survives a year where the deferral is zero.
-          const nonElectivePct = mainContrib?.hasEmployerNonElective
-            ? Number(mainContrib.employerNonElectivePercent || 0) : 0;
-          const nonElectiveAmount = mainContrib?.hasEmployerNonElective
-            ? Number(mainContrib.employerNonElectiveAmount || 0) : 0;
-          const salaryGrowthConfig = a.owner === "self"
-            ? (pref.salaryGrowth as import("@/lib/utils/salary-growth").SalaryGrowthConfig | null)
-            : (pref.spouseSalaryGrowth as import("@/lib/utils/salary-growth").SalaryGrowthConfig | null);
-
-          return {
-            name: a.name,
-            owner: a.owner,
-            type: a.accountType,
-            taxTreatment: a.taxTreatment,
-            value,
-            isActivelyContributing: a.isActivelyContributing,
-            annualContribution: Math.round(acctAnnualContribution),
-            annualEscalation,
-            maxAnnualContribution: maxAnnual,
-            contributionMethod: contribMethod,
-            contributionPct: contribPct,
-            employerMatchRate: matchRate,
-            employerMatchMaxPct: matchMaxPct,
-            employerNonElectivePct: nonElectivePct,
-            employerNonElectiveAmount: nonElectiveAmount,
-            // One factor per projected year. Where several contributions feed
-            // one account, the least-funded of them sets the year — a pause on
-            // the main deferral is the thing that actually stops the money.
-            contributionFactors: Array.from({ length: 60 }, (_, y) =>
-              matchingContribs
-                .filter((c) => c.isActive)
-                .reduce((lowest, c) => Math.min(lowest, fundedFractionOfYear(c, y)), 1)
-            ),
-            salary,
-            salaryGrowth: salaryGrowthConfig,
-            ownerRetirementYear: a.owner === "spouse" ? spouseYearsToRetirement : selfYearsToRetirement,
-            ownerCurrentAge: (a.owner === "spouse" ? (pref.spouseCurrentAge ?? pref.currentAge) : pref.currentAge) ?? undefined,
-          };
-        }).filter((a) => a.value > 0 || a.annualContribution > 0)}
+        accounts={buildProjectionAccounts({
+          accounts: accountsList,
+          holdings,
+          contribs,
+          selfSalary,
+          spouseSalary,
+          selfSalaryGrowth: pref.salaryGrowth as SalaryGrowthConfig | null,
+          spouseSalaryGrowth: pref.spouseSalaryGrowth as SalaryGrowthConfig | null,
+          selfCurrentAge: pref.currentAge,
+          spouseCurrentAge: pref.spouseCurrentAge,
+          selfYearsToRetirement,
+          spouseYearsToRetirement,
+        })}
         currentAge={pref.currentAge}
         retirementAge={pref.retirementAge}
         spouseAge={pref.spouseCurrentAge}

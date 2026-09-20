@@ -19,6 +19,7 @@ import {
   projectRMDs,
 } from "../src/lib/utils/financial-analytics";
 import { runDetailedProjection } from "../src/lib/utils/projection-scenarios";
+import { buildProjectionAccounts } from "../src/lib/projections/build-accounts";
 
 let failures = 0;
 function check(label: string, ok: boolean, detail = "") {
@@ -162,6 +163,80 @@ function main() {
   );
   check("the window opens at retirement", noSSYet[0].age === 62, String(noSSYet[0].age));
   check("and closes before RMDs begin", noSSYet[noSSYet.length - 1].age === RMD_START_AGE - 1);
+
+  // ---- the two pages describe the same household ------------------------
+  //
+  // Analytics used to roll its own flat annuity: no salary growth, no
+  // contribution pauses, no employer non-elective money, no IRS cap. It
+  // therefore disagreed with the projections page about the same accounts,
+  // on adjacent screens, with nothing saying so. Both now go through
+  // buildProjectionAccounts and runDetailedProjection.
+  const acctRow = {
+    id: "a1", clerkId: "u", name: "401k", owner: "self" as const,
+    accountType: "401k" as const, taxTreatment: "tax_deferred" as const,
+    institution: "Test", isActive: true, isActivelyContributing: true,
+    plaidItemId: null, plaidAccountId: null, dataSource: "manual" as const,
+    createdAt: new Date(), updatedAt: new Date(),
+  };
+  const contribRow = {
+    id: "c1", clerkId: "u", owner: "self" as const, accountId: "a1",
+    label: "401k", accountType: "401k" as const,
+    contributionMethod: "percent_of_salary" as const,
+    contributionPercent: "10", contributionAmount: null,
+    frequency: "monthly", isActive: true, hasEmployerMatch: true,
+    employerMatchRate: "1", employerMatchMaxPercent: "5",
+    hasEmployerNonElective: true, employerNonElectivePercent: "2",
+    employerNonElectiveAmount: null, hasAnnualEscalation: false,
+    annualEscalationAmount: null, maxAnnualContribution: null,
+    vestingSchedule: "immediate" as const, vestingYears: null,
+    serviceStartDate: null, endedOn: null, pausedFrom: null, resumesOn: null,
+    notes: null, createdAt: new Date(), updatedAt: new Date(),
+  };
+
+  const built = buildProjectionAccounts({
+    accounts: [acctRow as never],
+    holdings: [{ accountId: "a1", currentValue: "500000" }],
+    contribs: [contribRow as never],
+    selfSalary: 200_000, spouseSalary: 0,
+    selfSalaryGrowth: null, spouseSalaryGrowth: null,
+    selfCurrentAge: 45, spouseCurrentAge: null,
+    selfYearsToRetirement: 20, spouseYearsToRetirement: 20,
+  });
+
+  check("the builder produces one account", built.length === 1, String(built.length));
+  check(
+    "it carries the employer non-elective percentage the flat annuity ignored",
+    built[0].employerNonElectivePct === 2,
+    String(built[0].employerNonElectivePct)
+  );
+  check(
+    "and a funding factor for every projected year",
+    built[0].contributionFactors?.length === 60
+  );
+
+  const engine = runDetailedProjection({
+    accounts: built, totalAnnualContributions: 20_000,
+    yearsToRetirement: 20, yearsInRetirement: 1, startAge: 45,
+    returnPct: 7, inflationPct: 3, annualExpenses: 84_000,
+    annualSSIncome: 0, ssStartYear: 999,
+  });
+  const engineAtRetirement = engine.totalValues[19];
+
+  // The old analytics maths, reproduced exactly, to show it is not the same.
+  const r = 0.07;
+  const g = Math.pow(1 + r, 20);
+  const flatAnnuity = 500_000 * g + 20_000 * ((g - 1) / r);
+
+  check(
+    "the engine and the old flat annuity give materially different answers",
+    Math.abs(engineAtRetirement - flatAnnuity) / flatAnnuity > 0.05,
+    `engine ${Math.round(engineAtRetirement).toLocaleString()} vs annuity ${Math.round(flatAnnuity).toLocaleString()}`
+  );
+  check(
+    "the engine caps the employee deferral at the IRS limit, which the annuity never did",
+    engine.contributions[0] < 200_000 * 0.1 + 200_000 * 0.05 + 200_000 * 0.02 + 1,
+    String(Math.round(engine.contributions[0]))
+  );
 
   // ---- unchanged ground truth ---------------------------------------------
   check("the RMD divisor at 73 is still 26.5", near(calculateRMD(1_000_000, 73), 1_000_000 / 26.5, 0.01));

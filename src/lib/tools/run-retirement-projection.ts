@@ -1,6 +1,7 @@
 import { tool } from "ai";
 import { z } from "zod";
 import { getApiUserId } from "@/lib/auth-helpers";
+import { RETURN_BY_RISK } from "@/lib/utils/risk";
 import { totalAnnual } from "../utils/contributions";
 import { eq, and } from "drizzle-orm";
 import { getDb } from "../db";
@@ -81,12 +82,7 @@ export const runRetirementProjectionTool = tool({
     const combinedSSMonthly = selfSSMonthly + spouseSSMonthly;
 
     // Expected return based on risk tolerance
-    const returnByRisk: Record<string, number> = {
-      conservative: 5,
-      moderate: 7,
-      aggressive: 9,
-    };
-    const expectedReturn = overrideReturnPct ?? returnByRisk[pref.riskTolerance || "moderate"] ?? 7;
+    const expectedReturn = overrideReturnPct ?? RETURN_BY_RISK[pref.riskTolerance || "moderate"] ?? 7;
     const inflation = overrideInflationPct ?? 3;
 
     const monthlyExpenses = pref.monthlyExpensesRetirement

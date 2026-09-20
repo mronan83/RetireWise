@@ -20,8 +20,8 @@ import {
   getMarginalRate,
   getRemainingInBracket,
 } from "../utils/financial-analytics";
+import { RETURN_BY_RISK } from "@/lib/utils/risk";
 
-const returnByRisk: Record<string, number> = { conservative: 5, moderate: 7, aggressive: 9 };
 
 export const runFinancialAnalyticsTool = tool({
   description:
@@ -63,7 +63,7 @@ export const runFinancialAnalyticsTool = tool({
     const pref = prefs[0];
     const currentAge = pref?.currentAge || 42;
     const retirementAge = pref?.retirementAge || 65;
-    const returnPct = returnByRisk[pref?.riskTolerance || "moderate"] || 7;
+    const returnPct = RETURN_BY_RISK[pref?.riskTolerance || "moderate"] || 7;
     const yearsToRetirement = Math.max(0, retirementAge - currentAge);
     const selfSalary = pref?.annualSalary ? Number(pref.annualSalary) : 0;
     const spouseSalary = pref?.spouseAnnualSalary ? Number(pref.spouseAnnualSalary) : 0;
