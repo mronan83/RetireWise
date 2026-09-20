@@ -6,7 +6,7 @@ import { PerformanceChart } from "@/components/dashboard/performance-chart";
 import { HoldingsTable } from "@/components/dashboard/holdings-table";
 import { AccountCard } from "@/components/dashboard/account-card";
 import { Skeleton } from "@/components/ui/skeleton";
-import { getAccounts } from "@/lib/queries/accounts";
+import { getAccountsWithFreshness } from "@/lib/queries/accounts";
 import { getHoldingsByClerkId } from "@/lib/queries/holdings";
 import { getSnapshots, getAccountPerformanceMap } from "@/lib/queries/snapshots";
 import { calculatePortfolioSummary, calculateGainLoss } from "@/lib/utils/calculations";
@@ -20,6 +20,7 @@ import { goals as goalsTable, realEstate, cashReserves, debts, vehicles } from "
 import { withHousehold } from "@/lib/auth-helpers";
 import { redirect } from "next/navigation";
 import { getOnboardingState } from "@/lib/onboarding";
+import { oldestOf } from "@/lib/utils/freshness";
 import { SetupBanner } from "./setup-banner";
 
 async function DashboardContentScoped() {
@@ -33,7 +34,7 @@ async function DashboardContentScoped() {
 
   const db = getDb();
   const [accountsList, holdingsWithAccounts, snapshots, userGoals, properties, cashAccounts, debtsList, vehiclesList, periodReturnsMap] = await Promise.all([
-    getAccounts(userId),
+    getAccountsWithFreshness(userId),
     getHoldingsByClerkId(userId),
     getSnapshots(userId, 90),
     db.select().from(goalsTable).where(eq(goalsTable.clerkId, userId)),
@@ -50,6 +51,11 @@ async function DashboardContentScoped() {
   }));
 
   const summary = calculatePortfolioSummary(holdingsForCalc);
+
+  // The oldest price behind the total, not the newest: a total inherits the
+  // staleness of its worst input, and reporting the freshest timestamp would
+  // describe it as more current than it is.
+  const pricesAsOf = oldestOf(holdingsWithAccounts.map((h) => h.lastPriceUpdate));
 
   const latestSnapshot = snapshots[0];
   const dailyChange = latestSnapshot
@@ -73,6 +79,7 @@ async function DashboardContentScoped() {
       accountName: h.accountName,
       gainLoss,
       gainLossPct,
+      lastPriceUpdate: h.lastPriceUpdate,
     };
   });
 
@@ -141,6 +148,7 @@ async function DashboardContentScoped() {
         dailyChangePct={dailyChangePct}
         accountCount={accountsList.length}
         holdingCount={holdingsWithAccounts.length}
+        pricesAsOf={pricesAsOf}
       />
 
       <div className="grid gap-6 lg:grid-cols-2">
@@ -169,6 +177,9 @@ async function DashboardContentScoped() {
                   gainLoss={gainLoss}
                   gainLossPct={gainLossPct}
                   periodReturns={periodReturnsMap.get(account.id)}
+                  connection={account.connection}
+                  valueAsOf={account.valueAsOf}
+                  unpricedHoldings={account.unpricedHoldings}
                 />
               );
             })}

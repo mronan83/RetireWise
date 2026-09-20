@@ -27,6 +27,7 @@ import {
   createDebt, updateDebt, deleteDebt,
 } from "@/lib/actions/net-worth";
 import { addVehicle, updateVehicle, deleteVehicle, decodeVIN } from "@/lib/actions/vehicles";
+import { LastUpdated } from "@/components/ui/last-updated";
 
 // --- Types ---
 type RealEstateItem = {
@@ -37,10 +38,14 @@ type RealEstateItem = {
 type CashItem = {
   id: string; owner: string; name: string; accountType: string;
   institution: string | null; balance: string; interestRate: string | null;
+  dataSource?: string | null; lastSyncedAt?: Date | string | null;
+  updatedAt?: Date | string | null;
 };
 type DebtItem = {
   id: string; owner: string; name: string; debtType: string;
   currentBalance: string; interestRate: string; monthlyPayment: string; payoffDate: string | null;
+  dataSource?: string | null; lastSyncedAt?: Date | string | null;
+  updatedAt?: Date | string | null;
 };
 type VehicleItem = {
   id: string; owner: string; name: string; vehicleType: string;
@@ -112,6 +117,36 @@ function RowActions({
 }
 
 // --- Main component ---
+/**
+ * How old one balance is, and whether anything is keeping it current.
+ *
+ * A linked balance ages in days and should be questioned in a week. A figure
+ * someone typed ages in months and is normal at six weeks — so the two are
+ * measured against different thresholds rather than one that would either
+ * cry wolf or stay silent.
+ */
+function ItemAge({
+  dataSource,
+  lastSyncedAt,
+  updatedAt,
+}: {
+  dataSource?: string | null;
+  lastSyncedAt?: Date | string | null;
+  updatedAt?: Date | string | null;
+}) {
+  const linked = dataSource === "plaid";
+  const at = linked ? (lastSyncedAt ?? updatedAt) : updatedAt;
+  if (at === undefined) return null;
+  return (
+    <LastUpdated
+      at={at}
+      kind={linked ? "linked_balance" : "manual_balance"}
+      label={linked ? "Synced" : "Edited"}
+      className="mt-0.5"
+    />
+  );
+}
+
 export function NetWorthForms({ section, properties, cash, debts, vehicles, historyRecord = {} }: Props) {
   const [mode, setMode] = useState<FormMode>(null);
   const [expandedChart, setExpandedChart] = useState<string | null>(null);
@@ -224,6 +259,11 @@ export function NetWorthForms({ section, properties, cash, debts, vehicles, hist
                         {c.institution}{c.interestRate && <> | {Number(c.interestRate)}% APY</>}
                       </p>
                     )}
+                    <ItemAge
+                      dataSource={c.dataSource}
+                      lastSyncedAt={c.lastSyncedAt}
+                      updatedAt={c.updatedAt}
+                    />
                   </div>
                   <div className="flex items-center gap-2">
                     <p className="font-mono font-medium text-sm">{formatCurrency(Number(c.balance))}</p>
@@ -335,6 +375,11 @@ export function NetWorthForms({ section, properties, cash, debts, vehicles, hist
                       {Number(d.interestRate)}% rate | {formatCurrency(Number(d.monthlyPayment))}/mo
                       {d.payoffDate && <> | Payoff: {d.payoffDate}</>}
                     </p>
+                    <ItemAge
+                      dataSource={d.dataSource}
+                      lastSyncedAt={d.lastSyncedAt}
+                      updatedAt={d.updatedAt}
+                    />
                   </div>
                   <div className="flex items-center gap-2">
                     <p className="font-mono font-medium text-sm text-red-500">

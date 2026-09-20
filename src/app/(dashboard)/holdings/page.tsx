@@ -31,6 +31,7 @@ async function HoldingsPageContent() {
       accountName: h.accountName,
       gainLoss,
       gainLossPct,
+      lastPriceUpdate: h.lastPriceUpdate,
     };
   });
 

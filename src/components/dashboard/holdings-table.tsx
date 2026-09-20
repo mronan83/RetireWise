@@ -17,6 +17,7 @@ import {
   formatNumber,
 } from "@/lib/utils/format";
 import { cn } from "@/lib/utils";
+import { absoluteTimestamp, freshnessOf, relativeAge } from "@/lib/utils/freshness";
 
 type HoldingRow = {
   id: string;
@@ -30,7 +31,20 @@ type HoldingRow = {
   accountName: string;
   gainLoss: number;
   gainLossPct: number;
+  /** When this price was last fetched. Null means it never was. */
+  lastPriceUpdate?: Date | string | null;
 };
+
+/**
+ * A stale price is the quietest way this app can be wrong: the value column
+ * still adds up, the gain still has a sign, and nothing says the number came
+ * from last month.
+ */
+function priceTone(state: ReturnType<typeof freshnessOf>): string {
+  if (state === "stale") return "text-destructive";
+  if (state === "aging") return "text-amber-600 dark:text-amber-500";
+  return "text-muted-foreground";
+}
 
 export function HoldingsTable({ holdings }: { holdings: HoldingRow[] }) {
   if (holdings.length === 0) {
@@ -73,8 +87,22 @@ export function HoldingsTable({ holdings }: { holdings: HoldingRow[] }) {
               <TableCell className="text-right font-mono">
                 {formatNumber(Number(holding.shares), 4)}
               </TableCell>
+              {/* The age sits under the price rather than in a column of its
+                  own: it describes that number specifically, and the table is
+                  already at its width on a phone. */}
               <TableCell className="text-right font-mono">
-                {formatCurrency(Number(holding.currentPrice))}
+                <div>{formatCurrency(Number(holding.currentPrice))}</div>
+                {holding.lastPriceUpdate !== undefined && (
+                  <div
+                    title={`Price fetched ${absoluteTimestamp(holding.lastPriceUpdate)}`}
+                    className={cn(
+                      "font-sans text-[11px]",
+                      priceTone(freshnessOf(holding.lastPriceUpdate, "price"))
+                    )}
+                  >
+                    {relativeAge(holding.lastPriceUpdate)}
+                  </div>
+                )}
               </TableCell>
               <TableCell className="text-right font-mono font-medium">
                 {formatCurrency(Number(holding.currentValue))}

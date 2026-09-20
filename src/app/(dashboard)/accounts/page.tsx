@@ -1,6 +1,6 @@
 import { getAuthContext, withHousehold } from "@/lib/auth-helpers";
 import { Link2 } from "lucide-react";
-import { getAccounts } from "@/lib/queries/accounts";
+import { getAccountsWithFreshness } from "@/lib/queries/accounts";
 import { getHoldingsByClerkId } from "@/lib/queries/holdings";
 import { getAccountPerformanceMap } from "@/lib/queries/snapshots";
 import { AccountCard } from "@/components/dashboard/account-card";
@@ -17,7 +17,7 @@ async function AccountsPageContent() {
   const { dataClerkId: userId } = await getAuthContext();
 
   const [accountsList, allHoldings, periodReturnsMap] = await Promise.all([
-    getAccounts(userId),
+    getAccountsWithFreshness(userId),
     getHoldingsByClerkId(userId),
     getAccountPerformanceMap(userId),
   ]);
@@ -94,6 +94,9 @@ async function AccountsPageContent() {
                 gainLoss={gainLoss}
                 gainLossPct={gainLossPct}
                 periodReturns={periodReturns}
+                connection={account.connection}
+                valueAsOf={account.valueAsOf}
+                unpricedHoldings={account.unpricedHoldings}
               />
             );
           })}

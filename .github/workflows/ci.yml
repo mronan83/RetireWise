@@ -48,6 +48,10 @@ jobs:
       # than behind the database job.
       - run: pnpm exec tsx scripts/test-ops.ts
 
+      # Staleness thresholds and the oldest-vs-newest choice behind a total.
+      # Pure logic, so it belongs here rather than behind the database job.
+      - run: pnpm exec tsx scripts/test-freshness.ts
+
   mobile:
     name: Mobile layout
     runs-on: ubuntu-latest

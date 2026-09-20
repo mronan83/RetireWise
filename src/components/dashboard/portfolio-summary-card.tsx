@@ -7,6 +7,7 @@ import {
   formatGainLossPct,
 } from "@/lib/utils/format";
 import { cn } from "@/lib/utils";
+import { LastUpdated } from "@/components/ui/last-updated";
 
 type Props = {
   totalValue: number;
@@ -18,6 +19,15 @@ type Props = {
   dailyChangePct: number;
   accountCount: number;
   holdingCount: number;
+  /**
+   * The OLDEST price behind this total, not the newest.
+   *
+   * A total inherits the staleness of its worst input: nine positions priced
+   * this morning and one priced last month produce a figure that is wrong by
+   * whatever that position has done since. Showing the newest timestamp would
+   * describe the total as fresher than it is.
+   */
+  pricesAsOf?: Date | string | null;
 };
 
 export function PortfolioSummaryCards({
@@ -30,6 +40,7 @@ export function PortfolioSummaryCards({
   dailyChangePct,
   accountCount,
   holdingCount,
+  pricesAsOf,
 }: Props) {
   return (
     <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
@@ -53,6 +64,14 @@ export function PortfolioSummaryCards({
             <p className="text-xs text-muted-foreground mt-1">
               {accountCount} accounts &middot; {holdingCount} holdings
             </p>
+          )}
+          {pricesAsOf !== undefined && (
+            <LastUpdated
+              at={pricesAsOf}
+              kind="price"
+              label="Priced as of"
+              className="mt-1.5"
+            />
           )}
         </CardContent>
       </Card>
