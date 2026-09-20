@@ -40,6 +40,10 @@ jobs:
       # than behind the database job.
       - run: pnpm exec tsx scripts/check-tenant-scope.ts
 
+      # Retry policy and key rotation. Pure logic, so it belongs here rather
+      # than behind the database job.
+      - run: pnpm exec tsx scripts/test-ops.ts
+
   mobile:
     name: Mobile layout
     runs-on: ubuntu-latest

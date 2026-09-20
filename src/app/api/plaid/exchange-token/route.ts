@@ -6,6 +6,7 @@ import { encryptToken } from "@/lib/plaid/encryption";
 import { syncPlaidBalances, syncPlaidItem } from "@/lib/plaid/sync";
 import { getDb } from "@/lib/db";
 import { plaidItems } from "@/lib/db/schema";
+import { recordAudit } from "@/lib/audit";
 
 export async function POST(request: Request) {
   return withApiHousehold(() => handlePost(request));
@@ -61,6 +62,14 @@ async function handlePost(request: Request) {
       lastSync: new Date(),
     });
   }
+
+  await recordAudit({
+    clerkId: userId,
+    action: "plaid.linked",
+    entity: "institution",
+    entityId: itemId,
+    detail: { institution: institutionName },
+  });
 
   // An institution carries some products and not others: a bank has balances
   // and no holdings, a brokerage the reverse. Asking each for what it does not

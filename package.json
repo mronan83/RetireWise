@@ -18,7 +18,10 @@
     "db:seed-demo:ci": "tsx scripts/seed-demo.ts",
     "db:migrate:ci": "drizzle-kit migrate",
     "test:invites": "tsx scripts/test-invites.ts",
-    "test:rls": "tsx scripts/test-rls.ts"
+    "test:rls": "tsx scripts/test-rls.ts",
+    "keys:rotate": "tsx scripts/rotate-keys.ts",
+    "keys:rotate:dry": "tsx scripts/rotate-keys.ts --dry-run",
+    "test:ops": "tsx scripts/test-ops.ts"
   },
   "dependencies": {
     "@ai-sdk/anthropic": "^3.0.71",

@@ -27,12 +27,19 @@ function createDb() {
     // prepared statements across queries. Harmless on a direct connection, so
     // it is safe to leave off unconditionally.
     prepare: false,
-    // Room for a few concurrent transactions. Tenant-scoped work runs inside
-    // an explicit transaction (see tenant.ts), which holds a connection for
-    // its duration, so a single-connection pool would serialise every request
-    // on an instance and deadlock any that fans out.
-    max: 5,
+    // Tenant-scoped work runs inside an explicit transaction (see tenant.ts),
+    // which holds a connection for as long as the request renders — not just
+    // for each query. That is the cost of enforcing row level security behind
+    // a transaction-mode pooler, and it makes pool size a real limit on
+    // concurrency rather than a formality. Sized for a burst of parallel page
+    // loads on one instance; the mobile suite, which is far more concurrent
+    // than real use, exhausted a pool of five.
+    max: 10,
     idle_timeout: 20,
+    // Wait rather than fail when the pool is busy, but not forever: a request
+    // that cannot get a connection should surface as an error someone can
+    // read, not as a page that hangs until the platform kills it.
+    connect_timeout: 15,
   });
 
   return drizzle(sql, { schema });

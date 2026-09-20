@@ -5,6 +5,7 @@ import { revalidatePath } from "next/cache";
 import { requireWriteClerkId, withWriteHousehold } from "@/lib/auth-helpers";
 import { getDb } from "../db";
 import { accounts, holdings, plaidItems } from "../db/schema";
+import { recordAudit } from "@/lib/audit";
 
 /**
  * Fold a newly linked Plaid account into the hand-entered account it turned
@@ -114,6 +115,14 @@ async function disconnectAccountImpl(accountId: string) {
     .update(holdings)
     .set({ dataSource: "manual", updatedAt: new Date() })
     .where(eq(holdings.accountId, account.id));
+
+  await recordAudit({
+    clerkId,
+    action: "plaid.disconnected",
+    entity: "account",
+    entityId: account.id,
+    detail: { institution: account.institution, name: account.name },
+  });
 
   // An item with no accounts left pointing at it should stop being refreshed.
   if (account.plaidItemId) {

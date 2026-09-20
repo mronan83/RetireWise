@@ -330,6 +330,22 @@ export const plaidItems = pgTable("plaid_items", {
   institutionName: text("institution_name").notNull(),
   status: plaidItemStatusEnum("status").notNull().default("active"),
   lastSync: timestamp("last_sync"),
+
+  /**
+   * Retry state.
+   *
+   * The refresh job used to set status to "error" on any failure and then
+   * select only "active" items — so one transient network blip stopped an
+   * account refreshing permanently, and the dashboard went on showing the
+   * stale figure as though it were current. Failures are now counted and
+   * retried with a widening gap; only repeated failure moves an item to
+   * requires_reauth, which is the one state that genuinely needs a person.
+   */
+  consecutiveFailures: integer("consecutive_failures").notNull().default(0),
+  lastError: text("last_error"),
+  lastErrorAt: timestamp("last_error_at"),
+  nextAttemptAt: timestamp("next_attempt_at"),
+
   createdAt: timestamp("created_at").defaultNow().notNull(),
   updatedAt: timestamp("updated_at").defaultNow().notNull(),
 });
@@ -832,3 +848,61 @@ export const billingEvents = pgTable("billing_events", {
   type: text("type").notNull(),
   receivedAt: timestamp("received_at").defaultNow().notNull(),
 });
+
+
+// ---------------------------------------------------------------------------
+// Operations
+// ---------------------------------------------------------------------------
+
+/**
+ * Who did what, to whose data.
+ *
+ * Scoped to the household like everything else, so a member can see their own
+ * household's history and nobody else's. The rows worth keeping are the ones
+ * that change access or move money-shaped data: invitations, linked
+ * institutions, stored API keys, deletions.
+ *
+ * Deliberately not a log of every read. A record nobody will ever read is a
+ * storage bill, not an audit trail.
+ */
+export const auditLog = pgTable(
+  "audit_log",
+  {
+    id: uuid("id").defaultRandom().primaryKey(),
+    /** The household the action affected. */
+    clerkId: text("clerk_id").notNull(),
+    /** The signed-in account that performed it, which differs for a spouse. */
+    actorId: text("actor_id"),
+    action: text("action").notNull(),
+    entity: text("entity"),
+    entityId: text("entity_id"),
+    detail: jsonb("detail"),
+    at: timestamp("at").defaultNow().notNull(),
+  },
+  (table) => [index("audit_log_clerk_at_idx").on(table.clerkId, table.at)]
+);
+
+/**
+ * One row per scheduled job run.
+ *
+ * Exists so /api/health/freshness can answer "is this data still being
+ * refreshed" rather than only "is the server up". This app was down for 92
+ * days without anyone noticing; a cron that quietly stops is the same failure
+ * wearing different clothes, and nothing in the system would have shown it.
+ */
+export const cronRuns = pgTable(
+  "cron_runs",
+  {
+    id: uuid("id").defaultRandom().primaryKey(),
+    job: text("job").notNull(),
+    startedAt: timestamp("started_at").defaultNow().notNull(),
+    finishedAt: timestamp("finished_at"),
+    ok: boolean("ok"),
+    processed: integer("processed").notNull().default(0),
+    failed: integer("failed").notNull().default(0),
+    /** True when a time budget stopped the run before it ran out of work. */
+    truncated: boolean("truncated").notNull().default(false),
+    detail: jsonb("detail"),
+  },
+  (table) => [index("cron_runs_job_started_idx").on(table.job, table.startedAt)]
+);

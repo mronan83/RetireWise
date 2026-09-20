@@ -3,6 +3,7 @@ import { getDb } from "./db";
 import { households, householdMembers } from "./db/schema";
 import { auth } from "./auth";
 import { compHousehold } from "./billing/entitlements";
+import { recordAudit } from "./audit";
 import { redeemInvite, type RedeemResult } from "./invites";
 
 /**
@@ -66,6 +67,14 @@ export async function createHousehold(): Promise<{ householdId: string }> {
   // billing on later cannot take anything away from someone who was already
   // using it. Cheap to record now; impossible to reconstruct afterwards.
   await compHousehold(userId, "friends-and-family");
+
+  await recordAudit({
+    clerkId: userId,
+    actorId: userId,
+    action: "household.created",
+    entity: "household",
+    entityId: household.id,
+  });
 
   return { householdId: household.id };
 }

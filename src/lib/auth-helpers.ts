@@ -39,7 +39,8 @@ async function resolve(userId: string): Promise<string> {
 async function read(): Promise<AuthContext | null> {
   // Demo mode (cookie set by proxy) reads the seeded demo household.
   const cookieStore = await cookies();
-  const demoEnabled = process.env.NEXT_PUBLIC_DEMO_ENABLED !== "false";
+    // Opt in, not out — see the note in src/proxy.ts.
+  const demoEnabled = process.env.NEXT_PUBLIC_DEMO_ENABLED === "true";
   if (demoEnabled && cookieStore.get("demo")?.value === "1") {
     return { userId: DEMO_CLERK_ID, dataClerkId: DEMO_CLERK_ID, isDemo: true };
   }

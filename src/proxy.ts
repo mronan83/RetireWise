@@ -39,7 +39,12 @@ const MACHINE_PREFIXES = [
 const matches = (path: string, prefixes: string[]) =>
   prefixes.some((p) => path === p || path.startsWith(`${p}/`));
 
-const demoEnabled = () => process.env.NEXT_PUBLIC_DEMO_ENABLED !== "false";
+// Opt in, not out. Demo mode returns NextResponse.next() for every protected
+// path — an authentication bypass shaped like a feature. It is correct today
+// (writes are refused by requireWriteClerkId, and it reads a seeded
+// household), but a bypass that is on unless someone remembers to turn it off
+// is the wrong default for a deployment real families use.
+const demoEnabled = () => process.env.NEXT_PUBLIC_DEMO_ENABLED === "true";
 
 export async function proxy(request: NextRequest) {
   const url = request.nextUrl;

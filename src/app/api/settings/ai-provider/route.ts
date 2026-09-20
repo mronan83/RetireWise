@@ -5,6 +5,7 @@ import { userPreferences } from "@/lib/db/schema";
 import { encrypt, decrypt, maskKey } from "@/lib/utils/encryption";
 import { CLAUDE_MODELS, isValidClaudeModel, resolveClaudeModel } from "@/lib/ai/models";
 import { isUserProvider } from "@/lib/ai/model";
+import { recordAudit } from "@/lib/audit";
 
 const KEY_COLUMNS = {
   anthropic: "anthropicApiKey",
@@ -60,8 +61,22 @@ async function handlePost(request: Request) {
   // Save or remove API key
   if (removeKey && removeKey in KEY_COLUMNS) {
     data[KEY_COLUMNS[removeKey as keyof typeof KEY_COLUMNS]] = null;
+    await recordAudit({
+      clerkId: userId,
+      action: "ai_key.removed",
+      entity: "provider",
+      entityId: String(removeKey),
+    });
   } else if (apiKey && provider && provider in KEY_COLUMNS) {
     data[KEY_COLUMNS[provider as keyof typeof KEY_COLUMNS]] = encrypt(apiKey);
+    // The action, never the key. The whole point of the column being
+    // encrypted is defeated if the audit trail holds it in the clear.
+    await recordAudit({
+      clerkId: userId,
+      action: "ai_key.stored",
+      entity: "provider",
+      entityId: String(provider),
+    });
   }
 
   if (existing.length > 0) {

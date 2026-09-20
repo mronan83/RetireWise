@@ -6,6 +6,7 @@ import { createHash, randomBytes, timingSafeEqual } from "crypto";
 import { and, desc, eq, gte, isNull, sql } from "drizzle-orm";
 import { getDb } from "./db";
 import { getEntitlements } from "./billing/entitlements";
+import { recordAudit } from "./audit";
 import {
   householdInvites,
   householdJoinAttempts,
@@ -128,6 +129,15 @@ export async function createInvite(
     })
     .returning();
 
+  await recordAudit({
+    clerkId: createdBy,
+    actorId: createdBy,
+    action: "invite.created",
+    entity: "household_invite",
+    entityId: row.id,
+    detail: { hint: row.codeHint, expiresAt: expiresAt.toISOString() },
+  });
+
   return { code, invite: { ...row, status: statusOf(row) } };
 }
 
@@ -158,6 +168,15 @@ export async function revokeInvite(
       )
     )
     .returning({ id: householdInvites.id });
+
+  if (rows.length > 0) {
+    await recordAudit({
+      clerkId: householdId,
+      action: "invite.revoked",
+      entity: "household_invite",
+      entityId: inviteId,
+    });
+  }
   return rows.length > 0;
 }
 
@@ -290,6 +309,16 @@ export async function redeemInvite(
   });
 
   await record(true);
+  // Keyed to the household that was joined, because that is whose data the
+  // new member can now see.
+  await recordAudit({
+    clerkId: primaryClerkId,
+    actorId: clerkId,
+    action: "invite.redeemed",
+    entity: "household_invite",
+    entityId: invite.id,
+    detail: { hint: invite.codeHint },
+  });
   return { ok: true, householdId: invite.householdId };
 }
 

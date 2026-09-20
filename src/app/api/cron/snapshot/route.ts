@@ -1,6 +1,6 @@
 import { eq } from "drizzle-orm";
 import { getDb } from "@/lib/db";
-import { accounts, holdings, portfolioSnapshots, accountSnapshots } from "@/lib/db/schema";
+import { accounts, holdings, portfolioSnapshots, accountSnapshots, cronRuns } from "@/lib/db/schema";
 import { calculateAllocation } from "@/lib/utils/calculations";
 import { getLatestSnapshot } from "@/lib/queries/snapshots";
 import { updateAllPrices } from "@/lib/utils/price-feed";
@@ -22,6 +22,14 @@ async function handleGet(request: Request) {
   }
 
   const db = getDb();
+
+  // Recorded so /api/health/freshness can tell "ran and found nothing to do"
+  // from "has not run since Tuesday". Without a row, a cron that silently
+  // stops looks exactly like one with no work.
+  const [run] = await db
+    .insert(cronRuns)
+    .values({ job: "portfolio_snapshot" })
+    .returning({ id: cronRuns.id });
 
   // Get all unique clerk IDs that have accounts
   const allAccounts = await db
@@ -170,6 +178,16 @@ async function handleGet(request: Request) {
       console.error(`Goal update failed for ${clerkId}:`, e);
     }
   }
+
+  await db
+    .update(cronRuns)
+    .set({
+      finishedAt: new Date(),
+      ok: true,
+      processed: snapshotsCreated,
+      detail: { pricesUpdated: totalPricesUpdated, date: today },
+    })
+    .where(eq(cronRuns.id, run.id));
 
   return Response.json({
     success: true,
