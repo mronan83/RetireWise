@@ -120,7 +120,18 @@ export default async function LandingPage() {
       </main>
 
       <footer className="border-t py-6 text-center text-sm text-muted-foreground">
-        RetireWise &mdash; AI-powered retirement investment modeling
+        <p>RetireWise &mdash; AI-powered retirement investment modeling</p>
+        <p className="mt-2 flex flex-wrap items-center justify-center gap-x-4 gap-y-1">
+          <Link href="/legal/terms" className="hover:underline">
+            Terms
+          </Link>
+          <Link href="/legal/privacy" className="hover:underline">
+            Privacy
+          </Link>
+        </p>
+        <p className="mx-auto mt-3 max-w-prose px-5 text-xs">
+          Not investment advice. Projections are model output, not forecasts.
+        </p>
       </footer>
     </div>
   );

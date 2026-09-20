@@ -17,6 +17,7 @@ import { AiProviderSection } from "./ai-provider-section";
 import { HouseholdSharing } from "./household-sharing";
 import { IrsLimitsSection } from "./irs-limits-section";
 import { PlanSection } from "./plan-section";
+import { YourDataSection } from "./your-data-section";
 
 export default async function SettingsPage() {
   return withHousehold(() => SettingsPageContent());
@@ -161,6 +162,13 @@ async function SettingsPageContent() {
         summary="Reference figures for the current tax year"
       >
         <IrsLimitsSection />
+      </CollapsibleSection>
+
+      <CollapsibleSection
+        title="Your Data"
+        summary="Export everything, or erase it"
+      >
+        <YourDataSection />
       </CollapsibleSection>
 
       <CollapsibleSection

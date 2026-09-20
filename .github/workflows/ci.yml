@@ -99,6 +99,13 @@ jobs:
       - name: Check tenant isolation
         run: pnpm test:rls
 
+      # Export completeness and deletion completeness: the same property from
+      # opposite ends. A table wired into neither would make an export that
+      # silently omits it still look full, and a deletion that silently keeps
+      # it still report success.
+      - name: Check export and deletion
+        run: pnpm test:account-data
+
       - name: Build
         run: pnpm build
 

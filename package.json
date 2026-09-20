@@ -21,7 +21,8 @@
     "test:rls": "tsx scripts/test-rls.ts",
     "keys:rotate": "tsx scripts/rotate-keys.ts",
     "keys:rotate:dry": "tsx scripts/rotate-keys.ts --dry-run",
-    "test:ops": "tsx scripts/test-ops.ts"
+    "test:ops": "tsx scripts/test-ops.ts",
+    "test:account-data": "tsx scripts/test-account-data.ts"
   },
   "dependencies": {
     "@ai-sdk/anthropic": "^3.0.71",

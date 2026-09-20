@@ -1,7 +1,13 @@
 import { expect, type Page } from "@playwright/test";
 
 /** Every route reachable in demo mode, by the path a person would visit. */
-export const PUBLIC_ROUTES = ["/", "/sign-in", "/sign-up"] as const;
+export const PUBLIC_ROUTES = [
+  "/",
+  "/sign-in",
+  "/sign-up",
+  "/legal/terms",
+  "/legal/privacy",
+] as const;
 
 export const DASHBOARD_ROUTES = [
   "/dashboard",
