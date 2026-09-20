@@ -200,6 +200,25 @@ function main() {
     "each label claimed a period the app had never observed"
   );
 
+  // ---- the periods five months of history CAN answer ----------------------
+  // Removing the overclaiming labels emptied the row entirely, which is
+  // honest and useless. These are the windows the record actually covers.
+  check("30 days is within five months of history", covers("2026-04-20", "2026-08-21"));
+  check("90 days is too", covers("2026-04-20", "2026-06-22"));
+  check(
+    "but a 30-day window is still refused when the history is two weeks old",
+    !covers("2026-09-06", "2026-08-21")
+  );
+
+  // Inception to date needs no coverage test: it starts where the record
+  // starts. What it must never do is borrow another period's name.
+  const inceptionPct = ((21045.35 - 19752.12) / 19752.12) * 100;
+  check(
+    "inception-to-date is a real figure, labelled by its own start date",
+    Math.abs(inceptionPct - 6.55) < 0.01,
+    `${inceptionPct.toFixed(2)}%`
+  );
+
   // ---- the sync that destroyed the real basis -----------------------------
   const securities = new Map([
     ["sec_plt", { ticker_symbol: "PLT.HYBRID.2060.T", name: "Plt Hybrid 2060 T", type: "mutual fund" }],

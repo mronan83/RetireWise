@@ -130,8 +130,21 @@ function addDays(isoDate: string, days: number): string {
   return d.toISOString().split("T")[0];
 }
 
+export type AccountPerformance = {
+  /** Percent change per period key. Null where the history cannot reach it. */
+  returns: Record<string, number | null>;
+  /**
+   * The first date this account was ever snapshotted.
+   *
+   * Carried so the card can label the inception-to-date figure with the
+   * date it actually starts from, instead of borrowing a period name the
+   * record does not cover.
+   */
+  since: string | null;
+};
+
 export async function getAccountPerformanceMap(clerkId: string): Promise<
-  Map<string, Record<string, number | null>>
+  Map<string, AccountPerformance>
 > {
   const db = getDb();
   const now = new Date();
@@ -141,6 +154,12 @@ export async function getAccountPerformanceMap(clerkId: string): Promise<
   const yesterday = new Date(now);
   yesterday.setDate(yesterday.getDate() - 1);
   const ytdStart = `${now.getFullYear()}-01-01`;
+  // Short windows, because five months of daily snapshots can answer these
+  // honestly while "1Y" and everything above it cannot.
+  const thirtyDaysAgo = new Date(now);
+  thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
+  const ninetyDaysAgo = new Date(now);
+  ninetyDaysAgo.setDate(ninetyDaysAgo.getDate() - 90);
   const oneYearAgo = new Date(now);
   oneYearAgo.setFullYear(oneYearAgo.getFullYear() - 1);
   const threeYearsAgo = new Date(now);
@@ -170,7 +189,8 @@ export async function getAccountPerformanceMap(clerkId: string): Promise<
   }
 
   // For each account, compute returns
-  const result = new Map<string, Record<string, number | null>>();
+  const result = new Map<string, AccountPerformance>();
+  const iso = (d: Date) => d.toISOString().split("T")[0];
 
   for (const [accountId, snaps] of byAccount) {
     if (snaps.length === 0) continue;
@@ -217,13 +237,31 @@ export async function getAccountPerformanceMap(clerkId: string): Promise<
         ? ((latestVal - prevSnap.value) / prevSnap.value) * 100
         : null;
 
+    /**
+     * Inception to date: the one period the record can always answer.
+     *
+     * Without it a household in its first year sees an empty row, which is
+     * honest and useless. Labelled with the start date on the card, so it
+     * states its own scope rather than borrowing a period name.
+     */
+    const inception =
+      snaps.length >= 2 && earliest.value > 0
+        ? ((latestVal - earliest.value) / earliest.value) * 100
+        : null;
+
     result.set(accountId, {
-      daily,
-      ytd: calcReturn(valueAt(ytdStart)),
-      "1yr": calcReturn(valueAt(oneYearAgo.toISOString().split("T")[0])),
-      "3yr": calcReturn(valueAt(threeYearsAgo.toISOString().split("T")[0])),
-      "5yr": calcReturn(valueAt(fiveYearsAgo.toISOString().split("T")[0])),
-      "10yr": calcReturn(valueAt(tenYearsAgo.toISOString().split("T")[0])),
+      returns: {
+        daily,
+        "30d": calcReturn(valueAt(iso(thirtyDaysAgo))),
+        "90d": calcReturn(valueAt(iso(ninetyDaysAgo))),
+        ytd: calcReturn(valueAt(ytdStart)),
+        "1yr": calcReturn(valueAt(iso(oneYearAgo))),
+        "3yr": calcReturn(valueAt(iso(threeYearsAgo))),
+        "5yr": calcReturn(valueAt(iso(fiveYearsAgo))),
+        "10yr": calcReturn(valueAt(iso(tenYearsAgo))),
+        inception,
+      },
+      since: earliest.date,
     });
   }
 

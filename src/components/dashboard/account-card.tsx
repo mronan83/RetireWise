@@ -15,15 +15,30 @@ import {
   LastUpdated,
   type ConnectionState,
 } from "@/components/ui/last-updated";
+import type { AccountPerformance } from "@/lib/queries/snapshots";
 
+/**
+ * Shortest first. A period only appears when the snapshot history actually
+ * reaches back that far — which is why 30D and 90D exist at all: five
+ * months of daily records can answer those honestly, and cannot answer 1Y.
+ */
 const PERIOD_LABELS: Record<string, string> = {
   daily: "Day",
+  "30d": "30D",
+  "90d": "90D",
   ytd: "YTD",
   "1yr": "1Y",
   "3yr": "3Y",
   "5yr": "5Y",
   "10yr": "10Y",
 };
+
+/** "2026-04-20" -> "Apr '26", for the inception-to-date label. */
+function sinceLabel(iso: string): string {
+  const d = new Date(`${iso}T00:00:00Z`);
+  const month = d.toLocaleString("en-US", { month: "short", timeZone: "UTC" });
+  return `Since ${month} '${String(d.getUTCFullYear()).slice(2)}`;
+}
 
 type Props = {
   account: Account;
@@ -38,7 +53,7 @@ type Props = {
    * indistinguishable from one that has genuinely not moved.
    */
   missingBasisNote?: string | null;
-  periodReturns?: Record<string, number | null>;
+  periodReturns?: AccountPerformance;
   /** Link health. Absent on callers that have not loaded it yet. */
   connection?: ConnectionState;
   /** How old the figure shown is — the oldest price behind it, not the newest. */
@@ -70,7 +85,8 @@ export function AccountCard({
   const hasGainLoss =
     gainLoss !== undefined && gainLossPct !== undefined && costBasis !== undefined && costBasis > 0;
   const isPositive = (gainLoss ?? 0) >= 0;
-  const hasPeriodData = periodReturns && Object.values(periodReturns).some((v) => v !== null);
+  const returns = periodReturns?.returns;
+  const hasPeriodData = returns && Object.values(returns).some((v) => v !== null);
   const isLinked = account.plaidAccountId !== null;
 
   return (
@@ -110,11 +126,24 @@ export function AccountCard({
             </div>
           )}
 
-          {/* Time-period returns */}
+          {/* Time-period returns.
+              These are the change in the account's BALANCE between two daily
+              snapshots, which is not the same thing as investment return: a
+              contribution raises the balance and therefore raises the
+              figure. Separating the two needs transaction history, which
+              this app does not yet pull from Plaid — so the row says what it
+              is rather than implying performance it cannot measure. */}
           {hasPeriodData && (
-            <div className="flex flex-wrap gap-x-2 gap-y-0.5 mt-2">
+            <div
+              className="flex flex-wrap gap-x-2 gap-y-0.5 mt-2"
+              title={
+                account.isActivelyContributing
+                  ? "Change in balance over each period. This account is still being contributed to, so these include contributions as well as market movement."
+                  : "Change in balance over each period, from daily snapshots."
+              }
+            >
               {Object.entries(PERIOD_LABELS).map(([key, label]) => {
-                const val = periodReturns![key];
+                const val = returns![key];
                 if (val === null || val === undefined) return null;
                 const pos = val >= 0;
                 return (
@@ -129,7 +158,32 @@ export function AccountCard({
                   </div>
                 );
               })}
+              {/* Inception to date, named for the date it starts from.
+                  Before this the same five-month figure appeared under "1Y",
+                  "3Y", "5Y" and "10Y" — four labels for a period the record
+                  had never covered. */}
+              {returns!.inception !== null && returns!.inception !== undefined && periodReturns!.since && (
+                <div className="flex items-baseline gap-0.5">
+                  <span className="text-[10px] text-muted-foreground">
+                    {sinceLabel(periodReturns!.since)}
+                  </span>
+                  <span
+                    className={cn(
+                      "text-[10px] font-mono font-medium",
+                      returns!.inception >= 0 ? "text-green-500" : "text-red-500"
+                    )}
+                  >
+                    {returns!.inception >= 0 ? "+" : ""}
+                    {returns!.inception.toFixed(1)}%
+                  </span>
+                </div>
+              )}
             </div>
+          )}
+          {hasPeriodData && account.isActivelyContributing && (
+            <p className="mt-1 text-[10px] leading-tight text-muted-foreground">
+              Includes contributions, not market movement alone
+            </p>
           )}
 
           <div className="mt-2 flex flex-wrap items-center gap-2">
