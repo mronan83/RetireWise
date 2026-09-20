@@ -4,6 +4,7 @@ import { createServerClient } from "@supabase/ssr";
 // User-facing pages and API routes that require a signed-in user.
 const PROTECTED_PREFIXES = [
   "/dashboard",
+  "/onboarding",
   "/accounts",
   "/holdings",
   "/transactions",

@@ -40,6 +40,10 @@ jobs:
       # than behind the database job.
       - run: pnpm exec tsx scripts/check-tenant-scope.ts
 
+      # Fails when a signed-in page is missing from the proxy's protected list,
+      # which makes it answer 500 to signed-out visitors rather than redirect.
+      - run: pnpm exec tsx scripts/check-protected-routes.ts
+
       # Retry policy and key rotation. Pure logic, so it belongs here rather
       # than behind the database job.
       - run: pnpm exec tsx scripts/test-ops.ts
