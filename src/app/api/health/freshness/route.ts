@@ -68,13 +68,30 @@ async function handleGet(request: Request) {
     const refreshAgeHours = hoursSince(lastRefresh?.finishedAt ?? null);
     const snapshotAgeHours = hoursSince(lastSnapshot?.at ?? null);
 
+    const linkedItems = items?.total ?? 0;
+    const oldestSyncHours = items?.oldestSyncHours ?? null;
+
+    // Evidence that refreshing is happening, in order of directness.
+    //
+    // The run history is the better signal, but it only starts accumulating
+    // after this code ships, and a monitor pointed here on day one would
+    // otherwise alert for a day about a job that has simply not come round
+    // yet. Item sync age answers the same question — is the data moving —
+    // from data that already exists, so it stands in until a run is recorded.
+    //
+    // A household with nothing linked has nothing to refresh, and reporting
+    // that as stale would be an alert with no action behind it.
+    const refreshRanRecently =
+      refreshAgeHours !== null && refreshAgeHours <= REFRESH_MAX_AGE_HOURS;
+    const itemsSyncedRecently =
+      oldestSyncHours !== null && oldestSyncHours <= REFRESH_MAX_AGE_HOURS;
+
     const checks = {
-      // Null means it has never run, which is as wrong as having stopped.
-      refreshRan: refreshAgeHours !== null && refreshAgeHours <= REFRESH_MAX_AGE_HOURS,
+      refreshRan: linkedItems === 0 || refreshRanRecently || itemsSyncedRecently,
       snapshotRan: snapshotAgeHours !== null && snapshotAgeHours <= SNAPSHOT_MAX_AGE_HOURS,
-      // A truncated run is not a failure, but a run that is always truncated
-      // means the job can no longer finish inside its window.
-      refreshCompleted: lastRefresh ? lastRefresh.truncated === false : false,
+      // A truncated run is not a failure, but a job that is always truncated
+      // can no longer finish inside its window. Unknown until one has run.
+      refreshCompleted: lastRefresh ? lastRefresh.truncated === false : true,
     };
 
     const fresh = Object.values(checks).every(Boolean);
@@ -92,10 +109,10 @@ async function handleGet(request: Request) {
         },
         snapshot: { ageHours: snapshotAgeHours },
         plaidItems: {
-          total: items?.total ?? 0,
+          total: linkedItems,
           failing: items?.failing ?? 0,
           needingReconnect: items?.needingReconnect ?? 0,
-          oldestSyncHours: items?.oldestSyncHours ?? null,
+          oldestSyncHours,
         },
         checkedAt: new Date().toISOString(),
       },
