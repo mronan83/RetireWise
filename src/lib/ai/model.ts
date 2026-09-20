@@ -1,64 +1,82 @@
 import type { LanguageModel } from "ai";
 import { resolveClaudeModel } from "./models";
 
+/** Providers a user can choose. Each one requires that user's own API key. */
+export const USER_PROVIDERS = ["anthropic", "google", "openai"] as const;
+export type UserProvider = (typeof USER_PROVIDERS)[number];
+
+export function isUserProvider(value: unknown): value is UserProvider {
+  return typeof value === "string" && (USER_PROVIDERS as readonly string[]).includes(value);
+}
+
 /**
- * Get the AI model for the given provider.
- * Uses user-provided API key if available, falls back to env var.
+ * Thrown when the household has not supplied a key for its chosen provider.
+ *
+ * A distinct type so route handlers can answer 400 with a message that points
+ * at Settings, rather than letting a provider error surface as a 500 that
+ * reads like the app is broken.
+ */
+export class MissingApiKeyError extends Error {
+  readonly provider: string;
+  constructor(provider: string) {
+    super(
+      `No ${getProviderLabel(provider)} API key on file. Add your own key in Settings → AI provider.`
+    );
+    this.name = "MissingApiKeyError";
+    this.provider = provider;
+  }
+}
+
+/**
+ * Build the language model for a provider using the caller's own API key.
+ *
+ * There is deliberately no fallback to a server-side key. AI usage is billed
+ * per token to whoever owns the key, so a fallback would quietly move every
+ * user's inference cost onto the app operator's account — an expense that
+ * grows with usage and shows up on a card statement rather than in an error.
+ * If a household wants the AI features, it brings its own key.
  */
 export function getModel(
-  provider?: string,
-  userApiKey?: string,
+  provider: string | undefined,
+  userApiKey: string | undefined,
   claudeModel?: string | null
 ): LanguageModel {
-  const p = provider || process.env.AI_PROVIDER || "anthropic";
+  const p = provider || "anthropic";
+
+  if (p === "gateway") {
+    // App-funded inference. Off unless the operator explicitly opts in, and
+    // never selectable from Settings — see the POST handler in
+    // /api/settings/ai-provider.
+    if (process.env.AI_GATEWAY_ENABLED !== "true" || !process.env.AI_GATEWAY_API_KEY) {
+      throw new MissingApiKeyError("anthropic");
+    }
+    // eslint-disable-next-line @typescript-eslint/no-require-imports
+    const { gateway } = require("ai");
+    return gateway(`anthropic/${resolveClaudeModel(claudeModel)}`);
+  }
+
+  if (!isUserProvider(p)) {
+    throw new Error(`Unknown AI provider "${p}". Use: anthropic, google, or openai.`);
+  }
+
+  if (!userApiKey) throw new MissingApiKeyError(p);
 
   switch (p) {
     case "anthropic": {
-      const apiKey = userApiKey || process.env.ANTHROPIC_API_KEY;
-      if (!apiKey) {
-        throw new Error("No Anthropic API key configured. Add one in Settings or set ANTHROPIC_API_KEY.");
-      }
       // eslint-disable-next-line @typescript-eslint/no-require-imports
       const { createAnthropic } = require("@ai-sdk/anthropic");
-      const client = createAnthropic({ apiKey });
-      return client(resolveClaudeModel(claudeModel));
+      return createAnthropic({ apiKey: userApiKey })(resolveClaudeModel(claudeModel));
     }
-
     case "google": {
-      const apiKey = userApiKey || process.env.GOOGLE_API_KEY;
-      if (!apiKey) {
-        throw new Error("No Google API key configured. Add one in Settings or set GOOGLE_API_KEY.");
-      }
       // eslint-disable-next-line @typescript-eslint/no-require-imports
       const { createGoogleGenerativeAI } = require("@ai-sdk/google");
-      const client = createGoogleGenerativeAI({ apiKey });
-      return client("gemini-2.0-flash");
+      return createGoogleGenerativeAI({ apiKey: userApiKey })("gemini-2.0-flash");
     }
-
     case "openai": {
-      const apiKey = userApiKey || process.env.OPENAI_API_KEY;
-      if (!apiKey) {
-        throw new Error("No OpenAI API key configured. Add one in Settings or set OPENAI_API_KEY.");
-      }
       // eslint-disable-next-line @typescript-eslint/no-require-imports
       const { createOpenAI } = require("@ai-sdk/openai");
-      const client = createOpenAI({ apiKey });
-      return client("gpt-4.1");
+      return createOpenAI({ apiKey: userApiKey })("gpt-4.1");
     }
-
-    case "gateway": {
-      if (!process.env.AI_GATEWAY_API_KEY) {
-        throw new Error("AI_GATEWAY_API_KEY is not set.");
-      }
-      // eslint-disable-next-line @typescript-eslint/no-require-imports
-      const { gateway } = require("ai");
-      return gateway(`anthropic/${resolveClaudeModel(claudeModel)}`);
-    }
-
-    default:
-      throw new Error(
-        `Unknown AI provider "${p}". Use: anthropic, google, openai, or gateway.`
-      );
   }
 }
 
@@ -76,27 +94,3 @@ export function getProviderLabel(provider: string): string {
       return provider;
   }
 }
-
-export const AVAILABLE_PROVIDERS = [
-  {
-    id: "anthropic",
-    name: "Claude",
-    company: "Anthropic",
-    description: "Best for nuanced financial analysis and reasoning",
-    configured: () => !!process.env.ANTHROPIC_API_KEY,
-  },
-  {
-    id: "google",
-    name: "Gemini 2.0 Flash",
-    company: "Google",
-    description: "Fast and cost-effective, free tier available",
-    configured: () => !!process.env.GOOGLE_API_KEY,
-  },
-  {
-    id: "openai",
-    name: "GPT-4.1",
-    company: "OpenAI",
-    description: "Strong general-purpose model",
-    configured: () => !!process.env.OPENAI_API_KEY,
-  },
-] as const;

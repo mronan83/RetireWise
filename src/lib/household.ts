@@ -2,6 +2,7 @@ import { eq } from "drizzle-orm";
 import { getDb } from "./db";
 import { households, householdMembers } from "./db/schema";
 import { auth } from "./auth";
+import { compHousehold, getEntitlements } from "./billing/entitlements";
 
 /**
  * Get the household clerkId for data queries.
@@ -66,6 +67,11 @@ export async function createHousehold(): Promise<{
     role: "primary",
   });
 
+  // Every household created while the app is free is comped, so switching
+  // billing on later cannot take anything away from someone who was already
+  // using it. Cheap to record now; impossible to reconstruct afterwards.
+  await compHousehold(userId, "friends-and-family");
+
   return { householdId: household.id, inviteCode };
 }
 
@@ -79,7 +85,7 @@ export async function joinHousehold(inviteCode: string): Promise<boolean> {
   const db = getDb();
 
   const household = await db
-    .select({ id: households.id })
+    .select({ id: households.id, primaryClerkId: households.primaryClerkId })
     .from(households)
     .where(eq(households.inviteCode, inviteCode.toUpperCase()))
     .limit(1);
@@ -94,6 +100,22 @@ export async function joinHousehold(inviteCode: string): Promise<boolean> {
     .limit(1);
 
   if (existing.length > 0) return true; // Already in a household
+
+  // Household size is a plan limit. It is unlimited on the free tier, so this
+  // never refuses today — but the check runs on every join, which is the only
+  // way to know it still works on the day a limit is set.
+  // The limit belongs to the household being joined, not to the joiner.
+  const { limits } = await getEntitlements(household[0].primaryClerkId);
+  const maxMembers = limits.householdMembers;
+  if (maxMembers !== null) {
+    const members = await db
+      .select({ id: householdMembers.id })
+      .from(householdMembers)
+      .where(eq(householdMembers.householdId, household[0].id));
+    if (members.length >= maxMembers) {
+      throw new Error(`This household is limited to ${maxMembers} members.`);
+    }
+  }
 
   await db.insert(householdMembers).values({
     householdId: household[0].id,

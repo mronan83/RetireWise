@@ -710,3 +710,70 @@ export const netWorthSnapshots = pgTable(
     index("net_worth_snapshots_clerk_date_idx").on(table.clerkId, table.snapshotDate),
   ]
 );
+
+// ---------------------------------------------------------------------------
+// Billing
+// ---------------------------------------------------------------------------
+
+/**
+ * One row per household, holding whatever the billing provider last told us.
+ *
+ * The row is not the source of truth about what a household may do — that is
+ * resolved in src/lib/billing/entitlements.ts, which can answer without this
+ * row existing at all. Absent Stripe configuration the table stays empty and
+ * every household resolves to the full free tier, which is the point: the
+ * billing machinery ships dormant and turning it on is configuration, not a
+ * migration.
+ */
+export const subscriptions = pgTable("subscriptions", {
+  id: uuid("id").defaultRandom().primaryKey(),
+  clerkId: text("clerk_id").unique().notNull(),
+
+  planId: text("plan_id").notNull().default("free"),
+  // Mirrors Stripe's subscription status vocabulary: active, trialing,
+  // past_due, canceled, incomplete, incomplete_expired, unpaid, paused.
+  status: text("status").notNull().default("active"),
+
+  /**
+   * Granted access that ignores billing entirely.
+   *
+   * Friends and family are comped. A comped household keeps full access on the
+   * day Stripe is switched on, so enabling billing can never silently downgrade
+   * someone who was already using the app.
+   */
+  comped: boolean("comped").notNull().default(false),
+  compReason: text("comp_reason"),
+
+  stripeCustomerId: text("stripe_customer_id").unique(),
+  stripeSubscriptionId: text("stripe_subscription_id").unique(),
+  stripePriceId: text("stripe_price_id"),
+  currentPeriodEnd: timestamp("current_period_end"),
+  cancelAtPeriodEnd: boolean("cancel_at_period_end").notNull().default(false),
+
+  /**
+   * Stripe's `created` timestamp for the last event applied to this row.
+   *
+   * Webhooks arrive out of order often enough to matter: a cancellation
+   * delivered before the update that preceded it would otherwise leave the row
+   * describing a state the customer has already left. An older event is
+   * ignored rather than applied.
+   */
+  lastEventAt: timestamp("last_event_at"),
+
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+  updatedAt: timestamp("updated_at").defaultNow().notNull(),
+});
+
+/**
+ * Every webhook Stripe has delivered, by its event id.
+ *
+ * Stripe retries on any non-2xx and can deliver the same event more than once
+ * even on success. The unique constraint is the idempotency guard: a duplicate
+ * insert fails, and the handler returns 200 without replaying the effect.
+ */
+export const billingEvents = pgTable("billing_events", {
+  id: uuid("id").defaultRandom().primaryKey(),
+  stripeEventId: text("stripe_event_id").unique().notNull(),
+  type: text("type").notNull(),
+  receivedAt: timestamp("received_at").defaultNow().notNull(),
+});

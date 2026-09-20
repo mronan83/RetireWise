@@ -16,6 +16,7 @@ import { ContributionsSection } from "./contributions-section";
 import { AiProviderSection } from "./ai-provider-section";
 import { HouseholdSharing } from "./household-sharing";
 import { IrsLimitsSection } from "./irs-limits-section";
+import { PlanSection } from "./plan-section";
 
 export default async function SettingsPage() {
   const { dataClerkId: userId } = await getAuthContext();
@@ -154,6 +155,13 @@ export default async function SettingsPage() {
         summary="Reference figures for the current tax year"
       >
         <IrsLimitsSection />
+      </CollapsibleSection>
+
+      <CollapsibleSection
+        title="Plan & Billing"
+        summary="Friends & Family — every feature, free"
+      >
+        <PlanSection />
       </CollapsibleSection>
 
       <CollapsibleSection

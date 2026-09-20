@@ -4,6 +4,7 @@ import { getDb } from "@/lib/db";
 import { userPreferences } from "@/lib/db/schema";
 import { encrypt, decrypt, maskKey } from "@/lib/utils/encryption";
 import { CLAUDE_MODELS, isValidClaudeModel, resolveClaudeModel } from "@/lib/ai/models";
+import { isUserProvider } from "@/lib/ai/model";
 
 const KEY_COLUMNS = {
   anthropic: "anthropicApiKey",
@@ -29,9 +30,18 @@ export async function POST(request: Request) {
 
   const data: Record<string, unknown> = { updatedAt: new Date() };
 
-  // Save provider selection
-  if (provider && ["anthropic", "google", "openai", "gateway"].includes(provider)) {
+  // Save provider selection.
+  //
+  // "gateway" is not offered: it runs on the operator's AI_GATEWAY_API_KEY, so
+  // letting a household select it would put its inference on someone else's
+  // bill. Only providers backed by the household's own key are selectable.
+  if (provider && isUserProvider(provider)) {
     data.aiProvider = provider;
+  } else if (provider) {
+    return Response.json(
+      { error: "Choose a provider you have supplied an API key for." },
+      { status: 400 }
+    );
   }
 
   // Save the Claude model choice. Rejected unless it is one we offer, so a
@@ -94,26 +104,26 @@ export async function GET() {
     });
   }
 
-  // Return masked keys (never send the real key back to the client)
+  // Return masked keys (never send the real key back to the client).
+  //
+  // There is no longer a "server" source: a provider is usable only when this
+  // household has stored its own key, because inference is billed to whoever
+  // owns the key and the app operator is not paying for other people's usage.
   const keys: Record<string, { configured: boolean; masked: string | null; source: string }> = {};
   for (const [provider, column] of Object.entries(KEY_COLUMNS)) {
     const encrypted = pref[column as keyof typeof pref] as string | null;
-    const hasEnvKey = provider === "anthropic"
-      ? !!process.env.ANTHROPIC_API_KEY
-      : provider === "google"
-        ? !!process.env.GOOGLE_API_KEY
-        : !!process.env.OPENAI_API_KEY;
-
-    if (encrypted) {
-      try {
-        const decrypted = decrypt(encrypted);
-        keys[provider] = { configured: true, masked: maskKey(decrypted), source: "user" };
-      } catch {
-        keys[provider] = { configured: false, masked: null, source: "none" };
-      }
-    } else if (hasEnvKey) {
-      keys[provider] = { configured: true, masked: null, source: "server" };
-    } else {
+    if (!encrypted) {
+      keys[provider] = { configured: false, masked: null, source: "none" };
+      continue;
+    }
+    try {
+      keys[provider] = {
+        configured: true,
+        masked: maskKey(decrypt(encrypted)),
+        source: "user",
+      };
+    } catch {
+      // Stored but undecryptable — the household has to replace it.
       keys[provider] = { configured: false, masked: null, source: "none" };
     }
   }

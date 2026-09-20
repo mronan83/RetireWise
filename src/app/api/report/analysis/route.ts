@@ -22,8 +22,8 @@ import {
   ACCOUNT_TYPE_LABELS,
   ACCOUNT_OWNER_LABELS,
 } from "@/lib/constants";
-import { getModel } from "@/lib/ai/model";
-import { decrypt } from "@/lib/utils/encryption";
+import { MissingApiKeyError } from "@/lib/ai/model";
+import { resolveUserModel } from "@/lib/ai/user-model";
 
 const COLORS = [
   "#6366f1", "#22c55e", "#f59e0b", "#ef4444", "#8b5cf6",
@@ -256,31 +256,20 @@ export async function GET(request: Request) {
     taxDeferredTotal: formatCurrency(taxBuckets.tax_deferred.value),
   };
 
-  // Generate AI insights
+  // Generate AI insights on the household's own API key.
   let aiInsights = "";
   try {
-    // Resolve user API key
-    let userApiKey: string | undefined;
-    if (pref) {
-      const keyMap: Record<string, string | null> = {
-        anthropic: pref.anthropicApiKey,
-        google: pref.googleApiKey,
-        openai: pref.openaiApiKey,
-      };
-      const encrypted = keyMap[pref.aiProvider || "anthropic"];
-      if (encrypted) {
-        try { userApiKey = decrypt(encrypted); } catch { /* fall back */ }
-      }
-    }
-
-    const model = getModel(pref?.aiProvider || undefined, userApiKey, pref?.anthropicModel);
+    const { model } = await resolveUserModel(userId);
     const { text } = await generateText({
       model,
       prompt: `You are a financial analyst generating a report infographic. Be specific with numbers, tickers, and percentages. Format as 6-8 bullet points, each 1-2 sentences. Use plain language.\n\n${config.prompt(ctx)}`,
     });
     aiInsights = text;
-  } catch {
-    aiInsights = "AI insights unavailable — check your AI provider configuration in Settings.";
+  } catch (e) {
+    aiInsights =
+      e instanceof MissingApiKeyError
+        ? "AI insights need your own API key. Add one in Settings \u2192 AI provider."
+        : "AI insights unavailable \u2014 check your AI provider configuration in Settings.";
   }
 
   // Format insights as HTML

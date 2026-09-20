@@ -22,7 +22,8 @@ import {
   ACCOUNT_TYPE_LABELS,
   ACCOUNT_OWNER_LABELS,
 } from "@/lib/constants";
-import { getModel } from "@/lib/ai/model";
+import { MissingApiKeyError } from "@/lib/ai/model";
+import { resolveUserModel } from "@/lib/ai/user-model";
 
 const COLORS = [
   "#6366f1", "#22c55e", "#f59e0b", "#ef4444", "#8b5cf6",
@@ -139,10 +140,15 @@ export async function GET() {
     ? Math.max(0, pref.retirementAge - pref.currentAge)
     : null;
 
-  // AI insights
+  // AI insights on the household's own API key.
+  //
+  // This call site used to pass `undefined` for the key, so it silently ran on
+  // the server's ANTHROPIC_API_KEY while the other two AI routes used the
+  // household's. Routing every entry point through resolveUserModel is what
+  // stops that from recurring.
   let aiInsights = "";
   try {
-    const model = getModel(pref?.aiProvider || undefined, undefined, pref?.anthropicModel);
+    const { model } = await resolveUserModel(userId);
     const holdingSummary = sortedHoldings
       .map(
         (h) =>
@@ -175,9 +181,11 @@ ${spouseSS[0] ? `Spouse SS at FRA: $${spouseSS[0].benefitAtFRA}/mo` : ""}
 Focus on: concentration risk, allocation balance, actionable improvements, and anything notable. Be specific about tickers and numbers.`,
     });
     aiInsights = text;
-  } catch {
+  } catch (e) {
     aiInsights =
-      "AI insights unavailable — check your AI provider configuration in Settings.";
+      e instanceof MissingApiKeyError
+        ? "AI insights need your own API key. Add one in Settings \u2192 AI provider."
+        : "AI insights unavailable \u2014 check your AI provider configuration in Settings.";
   }
 
   // Build SVG donut chart

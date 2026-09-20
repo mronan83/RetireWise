@@ -50,6 +50,13 @@
       "when": 1789853000000,
       "tag": "0006_contribution_pause",
       "breakpoints": true
+    },
+    {
+      "idx": 7,
+      "version": "7",
+      "when": 1789907760016,
+      "tag": "0007_billing",
+      "breakpoints": true
     }
   ]
 }

@@ -45,7 +45,7 @@ type ClaudeModel = {
 type KeyInfo = {
   configured: boolean;
   masked: string | null;
-  source: "user" | "server" | "none";
+  source: "user" | "none";
 };
 
 type Props = {
@@ -160,7 +160,7 @@ export function AiProviderSection({ currentProvider }: Props) {
       });
       const data = await fetch("/api/settings/ai-provider").then((r) => r.json());
       if (data.keys) setKeys(data.keys);
-      // If removing the active provider's key, it may still work via server env var
+      // No server-side fallback: removing the key disables this provider.
     } catch {
       // ignore
     } finally {
@@ -173,8 +173,9 @@ export function AiProviderSection({ currentProvider }: Props) {
   return (
     <div className="space-y-3">
       <p className="text-sm text-muted-foreground">
-        Choose which AI model powers your portfolio analysis. Add your own API key for any provider,
-        or use the server default if available.
+        Choose which AI model powers your portfolio analysis. Each provider needs your own
+        API key — usage is billed by the provider to the key that makes the request, so
+        RetireWise never runs AI on anyone else&apos;s account.
       </p>
 
       <div className="grid gap-3">
@@ -207,9 +208,6 @@ export function AiProviderSection({ currentProvider }: Props) {
                         <Key className="h-2.5 w-2.5 mr-0.5" />
                         Your key
                       </Badge>
-                    )}
-                    {keyInfo?.source === "server" && (
-                      <Badge variant="secondary" className="text-[10px]">Server key</Badge>
                     )}
                     {!configured && (
                       <Badge variant="outline" className="text-[10px] text-muted-foreground">No key</Badge>
@@ -356,8 +354,8 @@ export function AiProviderSection({ currentProvider }: Props) {
       )}
 
       <p className="text-[10px] text-muted-foreground">
-        API keys are encrypted before storage and never sent back to the browser. If a server-wide key is configured
-        by the admin, it will be used as a fallback when no personal key is set.
+        API keys are encrypted before storage and never sent back to the browser. A provider
+        without a key cannot be selected, and the AI features stay unavailable until you add one.
       </p>
     </div>
   );

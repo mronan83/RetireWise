@@ -1,4 +1,8 @@
+import { and, eq } from "drizzle-orm";
 import { getApiUserId } from "@/lib/auth-helpers";
+import { getDb } from "@/lib/db";
+import { plaidItems } from "@/lib/db/schema";
+import { guardFeature, guardLimit } from "@/lib/billing/entitlements";
 import { CountryCode, Products } from "plaid";
 import { getPlaidClient } from "@/lib/plaid/client";
 
@@ -8,6 +12,18 @@ export async function POST(request: Request) {
   if (!userId) {
     return Response.json({ error: "Unauthorized" }, { status: 401 });
   }
+
+  const denied = await guardFeature(userId, "plaid_linking");
+  if (denied) return denied;
+
+  // Linked institutions are a plan limit — unlimited on the free tier, so this
+  // is a no-op today that is nonetheless exercised on every link attempt.
+  const linked = await getDb()
+    .select({ id: plaidItems.id })
+    .from(plaidItems)
+    .where(and(eq(plaidItems.clerkId, userId), eq(plaidItems.status, "active")));
+  const overLimit = await guardLimit(userId, "linkedInstitutions", linked.length);
+  if (overLimit) return overLimit;
 
   if (!process.env.PLAID_CLIENT_ID || !process.env.PLAID_SECRET) {
     return Response.json(
