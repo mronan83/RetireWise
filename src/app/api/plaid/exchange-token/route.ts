@@ -1,6 +1,6 @@
 import { and, eq } from "drizzle-orm";
 import { revalidatePath } from "next/cache";
-import { getApiUserId, withApiHousehold } from "@/lib/auth-helpers";
+import { getApiUserId, withApiHousehold, withApiWriteHousehold } from "@/lib/auth-helpers";
 import { getPlaidClient } from "@/lib/plaid/client";
 import { encryptToken } from "@/lib/plaid/encryption";
 import { syncPlaidBalances, syncPlaidItem } from "@/lib/plaid/sync";
@@ -9,7 +9,7 @@ import { plaidItems } from "@/lib/db/schema";
 import { recordAudit } from "@/lib/audit";
 
 export async function POST(request: Request) {
-  return withApiHousehold(() => handlePost(request));
+  return withApiWriteHousehold(() => handlePost(request));
 }
 
 async function handlePost(request: Request) {

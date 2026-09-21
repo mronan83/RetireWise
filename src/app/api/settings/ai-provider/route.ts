@@ -1,4 +1,4 @@
-import { getApiUserId, withApiHousehold } from "@/lib/auth-helpers";
+import { getApiUserId, withApiHousehold, withApiWriteHousehold } from "@/lib/auth-helpers";
 import { eq } from "drizzle-orm";
 import { getDb } from "@/lib/db";
 import { userPreferences } from "@/lib/db/schema";
@@ -14,7 +14,7 @@ const KEY_COLUMNS = {
 } as const;
 
 export async function POST(request: Request) {
-  return withApiHousehold(() => handlePost(request));
+  return withApiWriteHousehold(() => handlePost(request));
 }
 
 async function handlePost(request: Request) {

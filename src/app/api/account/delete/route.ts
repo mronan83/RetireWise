@@ -1,5 +1,5 @@
 import { eq } from "drizzle-orm";
-import { withApiHousehold } from "@/lib/auth-helpers";
+import { withApiHousehold, withApiWriteHousehold } from "@/lib/auth-helpers";
 import { auth } from "@/lib/auth";
 import { getDb } from "@/lib/db";
 import { households } from "@/lib/db/schema";
@@ -46,7 +46,7 @@ async function isPrimary(clerkId: string, accountId: string | null): Promise<boo
 const CONFIRMATION = "DELETE MY DATA";
 
 export async function POST(request: Request) {
-  return withApiHousehold(async (clerkId) => {
+  return withApiWriteHousehold(async (clerkId) => {
     const { userId } = await auth();
 
     if (!(await isPrimary(clerkId, userId))) {

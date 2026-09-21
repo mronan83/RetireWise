@@ -1,10 +1,10 @@
-import { getApiUserId, withApiHousehold } from "@/lib/auth-helpers";
+import { getApiUserId, withApiWriteHousehold } from "@/lib/auth-helpers";
 import { eq, and } from "drizzle-orm";
 import { getDb } from "@/lib/db";
 import { alerts } from "@/lib/db/schema";
 
 export async function POST() {
-  return withApiHousehold(() => handlePost());
+  return withApiWriteHousehold(() => handlePost());
 }
 
 async function handlePost() {

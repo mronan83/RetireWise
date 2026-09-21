@@ -18,6 +18,7 @@ const SCOPERS = [
   "withHousehold",
   "withWriteHousehold",
   "withApiHousehold",
+  "withApiWriteHousehold",
   "withSystemRole",
 ];
 

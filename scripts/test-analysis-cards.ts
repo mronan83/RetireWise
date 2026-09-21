@@ -206,6 +206,55 @@ function main() {
     "the gate is an exact string comparison, deliberately"
   );
 
+  // ---- what turning demo mode on would have opened ------------------------
+  // The reason the flag was off is not that the button was broken. Seven POST
+  // handlers ran under withApiHousehold, the READ wrapper. Signed in that is
+  // right; in demo mode getApiUserId resolves to DEMO_CLERK_ID, so each of
+  // them would have written to the seeded household for an anonymous visitor.
+  const writeRoutes: [string, string][] = [
+    ["src/app/api/account/delete/route.ts", "delete the demo household outright"],
+    ["src/app/api/settings/projection-controls/route.ts", "rewrite the demo projection settings"],
+    ["src/app/api/settings/ai-provider/route.ts", "store an API key in the demo household"],
+    ["src/app/api/plaid/create-link-token/route.ts", "spend Plaid link quota anonymously"],
+    ["src/app/api/plaid/exchange-token/route.ts", "attach a stranger's real Plaid item to this database"],
+    ["src/app/api/alerts/dismiss/route.ts", "dismiss another visitor's alerts"],
+    ["src/app/api/alerts/dismiss-all/route.ts", "dismiss all of them"],
+  ];
+  for (const [file, damage] of writeRoutes) {
+    const src = read(file);
+    const post = src.slice(src.indexOf("export async function POST"));
+    check(
+      `POST ${file.replace("src/app/api", "").replace("/route.ts", "")} runs under the write wrapper`,
+      /return withApiWriteHousehold\(/.test(post),
+      `under the read wrapper a demo visitor could ${damage}`
+    );
+  }
+
+  const helpers = read("src/lib/auth-helpers.ts");
+  check(
+    "the write wrapper exists and refuses demo mode",
+    /export async function withApiWriteHousehold[\s\S]*?ctx\.isDemo[\s\S]*?status: 403/.test(
+      helpers
+    )
+  );
+  check(
+    "it still answers 401 when signed out, not 403",
+    /export async function withApiWriteHousehold[\s\S]*?if \(!ctx\) return Response\.json\(\s*\{ error: "Unauthorized" \}, \{ status: 401 \}/.test(
+      helpers
+    )
+  );
+  check(
+    "and the read wrapper does not refuse demo mode — reading is the point",
+    !/export async function withApiHousehold\(\s*fn[\s\S]*?isDemo/.test(
+      helpers.slice(helpers.indexOf("export async function withApiHousehold"))
+    )
+  );
+  check(
+    "the tenant-scope check knows the new wrapper",
+    read("scripts/check-tenant-scope.ts").includes('"withApiWriteHousehold"'),
+    "otherwise every route moved to it reads as newly unscoped"
+  );
+
   // Exit is ungated on purpose: someone already inside must always be able to
   // leave, including after the flag is turned off under them.
   check(

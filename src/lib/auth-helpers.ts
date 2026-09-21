@@ -111,6 +111,38 @@ export async function withWriteHousehold<T>(fn: (clerkId: string) => Promise<T>)
 }
 
 /**
+ * For route handlers that write.
+ *
+ * withApiHousehold is the read wrapper, and seven POST handlers were using
+ * it — account deletion, the two settings writers, both Plaid link steps and
+ * the two alert dismissals. Signed in, that is correct. In demo mode it is
+ * not: getApiUserId resolves to DEMO_CLERK_ID, so each of them would have
+ * written to the seeded household on behalf of an anonymous visitor.
+ *
+ * That was survivable only because demo mode has been off in production. It
+ * is the reason turning it on is not a one-line change: a visitor could have
+ * deleted the demo household, stored an API key in it, or attached their own
+ * real Plaid Item — putting a stranger's encrypted institution token in this
+ * database.
+ *
+ * 403 rather than 401: the caller is identified, and the request is refused
+ * for what it is, not for who sent it.
+ */
+export async function withApiWriteHousehold(
+  fn: (clerkId: string) => Promise<Response>
+): Promise<Response> {
+  const ctx = await read();
+  if (!ctx) return Response.json({ error: "Unauthorized" }, { status: 401 });
+  if (ctx.isDemo) {
+    return Response.json(
+      { error: "Demo mode is read-only." },
+      { status: 403 }
+    );
+  }
+  return withTenant(ctx.dataClerkId, ctx.userId, () => fn(ctx.dataClerkId));
+}
+
+/**
  * The same, for route handlers: answers 401 instead of throwing when signed
  * out, so a signed-out request does not surface as a 500.
  */
