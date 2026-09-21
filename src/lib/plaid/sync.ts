@@ -204,6 +204,12 @@ async function resolveAccount(args: {
 
 type IncomingHolding = {
   ticker: string;
+  /**
+   * Plaid's id for the security, carried through so the transactions sync
+   * can find this position without agreeing on how the ticker is spelled.
+   * Null only for a position Plaid described with no security at all.
+   */
+  plaidSecurityId: string | null;
   name: string;
   assetClass: ReturnType<typeof mapPlaidSecurityType>;
   shares: number;
@@ -259,6 +265,7 @@ export function aggregateHoldings(
     } else {
       byTicker.set(ticker, {
         ticker,
+        plaidSecurityId: ph.security_id,
         name: security.name || ticker,
         assetClass: mapPlaidSecurityType(security.type ?? null),
         shares,
@@ -271,6 +278,7 @@ export function aggregateHoldings(
 
   return [...byTicker.values()].map((h) => ({
     ticker: h.ticker,
+    plaidSecurityId: h.plaidSecurityId,
     name: h.name,
     assetClass: h.assetClass,
     shares: h.shares,
@@ -333,14 +341,36 @@ async function reconcileHoldings(
     .where(eq(holdings.accountId, accountId));
 
   const existingByTicker = new Map(existing.map((h) => [h.ticker, h]));
+  const existingBySecurity = new Map(
+    existing.filter((h) => h.plaidSecurityId).map((h) => [h.plaidSecurityId!, h])
+  );
   const incomingTickers = new Set(incoming.map((h) => h.ticker));
+  /** Rows this pass claimed, so the prune below drops only what Plaid dropped. */
+  const matchedIds = new Set<string>();
 
   let updated = 0;
   let added = 0;
   let removed = 0;
 
   for (const h of incoming) {
-    const match = existingByTicker.get(h.ticker);
+    /**
+     * Security id first, ticker second.
+     *
+     * Plaid re-spells an employer plan's funds between responses and between
+     * releases. Matching only on the spelling means a re-spelled position is
+     * not recognised as the one already stored: it is inserted as new and the
+     * old row is pruned as a closed position, taking a hand-entered cost
+     * basis with it. The id does not move, so it is the stronger evidence and
+     * is tried first; ticker still catches rows stored before the id existed.
+     */
+    const byId = h.plaidSecurityId
+      ? existingBySecurity.get(h.plaidSecurityId)
+      : undefined;
+    const candidate = byId ?? existingByTicker.get(h.ticker);
+    // Two incoming positions resolving to one stored row would update it
+    // twice and lose one of them; the second is inserted instead.
+    const match = candidate && !matchedIds.has(candidate.id) ? candidate : undefined;
+    if (match) matchedIds.add(match.id);
 
     /**
      * A sync that learns nothing about cost basis must not unlearn what is
@@ -361,6 +391,7 @@ async function reconcileHoldings(
 
     const values = {
       name: h.name,
+      plaidSecurityId: h.plaidSecurityId,
       assetClass: h.assetClass,
       shares: String(h.shares),
       currentPrice: String(h.currentPrice),
@@ -386,18 +417,27 @@ async function reconcileHoldings(
   // far more often a permissions or timing problem than a liquidated account,
   // and emptying the account on that signal loses data the user typed in.
   if (incoming.length > 0) {
-    const doomed = [...existingByTicker.entries()].filter(
-      ([ticker]) => !incomingTickers.has(ticker)
+    // Unmatched, and Plaid is not reporting that ticker either.
+    //
+    // Unmatched alone is not enough: a row could be unmatched because it is a
+    // second copy of a ticker some earlier bug stored twice, and pruning on
+    // this pass would delete it with no way back. What this has to catch is
+    // the position Plaid genuinely stopped reporting — so a position Plaid
+    // kept but re-spelled, matched by security id above, is no longer deleted
+    // for having a ticker the response no longer contains.
+    const doomed = existing.filter(
+      (h) => !matchedIds.has(h.id) && !incomingTickers.has(h.ticker)
     );
 
     /**
      * Write down what is about to be deleted, before deleting it.
      *
-     * Positions are matched to Plaid by ticker, and Plaid spells an employer
-     * plan's funds in its own way — `VG.IS.TL.INTL.STK.MK`,
-     * `PUTN.LARGE.CP.VAL.R1`, `NYL.ANCHOR.ACCOUNT`. When a manual account is
-     * adopted, the rows a person typed by hand match none of those, so they
-     * are not updated in place: they are deleted and replaced by Plaid's.
+     * A position with no security id — one a person typed by hand — is still
+     * matched to Plaid by ticker, and Plaid spells an employer plan's funds
+     * in its own way: `VG.IS.TL.INTL.STK.MK`, `PUTN.LARGE.CP.VAL.R1`,
+     * `NYL.ANCHOR.ACCOUNT`. When a manual account is adopted, the rows a
+     * person typed match none of those, so they are not updated in place:
+     * they are deleted and replaced by Plaid's.
      * Everything hand-entered on them goes with them, cost basis first, and
      * the only trace left is that the account's gain silently changed.
      *
@@ -419,8 +459,8 @@ async function reconcileHoldings(
         entityId: accountId,
         detail: {
           reason: "Plaid did not report these tickers; replaced by its own",
-          removed: doomed.map(([ticker, h]) => ({
-            ticker,
+          removed: doomed.map((h) => ({
+            ticker: h.ticker,
             name: h.name,
             shares: h.shares,
             costBasisPerShare: h.costBasisPerShare,
@@ -434,7 +474,7 @@ async function reconcileHoldings(
       });
     }
 
-    for (const [, holding] of doomed) {
+    for (const holding of doomed) {
       await db.delete(holdings).where(eq(holdings.id, holding.id));
       removed++;
     }

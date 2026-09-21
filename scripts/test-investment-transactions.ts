@@ -13,8 +13,13 @@
  */
 import {
   deriveCostBasis,
+  isFeePseudoSecurity,
   mapTransactionType,
+  matchTransactionsToPositions,
+  planSecurityBackfill,
+  resolveTransactionSecurity,
   type LocalTransactionType,
+  type PlaidSecurityLike,
 } from "../src/lib/plaid/investment-transactions";
 
 let failures = 0;
@@ -183,6 +188,298 @@ function main() {
   check(
     "which is why the share count has to reconcile first",
     !deriveCostBasis([buy("2025-01-10", 10, visibleOnly)], heldShares).ok
+  );
+
+  // ---- matching a position to its transactions ----------------------------
+  /**
+   * The join, which is where the Schwab 401(k) actually failed.
+   *
+   * Every refusal above is a property of deriveCostBasis, and deriveCostBasis
+   * only ever saw what the join handed it. The join handed it nothing:
+   * matched on a ticker string derived per endpoint, eight of thirteen
+   * positions found none of the account's 727 transactions and were reported
+   * as "no transactions in the window" — for a window full of them. A
+   * refusal is only honest when the input was complete.
+   */
+  type P = { id: string; accountId: string; ticker: string | null; plaidSecurityId: string | null };
+  type Tx = { accountId: string; ticker: string | null; plaidSecurityId: string | null; label: string };
+
+  const eupacHolding: P = {
+    id: "h_eupac",
+    accountId: "acct",
+    ticker: "GG.EUPAC.TRUST.R1",
+    plaidSecurityId: "sec_eupac",
+  };
+  const eupacTxn: Tx = {
+    accountId: "acct",
+    ticker: "RERGX",
+    plaidSecurityId: "sec_eupac",
+    label: "eupac",
+  };
+
+  const joined = matchTransactionsToPositions([eupacHolding], [eupacTxn]);
+  check(
+    "the same fund spelled two ways still joins on the security id",
+    (joined.get("h_eupac") ?? []).length === 1,
+    "GG.EUPAC.TRUST.R1 (holding) vs RERGX (transaction)"
+  );
+
+  // The other three from the same account, to prove it is not one lucky pair.
+  const plan: P[] = [
+    eupacHolding,
+    { id: "h_intl", accountId: "acct", ticker: "VG.IS.TL.INTL.STK.MK", plaidSecurityId: "sec_intl" },
+    { id: "h_val", accountId: "acct", ticker: "PUTN.LARGE.CP.VAL.R1", plaidSecurityId: "sec_val" },
+    { id: "h_growth", accountId: "acct", ticker: "WT.CIF.II.GROWTH.2", plaidSecurityId: "sec_growth" },
+  ];
+  const planTxns: Tx[] = [
+    eupacTxn,
+    { accountId: "acct", ticker: "VTSNX", plaidSecurityId: "sec_intl", label: "intl" },
+    { accountId: "acct", ticker: "GEPABX", plaidSecurityId: "sec_val", label: "val" },
+    { accountId: "acct", ticker: "WTLRNX", plaidSecurityId: "sec_growth", label: "growth" },
+  ];
+  const planJoin = matchTransactionsToPositions(plan, planTxns);
+  check(
+    "every position in the plan finds its transactions, none of them by ticker",
+    plan.every((p) => (planJoin.get(p.id) ?? []).length === 1),
+    plan.map((p) => `${p.id}:${(planJoin.get(p.id) ?? []).length}`).join(" ")
+  );
+
+  // The bug this replaces, stated as what the old key would have returned.
+  check(
+    "matching on the ticker text alone would have found nothing",
+    plan.every((p) => !planTxns.some((t) => t.ticker === p.ticker))
+  );
+
+  // A transaction whose security Plaid never described still carries the id.
+  const undescribed = matchTransactionsToPositions(
+    [eupacHolding],
+    [{ accountId: "acct", ticker: null, plaidSecurityId: "sec_eupac", label: "no ticker" }]
+  );
+  check(
+    "a transaction with no ticker at all still joins on its security id",
+    (undescribed.get("h_eupac") ?? []).length === 1,
+    "97 of 727 rows arrived this way"
+  );
+
+  // Two positions must not share each other's rows.
+  const crossed = matchTransactionsToPositions(plan, planTxns);
+  check(
+    "a position gets its own transactions and no one else's",
+    (crossed.get("h_intl") ?? [])[0]?.label === "intl"
+  );
+
+  // Accounts are part of the key: the same fund in two accounts is two
+  // positions, and Plaid's security ids are per-Item, not per-account.
+  const sameSecurityTwoAccounts = matchTransactionsToPositions(
+    [
+      { id: "h_a", accountId: "acct_a", ticker: "VTI", plaidSecurityId: "sec_vti" },
+      { id: "h_b", accountId: "acct_b", ticker: "VTI", plaidSecurityId: "sec_vti" },
+    ],
+    [{ accountId: "acct_a", ticker: "VTI", plaidSecurityId: "sec_vti", label: "a" }]
+  );
+  check(
+    "a transaction does not leak into the same fund held in another account",
+    (sameSecurityTwoAccounts.get("h_a") ?? []).length === 1 &&
+      (sameSecurityTwoAccounts.get("h_b") ?? []).length === 0
+  );
+
+  // Rows a person typed have no Plaid identity, and ticker is all there is.
+  const manual = matchTransactionsToPositions(
+    [{ id: "h_m", accountId: "acct", ticker: "VTI", plaidSecurityId: "sec_vti" }],
+    [
+      { accountId: "acct", ticker: "VTI", plaidSecurityId: null, label: "typed" },
+      { accountId: "acct", ticker: "VTI", plaidSecurityId: "sec_vti", label: "plaid" },
+    ]
+  );
+  check(
+    "a hand-entered row joins on ticker alongside the Plaid rows",
+    (manual.get("h_m") ?? []).length === 2,
+    (manual.get("h_m") ?? []).map((t) => t.label).join(",")
+  );
+
+  // Nothing was backfilled, so rows stored before the id column must keep
+  // matching exactly as they did until a sync rewrites them.
+  const legacy = matchTransactionsToPositions(
+    [{ id: "h_l", accountId: "acct", ticker: "VOO", plaidSecurityId: "sec_voo" }],
+    [{ accountId: "acct", ticker: "VOO", plaidSecurityId: null, label: "pre-migration" }]
+  );
+  check(
+    "a row stored before the security id existed still matches on ticker",
+    (legacy.get("h_l") ?? []).length === 1
+  );
+
+  // And a manual holding — no Plaid identity of its own — still matches the
+  // Plaid rows for the ticker it was typed under.
+  const manualHolding = matchTransactionsToPositions(
+    [{ id: "h_typed", accountId: "acct", ticker: "VOO", plaidSecurityId: null }],
+    [{ accountId: "acct", ticker: "VOO", plaidSecurityId: "sec_voo", label: "plaid" }]
+  );
+  check(
+    "a hand-entered position still finds Plaid's rows for its ticker",
+    (manualHolding.get("h_typed") ?? []).length === 1
+  );
+
+  // The reason this matters, end to end: with the join fixed, the refusal is
+  // the true one — the share counts disagree — not "there were no rows".
+  const joinedRows = matchTransactionsToPositions([eupacHolding], [eupacTxn]);
+  const honest = deriveCostBasis(
+    (joinedRows.get("h_eupac") ?? []).map(() => buy("2025-01-10", 10, 1000)),
+    604.057
+  );
+  check(
+    "a joined position that predates the window is refused for that reason",
+    !honest.ok && /acquired .* but .* are held/.test(honest.reason),
+    honest.ok ? "" : honest.reason
+  );
+  const unjoined = deriveCostBasis([], 604.057);
+  check(
+    "which is not the reason it used to give",
+    !unjoined.ok && unjoined.reason === "no transactions in the window"
+  );
+
+  // ---- fee pseudo-securities ----------------------------------------------
+  // Plaid invents a security per fee, named after the fund it was charged
+  // against. Nothing holds it, so a row filed under it is a position row
+  // belonging to no position — and the fund it names has a position of its
+  // own, which it must not be confused with.
+  const securities = new Map<string, PlaidSecurityLike>([
+    ["sec_intl", { ticker_symbol: null, cusip: null, name: "VANG INST TOTL SK TR" }],
+    ["sec_intl_fee", { ticker_symbol: null, cusip: null, name: "VANG INST TOTL SK TR - fees" }],
+    ["sec_vti", { ticker_symbol: "VTI", cusip: "922908769", name: "Vanguard Total Stock Market ETF" }],
+  ]);
+
+  check(
+    "a fee pseudo-security is recognised",
+    isFeePseudoSecurity(securities.get("sec_intl_fee"))
+  );
+  check(
+    "the fund it is named after is not",
+    !isFeePseudoSecurity(securities.get("sec_intl"))
+  );
+  check(
+    "and neither is a real security that merely mentions fees",
+    !isFeePseudoSecurity({ ticker_symbol: "BLK", cusip: null, name: "BlackRock Low Fees Fund" })
+  );
+
+  const feeRow = resolveTransactionSecurity("sec_intl_fee", securities);
+  check(
+    "a fee row is stored with no position identity at all",
+    feeRow.ticker === null && feeRow.plaidSecurityId === null
+  );
+  const feeJoin = matchTransactionsToPositions(
+    [{ id: "h_intl", accountId: "acct", ticker: "VG.IS.TL.INTL.STK.MK", plaidSecurityId: "sec_intl" }],
+    [{ accountId: "acct", ...feeRow, label: "fee" }]
+  );
+  check(
+    "so it cannot attach itself to the position it is named after",
+    (feeJoin.get("h_intl") ?? []).length === 0
+  );
+
+  // ---- rows stored before the security id existed -------------------------
+  /**
+   * The migration had nothing to backfill from, and this sync never revisits
+   * a row it has already stored — so without a backfill the 727 rows already
+   * in the table keep a null security id for good, the match falls back to
+   * the ticker spelling that never agreed, and the eight positions stay
+   * broken while every run reports "fetched 727, inserted 0".
+   */
+  const storedBefore = [
+    // Stored with the transactions-side spelling and no id.
+    { plaidTransactionId: "itx_1", plaidSecurityId: null, ticker: "RERGX" },
+    // Stored with neither: its security went undescribed in that page.
+    { plaidTransactionId: "itx_2", plaidSecurityId: null, ticker: null },
+    // Already identified by an earlier run.
+    { plaidTransactionId: "itx_3", plaidSecurityId: "sec_eupac", ticker: "RERGX" },
+  ];
+  const refetched = [
+    { plaidTransactionId: "itx_1", security: { ticker: "RERGX", plaidSecurityId: "sec_eupac" } },
+    { plaidTransactionId: "itx_2", security: { ticker: "RERGX", plaidSecurityId: "sec_eupac" } },
+    { plaidTransactionId: "itx_3", security: { ticker: "RERGX", plaidSecurityId: "sec_eupac" } },
+    // Not stored at all: this run inserts it, and it needs no backfill.
+    { plaidTransactionId: "itx_4", security: { ticker: "RERGX", plaidSecurityId: "sec_eupac" } },
+    // A fee row, which carries no identity to write.
+    { plaidTransactionId: "itx_5", security: { ticker: null, plaidSecurityId: null } },
+  ];
+
+  const plannedBackfill = planSecurityBackfill(refetched, storedBefore);
+  check(
+    "a stored row with no security id is given one from the re-fetched window",
+    plannedBackfill.length === 2,
+    plannedBackfill.map((b) => b.plaidTransactionId).join(",")
+  );
+  check(
+    "a row that already has one is left alone",
+    !plannedBackfill.some((b) => b.plaidTransactionId === "itx_3")
+  );
+  check(
+    "a row this run is inserting anyway is not backfilled",
+    !plannedBackfill.some((b) => b.plaidTransactionId === "itx_4")
+  );
+  check(
+    "a fee row carries no identity to write",
+    !plannedBackfill.some((b) => b.plaidTransactionId === "itx_5")
+  );
+  check(
+    "a stored ticker is not rewritten: the id is what matching uses",
+    plannedBackfill.find((b) => b.plaidTransactionId === "itx_1")?.ticker === null
+  );
+  check(
+    "but a row stored with no ticker at all gets the one now resolvable",
+    plannedBackfill.find((b) => b.plaidTransactionId === "itx_2")?.ticker === "RERGX"
+  );
+  check(
+    "and the backfill is self-extinguishing: nothing to do on the next run",
+    planSecurityBackfill(
+      refetched,
+      storedBefore.map((r) => ({ ...r, plaidSecurityId: r.plaidSecurityId ?? "sec_eupac" }))
+    ).length === 0
+  );
+
+  // The point of it, stated as the join it restores.
+  const beforeBackfill = matchTransactionsToPositions(
+    [eupacHolding],
+    [{ accountId: "acct", ticker: "RERGX", plaidSecurityId: null, label: "stored in April" }]
+  );
+  check(
+    "which matters because until then that row matches nothing",
+    (beforeBackfill.get("h_eupac") ?? []).length === 0,
+    "holding GG.EUPAC.TRUST.R1, row RERGX, no id on either side of the join"
+  );
+  const afterBackfill = matchTransactionsToPositions(
+    [eupacHolding],
+    [{ accountId: "acct", ticker: "RERGX", plaidSecurityId: "sec_eupac", label: "backfilled" }]
+  );
+  check(
+    "and joins once the id is written",
+    (afterBackfill.get("h_eupac") ?? []).length === 1
+  );
+
+  // ---- securities accumulate across pages ---------------------------------
+  // Plaid describes a security in whichever page first mentions it. Mapping a
+  // page as it arrives leaves a row referencing a security described later
+  // with no ticker, for no reason but fetch order.
+  const pages: { securities: [string, PlaidSecurityLike][] }[] = [
+    { securities: [["sec_vti", { ticker_symbol: "VTI", cusip: null, name: "Vanguard Total Stock Market ETF" }]] },
+    { securities: [] },
+    { securities: [["sec_eupac", { ticker_symbol: "RERGX", cusip: null, name: "American Funds EuroPacific Growth R6" }]] },
+  ];
+  const accumulated = new Map<string, PlaidSecurityLike>();
+  for (const page of pages) for (const [id, sec] of page.securities) accumulated.set(id, sec);
+
+  // The row is on page 1; its security is described on page 3.
+  const late = resolveTransactionSecurity("sec_eupac", accumulated);
+  check(
+    "a security described on a later page still resolves for an earlier row",
+    late.ticker === "RERGX" && late.plaidSecurityId === "sec_eupac"
+  );
+  check(
+    "and an id no page described keeps its id, which is what the join needs",
+    resolveTransactionSecurity("sec_unknown", accumulated).plaidSecurityId === "sec_unknown"
+  );
+  check(
+    "ticker falls back to CUSIP, then name, as the holdings side does",
+    resolveTransactionSecurity("sec_cusip", new Map([["sec_cusip", { cusip: "922908769", name: "Some Fund" }]])).ticker === "922908769" &&
+      resolveTransactionSecurity("sec_name", new Map([["sec_name", { name: "Collective Trust B" }]])).ticker === "Collective Trust B"
   );
 
   console.log(failures === 0 ? "\nALL PASS" : `\n${failures} FAILED`);

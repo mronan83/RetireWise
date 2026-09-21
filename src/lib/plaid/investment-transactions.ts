@@ -41,6 +41,17 @@ export type TransactionSyncCounts = {
   inserted: number;
   skippedDuplicate: number;
   skippedUnmappedAccount: number;
+  /**
+   * Rows Plaid attached to a fee pseudo-security, stored as account-level
+   * flows rather than as position rows. See isFeePseudoSecurity.
+   */
+  unlinkedFeeRows: number;
+  /**
+   * Rows already stored that this run gave a security id to. See
+   * planSecurityBackfill: without it the rows stored before the column
+   * existed would never get one, because a stored row is never revisited.
+   */
+  backfilledSecurityIds: number;
   earliest: string | null;
   latest: string | null;
 };
@@ -50,6 +61,8 @@ const EMPTY: TransactionSyncCounts = {
   inserted: 0,
   skippedDuplicate: 0,
   skippedUnmappedAccount: 0,
+  unlinkedFeeRows: 0,
+  backfilledSecurityIds: 0,
   earliest: null,
   latest: null,
 };
@@ -114,6 +127,140 @@ export function mapTransactionType(
   return null;
 }
 
+/** The fields of a Plaid security this module reads. */
+export type PlaidSecurityLike = {
+  ticker_symbol?: string | null;
+  cusip?: string | null;
+  name?: string | null;
+};
+
+/**
+ * A pseudo-security that stands for a charge, not for something held.
+ *
+ * Plaid models an employer plan's fees as securities of their own, named
+ * after the fund the charge was taken from: `VANG INST TOTL SK TR - fees`,
+ * `WT CIF II GROWTH - fees`. They carry no ticker and no CUSIP because they
+ * are not instruments, and no holding will ever report them — so a row
+ * stored against one is a position row that can never match a position, and
+ * the fund it names is already someone else's position.
+ *
+ * The flow is real and worth keeping (it comes out of the account's return),
+ * so the row is stored; what it must not carry is a security identity that
+ * makes it look like part of a position.
+ */
+export function isFeePseudoSecurity(
+  security: PlaidSecurityLike | undefined
+): boolean {
+  if (!security) return false;
+  if (security.ticker_symbol || security.cusip) return false;
+  return /[\s\-\u2013\u2014]+fees?$/i.test((security.name ?? "").trim());
+}
+
+/** What a transaction's security means for matching it to a position. */
+export type TransactionSecurity = {
+  ticker: string | null;
+  plaidSecurityId: string | null;
+};
+
+/**
+ * Resolve the security a transaction moved.
+ *
+ * Two things are deliberate here.
+ *
+ * The id is kept even when the security itself is not in the map. Plaid
+ * describes a security in the page that happens to mention it first, and a
+ * page processed on its own can reference ids it does not describe — 97 of
+ * one account's 727 rows came out with a null ticker for exactly that
+ * reason. The id is on every row regardless, and the holdings side carries
+ * the same id, so those rows still find their position.
+ *
+ * A fee pseudo-security yields no identity at all, so the row lands as an
+ * account-level fee rather than as a position row that can never match.
+ */
+export function resolveTransactionSecurity(
+  securityId: string | null,
+  securities: Map<string, PlaidSecurityLike>
+): TransactionSecurity {
+  if (!securityId) return { ticker: null, plaidSecurityId: null };
+
+  const security = securities.get(securityId);
+  if (isFeePseudoSecurity(security)) {
+    return { ticker: null, plaidSecurityId: null };
+  }
+
+  // The spelling rule aggregateHoldings uses — ticker, else CUSIP, else
+  // name. It is no longer what positions are matched on, but it is still
+  // what a person reads on the transactions page.
+  const ticker = security
+    ? security.ticker_symbol || security.cusip || security.name || null
+    : null;
+
+  return { ticker, plaidSecurityId: securityId };
+}
+
+/** A transaction row as already stored, for the backfill below. */
+export type StoredTransaction = {
+  plaidTransactionId: string | null;
+  plaidSecurityId: string | null;
+  ticker: string | null;
+};
+
+/** One stored row to be given the identity it was recorded without. */
+export type SecurityBackfill = {
+  plaidTransactionId: string;
+  plaidSecurityId: string;
+  /** A ticker to write where the row has none; null leaves it as stored. */
+  ticker: string | null;
+};
+
+/**
+ * Give already-stored rows the security id they were recorded without.
+ *
+ * This sync is idempotent by Plaid's transaction id, which it achieves by
+ * never touching a row it has already stored. That is right for a flow —
+ * the amount and date of a transaction that happened do not change — but it
+ * means a column added later is never filled in for anything already there,
+ * and the migration had nothing to backfill from.
+ *
+ * Without this, one Schwab 401(k)'s 727 stored rows keep a null security id
+ * for good, the position match falls back to the ticker spelling that never
+ * agreed, and the eight positions this change exists to fix stay broken
+ * while every run reports "fetched 727, inserted 0".
+ *
+ * The full window is re-fetched on every run anyway, so the identity is
+ * already in hand and being discarded. This is self-extinguishing: it plans
+ * work only for rows that still have no id, so the first run after the
+ * migration does all of it and later runs plan none.
+ */
+export function planSecurityBackfill(
+  fetched: { plaidTransactionId: string; security: TransactionSecurity }[],
+  stored: StoredTransaction[]
+): SecurityBackfill[] {
+  const byId = new Map(
+    stored.filter((s) => s.plaidTransactionId).map((s) => [s.plaidTransactionId!, s])
+  );
+
+  const planned: SecurityBackfill[] = [];
+  for (const f of fetched) {
+    if (!f.security.plaidSecurityId) continue;
+    const row = byId.get(f.plaidTransactionId);
+    // Not stored yet (it is in this run's insert), or already identified.
+    if (!row || row.plaidSecurityId) continue;
+
+    planned.push({
+      plaidTransactionId: f.plaidTransactionId,
+      plaidSecurityId: f.security.plaidSecurityId,
+      // A stored ticker is left alone: it is what the transactions page
+      // shows, and the id is what the matching now uses. Only a row that
+      // has none — its security went undescribed in the page it was
+      // stored from — gets one.
+      ticker: row.ticker === null ? f.security.ticker : null,
+    });
+  }
+
+  return planned;
+}
+
 /**
  * Pull every investment transaction for an Item and record the new ones.
  *
@@ -155,16 +302,16 @@ export async function syncInvestmentTransactions(options: {
 
   const all: PlaidInvestmentTransaction[] = [];
   /**
-   * Security id to ticker, taken from the same response.
+   * Every security described by any page, accumulated before a single row is
+   * mapped.
    *
-   * Plaid's security ids are opaque and per-Item, so a transaction can only
-   * be tied to a position through this. The spelling rule is the one
-   * aggregateHoldings uses — ticker, else CUSIP, else name — because a
-   * transaction whose ticker is spelled differently from the holding's
-   * would never match it, which is the mismatch that deleted a whole
-   * account's hand-entered rows yesterday.
+   * Plaid describes a security once, in whichever page first mentions it,
+   * and the pages are not ordered by security. A row on page 1 can name an
+   * id that only page 3 describes, so mapping each page as it arrives would
+   * leave that row with no ticker for no reason other than fetch order.
+   * Rows are built after the loop, against the whole map.
    */
-  const tickerBySecurity = new Map<string, string>();
+  const securities = new Map<string, PlaidSecurityLike>();
   let offset = 0;
   for (let page = 0; page < MAX_PAGES; page++) {
     const { data } = await client.investmentsTransactionsGet({
@@ -175,8 +322,7 @@ export async function syncInvestmentTransactions(options: {
     });
 
     for (const sec of data.securities ?? []) {
-      const ticker = sec.ticker_symbol || sec.cusip || sec.name;
-      if (ticker) tickerBySecurity.set(sec.security_id, ticker);
+      securities.set(sec.security_id, sec);
     }
 
     const batch = (data.investment_transactions ??
@@ -199,10 +345,38 @@ export async function syncInvestmentTransactions(options: {
   // Which ids are already stored, so the insert only carries new ones.
   const ids = all.map((t) => t.investment_transaction_id);
   const existing = await db
-    .select({ plaidTransactionId: transactions.plaidTransactionId })
+    .select({
+      plaidTransactionId: transactions.plaidTransactionId,
+      plaidSecurityId: transactions.plaidSecurityId,
+      ticker: transactions.ticker,
+    })
     .from(transactions)
     .where(inArray(transactions.plaidTransactionId, ids));
   const seen = new Set(existing.map((e) => e.plaidTransactionId));
+
+  // Before the insert, because these rows are the ones the insert skips.
+  const backfill = planSecurityBackfill(
+    all.map((t) => ({
+      plaidTransactionId: t.investment_transaction_id,
+      security: resolveTransactionSecurity(t.security_id, securities),
+    })),
+    existing
+  );
+  for (const b of backfill) {
+    await db
+      .update(transactions)
+      .set({
+        plaidSecurityId: b.plaidSecurityId,
+        ...(b.ticker === null ? {} : { ticker: b.ticker }),
+      })
+      .where(
+        and(
+          eq(transactions.plaidTransactionId, b.plaidTransactionId),
+          isNull(transactions.plaidSecurityId)
+        )
+      );
+  }
+  counts.backfilledSecurityIds = backfill.length;
 
   const rows: (typeof transactions.$inferInsert)[] = [];
   for (const t of all) {
@@ -218,10 +392,18 @@ export async function syncInvestmentTransactions(options: {
     const type = mapTransactionType(t.type, t.subtype);
     if (type === null) continue;
 
+    const security = resolveTransactionSecurity(t.security_id, securities);
+    if (t.security_id && security.plaidSecurityId === null) {
+      // A fee pseudo-security: kept as a flow, stripped of the identity that
+      // would file it under a position it can never belong to.
+      counts.unlinkedFeeRows++;
+    }
+
     rows.push({
       accountId,
       type,
-      ticker: t.security_id ? tickerBySecurity.get(t.security_id) ?? null : null,
+      ticker: security.ticker,
+      plaidSecurityId: security.plaidSecurityId,
       shares: t.quantity === 0 ? null : String(t.quantity),
       pricePerShare: t.price === 0 ? null : String(t.price),
       amount: String(t.amount),
@@ -331,6 +513,103 @@ export type BasisDerivationResult = {
   skipped: { ticker: string; reason: string }[];
 };
 
+/** Enough of a position to find its transactions. */
+export type PositionIdentity = {
+  id: string;
+  accountId: string;
+  ticker: string | null;
+  plaidSecurityId: string | null;
+};
+
+/** Enough of a transaction to be found by one. */
+export type TransactionIdentity = {
+  accountId: string;
+  ticker: string | null;
+  plaidSecurityId: string | null;
+};
+
+/**
+ * Group an account's transactions under the positions they belong to.
+ *
+ * The join used to be `accountId | ticker`, and the ticker on each side is a
+ * string we derived from whatever Plaid returned in that endpoint —
+ * `ticker_symbol || cusip || name`. Plaid does not return the same security
+ * record in both endpoints, so for one Schwab 401(k) the two sides read:
+ *
+ *   holding `GG.EUPAC.TRUST.R1`   transaction `RERGX`
+ *   holding `VG.IS.TL.INTL.STK.MK`  transaction `VTSNX`
+ *   holding `PUTN.LARGE.CP.VAL.R1`  transaction `GEPABX`
+ *
+ * Eight of that account's thirteen positions matched zero of its 727
+ * transactions, and every one of them was then reported as having "no
+ * transactions in the window" — a window with two years of payroll
+ * deferrals in it. The data was there; the key was wrong.
+ *
+ * So the key is Plaid's security id, which is opaque, meaningless and
+ * stable within an Item, wherever both sides have one. Ticker is still used
+ * where it is the only identity there is:
+ *
+ *  - rows a person typed in, which have no Plaid identity at all;
+ *  - rows stored before the security id was recorded, which the migration
+ *    could not backfill — they keep matching as they did until a sync
+ *    rewrites them.
+ *
+ * A ticker match never overrides a security-id match, because Plaid saying
+ * two rows are the same security is better evidence than two derived
+ * strings being spelled alike.
+ */
+export function matchTransactionsToPositions<
+  P extends PositionIdentity,
+  T extends TransactionIdentity
+>(positions: P[], txns: T[]): Map<string, T[]> {
+  const bySecurity = new Map<string, T[]>();
+  const byTicker = new Map<string, T[]>();
+  const byTickerWithoutPlaidIdentity = new Map<string, T[]>();
+
+  const push = (index: Map<string, T[]>, key: string, t: T) => {
+    const list = index.get(key);
+    if (list) list.push(t);
+    else index.set(key, [t]);
+  };
+
+  for (const t of txns) {
+    if (t.plaidSecurityId) {
+      push(bySecurity, `${t.accountId}|${t.plaidSecurityId}`, t);
+    }
+    if (t.ticker) {
+      push(byTicker, `${t.accountId}|${t.ticker}`, t);
+      if (!t.plaidSecurityId) {
+        push(byTickerWithoutPlaidIdentity, `${t.accountId}|${t.ticker}`, t);
+      }
+    }
+  }
+
+  const matched = new Map<string, T[]>();
+  for (const p of positions) {
+    const identified = p.plaidSecurityId
+      ? bySecurity.get(`${p.accountId}|${p.plaidSecurityId}`) ?? []
+      : [];
+    // Hand-entered rows belong to the position whatever its Plaid identity
+    // is: they are the same fund, recorded by the only other means there is.
+    const manual = p.ticker
+      ? byTickerWithoutPlaidIdentity.get(`${p.accountId}|${p.ticker}`) ?? []
+      : [];
+
+    let rows = [...identified, ...manual];
+
+    // Nothing by identity, so fall back to the old key. This is what finds a
+    // position's Plaid rows that were stored before the id column existed;
+    // once a sync has rewritten them the branch above matches instead.
+    if (rows.length === 0 && p.ticker) {
+      rows = byTicker.get(`${p.accountId}|${p.ticker}`) ?? [];
+    }
+
+    matched.set(p.id, rows);
+  }
+
+  return matched;
+}
+
 /**
  * Fill in cost basis for positions the transaction record can prove.
  *
@@ -349,6 +628,7 @@ export async function deriveMissingCostBasis(
       id: holdings.id,
       accountId: holdings.accountId,
       ticker: holdings.ticker,
+      plaidSecurityId: holdings.plaidSecurityId,
       shares: holdings.shares,
     })
     .from(holdings)
@@ -362,6 +642,7 @@ export async function deriveMissingCostBasis(
     .select({
       accountId: transactions.accountId,
       ticker: transactions.ticker,
+      plaidSecurityId: transactions.plaidSecurityId,
       type: transactions.type,
       shares: transactions.shares,
       amount: transactions.amount,
@@ -370,18 +651,11 @@ export async function deriveMissingCostBasis(
     .from(transactions)
     .where(inArray(transactions.accountId, accountIds));
 
-  const byPosition = new Map<string, typeof txns>();
-  for (const t of txns) {
-    if (!t.ticker) continue;
-    const key = `${t.accountId}|${t.ticker}`;
-    const list = byPosition.get(key) ?? [];
-    list.push(t);
-    byPosition.set(key, list);
-  }
+  const byPosition = matchTransactionsToPositions(candidates, txns);
 
   for (const c of candidates) {
     result.attempted++;
-    const rows = byPosition.get(`${c.accountId}|${c.ticker}`) ?? [];
+    const rows = byPosition.get(c.id) ?? [];
     const derived = deriveCostBasis(
       rows.map((r) => ({
         type: r.type as LocalTransactionType,
