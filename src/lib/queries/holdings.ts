@@ -22,6 +22,7 @@ export async function getHoldingsByClerkId(clerkId: string) {
       updatedAt: holdings.updatedAt,
       accountName: accounts.name,
       accountType: accounts.accountType,
+      accountTaxTreatment: accounts.taxTreatment,
       accountOwner: accounts.owner,
     })
     .from(holdings)

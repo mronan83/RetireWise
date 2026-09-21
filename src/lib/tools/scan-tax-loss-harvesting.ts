@@ -3,6 +3,7 @@ import { z } from "zod";
 import { getApiUserId } from "@/lib/auth-helpers";
 import { getHoldingsByClerkId } from "../queries/holdings";
 import { positionBasis } from "../utils/cost-basis";
+import { taxableHoldings } from "../utils/taxability";
 import { ASSET_CLASS_LABELS, ACCOUNT_TYPE_LABELS } from "../constants";
 
 // Common replacement funds to maintain market exposure while harvesting losses
@@ -37,15 +38,12 @@ export const scanTaxLossHarvestingTool = tool({
 
     const holdings = await getHoldingsByClerkId(userId);
 
-    // Only look at taxable accounts
-    const taxableHoldings = holdings.filter((h) => {
-      const type = h.accountType;
-      return (
-        type === "brokerage" || type === "other"
-      );
-    });
+    // Only look at taxable accounts, by the column that records it. The
+    // analysis page decides from the same rule whether to offer this at all;
+    // if the two disagree, one of them is lying to the household.
+    const scannable = taxableHoldings(holdings);
 
-    if (taxableHoldings.length === 0) {
+    if (scannable.length === 0) {
       return {
         candidates: [],
         summary:
@@ -71,7 +69,7 @@ export const scanTaxLossHarvestingTool = tool({
 
     let skippedNoBasis = 0;
 
-    for (const h of taxableHoldings) {
+    for (const h of scannable) {
       const shares = Number(h.shares);
       /**
        * No basis, no knowable loss.

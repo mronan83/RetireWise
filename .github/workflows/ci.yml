@@ -80,6 +80,13 @@ jobs:
       # which makes the gain too high, and it looks entirely reasonable.
       - run: pnpm exec tsx scripts/test-investment-transactions.ts
 
+      # Controls that said something untrue: four built features badged
+      # "Phase 2", a tax-loss harvesting card offered to a household with no
+      # taxable account, and a "Try Demo" button the proxy ignores. Also the
+      # single rule for taxability, which two files used to decide
+      # differently.
+      - run: pnpm exec tsx scripts/test-analysis-cards.ts
+
   mobile:
     name: Mobile layout
     runs-on: ubuntu-latest

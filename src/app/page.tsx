@@ -11,6 +11,15 @@ import {
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 
+/**
+ * Whether the seeded demo household can be browsed without signing in.
+ *
+ * The same expression the proxy gates on, read here so the landing page
+ * cannot offer an entrance the proxy will refuse. Inlined at build time, so
+ * changing it in the host takes effect on the next deployment.
+ */
+const demoEnabled = process.env.NEXT_PUBLIC_DEMO_ENABLED === "true";
+
 export default async function LandingPage() {
   const { userId } = await auth();
   if (userId) redirect("/dashboard");
@@ -58,11 +67,17 @@ export default async function LandingPage() {
                 Start Tracking
               </Button>
             </Link>
-            <Link href="/?demo=true">
-              <Button variant="outline" size="lg" className="px-8">
-                Try Demo
-              </Button>
-            </Link>
+            {/* Only offered where it works. The proxy honours ?demo=true
+                solely when NEXT_PUBLIC_DEMO_ENABLED is "true"; without it the
+                link was a button that did nothing and said nothing, which is
+                worse than no button at all. */}
+            {demoEnabled && (
+              <Link href="/?demo=true">
+                <Button variant="outline" size="lg" className="px-8">
+                  Try Demo
+                </Button>
+              </Link>
+            )}
           </div>
         </section>
 
