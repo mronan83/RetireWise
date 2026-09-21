@@ -1,0 +1,192 @@
+/**
+ * Investment transactions, and the cost basis they can and cannot prove.
+ *
+ * Deriving a basis from transactions is only safe when the record shows it
+ * covers the position's whole life. Plaid returns at most two years before
+ * the Item was linked, so a 401(k) accumulating payroll deferrals since
+ * before then has lots that are simply not in the data — and a basis built
+ * from the visible half is too low, which makes the gain too high, and it
+ * looks entirely reasonable while being wrong by thousands.
+ *
+ * So derivation is gated on two checkable conditions, and every assertion
+ * here is a way the gate could wrongly open.
+ */
+import {
+  deriveCostBasis,
+  mapTransactionType,
+  type LocalTransactionType,
+} from "../src/lib/plaid/investment-transactions";
+
+let failures = 0;
+function check(label: string, ok: boolean, detail = "") {
+  console.log(`${ok ? "PASS" : "FAIL"}  ${label}${ok || !detail ? "" : ` — ${detail}`}`);
+  if (!ok) failures++;
+}
+
+type T = { type: LocalTransactionType; shares: number | null; amount: number; date: string };
+const buy = (date: string, shares: number, amount: number): T => ({ type: "buy", shares, amount, date });
+
+function main() {
+  // ---- type mapping -------------------------------------------------------
+  // Plaid's `cash` says money moved without saying what it was. A payroll
+  // contribution, a dividend and a withdrawal are three different things to
+  // a retirement plan, and the subtype is what separates them.
+  check("a buy is a buy", mapTransactionType("buy", "buy") === "buy");
+  check("a sell is a sell", mapTransactionType("sell", "sell") === "sell");
+  check(
+    "a payroll contribution is not a generic cash movement",
+    mapTransactionType("cash", "contribution") === "contribution"
+  );
+  check(
+    "a dividend reinvestment is a dividend, not a buy",
+    mapTransactionType("buy", "dividend reinvestment") === "dividend"
+  );
+  check(
+    "a qualified dividend too",
+    mapTransactionType("cash", "qualified dividend") === "dividend"
+  );
+  check(
+    "a long-term capital gain distribution is income, not a purchase",
+    mapTransactionType("cash", "long-term capital gain") === "dividend"
+  );
+  check("a management fee is a fee", mapTransactionType("fee", "management fee") === "fee");
+  check("a fund fee too", mapTransactionType("cash", "fund fee") === "fee");
+  check("a distribution is a withdrawal", mapTransactionType("cash", "distribution") === "withdrawal");
+  check("a transfer is a transfer", mapTransactionType("transfer", "transfer") === "transfer");
+  check("a split is a split", mapTransactionType("cash", "split") === "split");
+  check(
+    "a cancellation is skipped rather than forced into a category",
+    mapTransactionType("cancel", "buy") === null
+  );
+  check(
+    "and so is a cash row whose subtype says nothing usable",
+    mapTransactionType("cash", "adjustment") === null
+  );
+
+  // ---- derivation: the case that works ------------------------------------
+  const clean = [buy("2025-01-10", 10, 1000), buy("2025-06-10", 10, 1400)];
+  const ok = deriveCostBasis(clean, 20);
+  check("a fully-visible position derives", ok.ok, ok.ok ? "" : ok.reason);
+  check(
+    "at the true average cost, not the latest price",
+    ok.ok && Math.abs(ok.costBasisPerShare - 120) < 1e-9,
+    ok.ok ? String(ok.costBasisPerShare) : ""
+  );
+  check("and reports the total it summed", ok.ok && ok.totalCost === 2400);
+
+  // Reinvested dividends are acquisitions and belong in the cost.
+  const withReinvestment: T[] = [
+    buy("2025-01-10", 10, 1000),
+    { type: "dividend", shares: 1, amount: 110, date: "2025-04-01" },
+  ];
+  const wr = deriveCostBasis(withReinvestment, 11);
+  check(
+    "a reinvested dividend counts toward cost, being shares bought",
+    wr.ok && Math.abs(wr.costBasisPerShare - 1110 / 11) < 1e-9,
+    wr.ok ? wr.costBasisPerShare.toFixed(4) : wr.reason
+  );
+
+  // ---- derivation: every case that must be refused ------------------------
+  // This is Slalom: years of payroll deferrals, only the last two visible.
+  const partial = deriveCostBasis([buy("2025-01-10", 10, 1000)], 604.057);
+  check("a position with shares acquired before the window is refused", !partial.ok);
+  check(
+    "and the refusal says which count disagreed",
+    !partial.ok && /acquired .* but .* are held/.test(partial.reason),
+    partial.ok ? "" : partial.reason
+  );
+
+  const sold = deriveCostBasis(
+    [buy("2025-01-10", 20, 2000), { type: "sell", shares: 5, amount: 700, date: "2025-08-01" }],
+    15
+  );
+  check(
+    "a sale is refused, because which lots went depends on the broker's method",
+    !sold.ok
+  );
+  check(
+    "and the refusal names the disposal date",
+    !sold.ok && sold.reason.includes("2025-08-01"),
+    sold.ok ? "" : sold.reason
+  );
+
+  const transferred = deriveCostBasis(
+    [{ type: "transfer", shares: 100, amount: 0, date: "2025-02-01" }, buy("2025-03-01", 10, 1100)],
+    110
+  );
+  check(
+    "a transfer in is refused: its basis was set before this window",
+    !transferred.ok,
+    transferred.ok ? "" : transferred.reason
+  );
+
+  const split = deriveCostBasis(
+    [buy("2025-01-10", 10, 1000), { type: "split", shares: 10, amount: 0, date: "2025-05-01" }],
+    20
+  );
+  check("a split is refused, having rebased the per-share cost", !split.ok);
+
+  check("no transactions at all is refused", !deriveCostBasis([], 100).ok);
+  check(
+    "transactions with no share-acquiring rows are refused",
+    !deriveCostBasis([{ type: "fee", shares: null, amount: 12, date: "2025-01-01" }], 100).ok
+  );
+  const noCost = deriveCostBasis([{ type: "buy", shares: 10, amount: 0, date: "2025-01-01" }], 10);
+  check("acquisitions with no cost amount are refused", !noCost.ok);
+
+  // ---- the arithmetic must not be fooled ---------------------------------
+  // Plaid signs a buy as money leaving the account; the magnitude is the
+  // cost whichever way the sign runs.
+  const negative = deriveCostBasis(
+    [
+      { type: "buy", shares: 10, amount: -1000, date: "2025-01-10" },
+      { type: "buy", shares: 10, amount: -1400, date: "2025-06-10" },
+    ],
+    20
+  );
+  check(
+    "a negative amount is still a cost of that size",
+    negative.ok && Math.abs(negative.costBasisPerShare - 120) < 1e-9,
+    negative.ok ? String(negative.costBasisPerShare) : negative.reason
+  );
+
+  // Fractional shares must reconcile within tolerance, not exactly.
+  const fractional = deriveCostBasis(
+    [buy("2025-01-10", 604.0569999, 18392.61)],
+    604.057
+  );
+  check(
+    "a rounding difference in fractional shares does not block derivation",
+    fractional.ok,
+    fractional.ok ? "" : fractional.reason
+  );
+
+  // But a real shortfall must, however small it looks next to the total.
+  const shortfall = deriveCostBasis([buy("2025-01-10", 600, 18000)], 604.057);
+  check(
+    "four missing shares is a shortfall, not a rounding difference",
+    !shortfall.ok,
+    shortfall.ok ? "" : shortfall.reason
+  );
+
+  // ---- what the old code would have produced ------------------------------
+  // The point of the gate, stated as the number it prevents.
+  const visibleOnly = 1000;
+  const heldShares = 604.057;
+  const marketValue = 21045.35;
+  const wrongBasis = visibleOnly;
+  check(
+    "deriving from a partial window would have claimed a ~2000% gain",
+    (marketValue - wrongBasis) / wrongBasis > 19,
+    `${(((marketValue - wrongBasis) / wrongBasis) * 100).toFixed(0)}%`
+  );
+  check(
+    "which is why the share count has to reconcile first",
+    !deriveCostBasis([buy("2025-01-10", 10, visibleOnly)], heldShares).ok
+  );
+
+  console.log(failures === 0 ? "\nALL PASS" : `\n${failures} FAILED`);
+  return failures;
+}
+
+process.exit(main() === 0 ? 0 : 1);

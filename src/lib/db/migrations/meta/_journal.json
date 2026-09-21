@@ -99,6 +99,13 @@
       "when": 1789949932917,
       "tag": "0013_holding_snapshots",
       "breakpoints": true
+    },
+    {
+      "idx": 14,
+      "version": "7",
+      "when": 1789952130639,
+      "tag": "0014_plaid_transaction_unique",
+      "breakpoints": true
     }
   ]
 }

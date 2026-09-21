@@ -1,0 +1,1 @@
+CREATE UNIQUE INDEX "transactions_plaid_id_idx" ON "transactions" USING btree ("plaid_transaction_id");

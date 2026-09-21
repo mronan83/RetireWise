@@ -6,6 +6,10 @@ import { getPlaidClient } from "@/lib/plaid/client";
 import { decryptToken } from "@/lib/plaid/encryption";
 import { syncPlaidBalances, syncPlaidItem } from "@/lib/plaid/sync";
 import {
+  deriveMissingCostBasis,
+  syncInvestmentTransactions,
+} from "@/lib/plaid/investment-transactions";
+import {
   DEAD_LETTER_AFTER,
   needsReconnect,
   nextAttemptAfter,
@@ -91,6 +95,21 @@ async function handleGet(request: Request) {
       const results = await Promise.allSettled([
         syncPlaidItem(shared),
         syncPlaidBalances(shared),
+        /**
+         * Investment transactions, for the flows that make a return a
+         * return.
+         *
+         * Alongside the others rather than after them, and settled rather
+         * than awaited in sequence, because this endpoint is the weakest of
+         * the three: employer-plan record-keepers support it unevenly, and
+         * an institution that returns nothing here must not stop the
+         * holdings and balances that were going to work.
+         */
+        syncInvestmentTransactions({
+          client,
+          clerkId: item.clerkId,
+          accessToken,
+        }),
       ]);
       const failures = results.filter((r) => r.status === "rejected");
       if (failures.length === results.length) {
@@ -164,6 +183,35 @@ async function handleGet(request: Request) {
   });
   await Promise.all(workers);
 
+  /**
+   * Derive cost basis, once per household and only after its items are in.
+   *
+   * After the loop because a position's transactions can arrive from a
+   * different Item than the one holding it, and per household because the
+   * derivation reads across accounts. Only positions that still have no
+   * basis are touched: one Plaid reported, or a person typed, is better
+   * evidence than anything reconstructed here.
+   *
+   * Every failure carries its reason, and the reasons are recorded on the
+   * run rather than swallowed — "could not derive" without saying why is
+   * how a gap becomes permanent and unexplained.
+   */
+  const basisByHousehold: Record<string, { derived: number; attempted: number; reasons: string[] }> = {};
+  for (const clerkId of new Set(due.map((i) => i.clerkId))) {
+    try {
+      const r = await deriveMissingCostBasis(clerkId);
+      if (r.attempted > 0) {
+        basisByHousehold[clerkId] = {
+          derived: r.derived,
+          attempted: r.attempted,
+          reasons: [...new Set(r.skipped.map((s) => s.reason))].slice(0, 10),
+        };
+      }
+    } catch (e) {
+      console.error(`Cost basis derivation failed for ${clerkId}:`, e);
+    }
+  }
+
   await db
     .update(cronRuns)
     .set({
@@ -172,7 +220,7 @@ async function handleGet(request: Request) {
       processed: refreshed,
       failed,
       truncated,
-      detail: { due: due.length, skipped, deadLettered },
+      detail: { due: due.length, skipped, deadLettered, costBasis: basisByHousehold },
     })
     .where(eq(cronRuns.id, run.id));
 
@@ -191,5 +239,6 @@ async function handleGet(request: Request) {
     skipped,
     truncated,
     deadLettered,
+    costBasis: basisByHousehold,
   });
 }

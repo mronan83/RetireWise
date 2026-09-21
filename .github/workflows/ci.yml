@@ -75,6 +75,11 @@ jobs:
       # called it the first.
       - run: pnpm exec tsx scripts/test-performance.ts
 
+      # Deriving cost basis from transactions, and every condition under
+      # which it must refuse. A basis built from a partial window is too low,
+      # which makes the gain too high, and it looks entirely reasonable.
+      - run: pnpm exec tsx scripts/test-investment-transactions.ts
+
   mobile:
     name: Mobile layout
     runs-on: ubuntu-latest

@@ -299,6 +299,10 @@ export const transactions = pgTable(
   },
   (table) => [
     index("transactions_account_date_idx").on(table.accountId, table.date),
+    // Plaid's own id, so a re-run of the transactions pull adds only what is
+    // new. Without it two overlapping runs each pass a pre-check and both
+    // insert, and the flow is counted twice.
+    uniqueIndex("transactions_plaid_id_idx").on(table.plaidTransactionId),
   ]
 );
 
