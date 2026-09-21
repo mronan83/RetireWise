@@ -46,6 +46,12 @@ export type TransactionSyncCounts = {
    * flows rather than as position rows. See isFeePseudoSecurity.
    */
   unlinkedFeeRows: number;
+  /**
+   * Rows already stored that this run gave a security id to. See
+   * planSecurityBackfill: without it the rows stored before the column
+   * existed would never get one, because a stored row is never revisited.
+   */
+  backfilledSecurityIds: number;
   earliest: string | null;
   latest: string | null;
 };
@@ -56,6 +62,7 @@ const EMPTY: TransactionSyncCounts = {
   skippedDuplicate: 0,
   skippedUnmappedAccount: 0,
   unlinkedFeeRows: 0,
+  backfilledSecurityIds: 0,
   earliest: null,
   latest: null,
 };
@@ -191,6 +198,69 @@ export function resolveTransactionSecurity(
   return { ticker, plaidSecurityId: securityId };
 }
 
+/** A transaction row as already stored, for the backfill below. */
+export type StoredTransaction = {
+  plaidTransactionId: string | null;
+  plaidSecurityId: string | null;
+  ticker: string | null;
+};
+
+/** One stored row to be given the identity it was recorded without. */
+export type SecurityBackfill = {
+  plaidTransactionId: string;
+  plaidSecurityId: string;
+  /** A ticker to write where the row has none; null leaves it as stored. */
+  ticker: string | null;
+};
+
+/**
+ * Give already-stored rows the security id they were recorded without.
+ *
+ * This sync is idempotent by Plaid's transaction id, which it achieves by
+ * never touching a row it has already stored. That is right for a flow —
+ * the amount and date of a transaction that happened do not change — but it
+ * means a column added later is never filled in for anything already there,
+ * and the migration had nothing to backfill from.
+ *
+ * Without this, one Schwab 401(k)'s 727 stored rows keep a null security id
+ * for good, the position match falls back to the ticker spelling that never
+ * agreed, and the eight positions this change exists to fix stay broken
+ * while every run reports "fetched 727, inserted 0".
+ *
+ * The full window is re-fetched on every run anyway, so the identity is
+ * already in hand and being discarded. This is self-extinguishing: it plans
+ * work only for rows that still have no id, so the first run after the
+ * migration does all of it and later runs plan none.
+ */
+export function planSecurityBackfill(
+  fetched: { plaidTransactionId: string; security: TransactionSecurity }[],
+  stored: StoredTransaction[]
+): SecurityBackfill[] {
+  const byId = new Map(
+    stored.filter((s) => s.plaidTransactionId).map((s) => [s.plaidTransactionId!, s])
+  );
+
+  const planned: SecurityBackfill[] = [];
+  for (const f of fetched) {
+    if (!f.security.plaidSecurityId) continue;
+    const row = byId.get(f.plaidTransactionId);
+    // Not stored yet (it is in this run's insert), or already identified.
+    if (!row || row.plaidSecurityId) continue;
+
+    planned.push({
+      plaidTransactionId: f.plaidTransactionId,
+      plaidSecurityId: f.security.plaidSecurityId,
+      // A stored ticker is left alone: it is what the transactions page
+      // shows, and the id is what the matching now uses. Only a row that
+      // has none — its security went undescribed in the page it was
+      // stored from — gets one.
+      ticker: row.ticker === null ? f.security.ticker : null,
+    });
+  }
+
+  return planned;
+}
+
 /**
  * Pull every investment transaction for an Item and record the new ones.
  *
@@ -275,10 +345,38 @@ export async function syncInvestmentTransactions(options: {
   // Which ids are already stored, so the insert only carries new ones.
   const ids = all.map((t) => t.investment_transaction_id);
   const existing = await db
-    .select({ plaidTransactionId: transactions.plaidTransactionId })
+    .select({
+      plaidTransactionId: transactions.plaidTransactionId,
+      plaidSecurityId: transactions.plaidSecurityId,
+      ticker: transactions.ticker,
+    })
     .from(transactions)
     .where(inArray(transactions.plaidTransactionId, ids));
   const seen = new Set(existing.map((e) => e.plaidTransactionId));
+
+  // Before the insert, because these rows are the ones the insert skips.
+  const backfill = planSecurityBackfill(
+    all.map((t) => ({
+      plaidTransactionId: t.investment_transaction_id,
+      security: resolveTransactionSecurity(t.security_id, securities),
+    })),
+    existing
+  );
+  for (const b of backfill) {
+    await db
+      .update(transactions)
+      .set({
+        plaidSecurityId: b.plaidSecurityId,
+        ...(b.ticker === null ? {} : { ticker: b.ticker }),
+      })
+      .where(
+        and(
+          eq(transactions.plaidTransactionId, b.plaidTransactionId),
+          isNull(transactions.plaidSecurityId)
+        )
+      );
+  }
+  counts.backfilledSecurityIds = backfill.length;
 
   const rows: (typeof transactions.$inferInsert)[] = [];
   for (const t of all) {

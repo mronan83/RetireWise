@@ -16,6 +16,7 @@ import {
   isFeePseudoSecurity,
   mapTransactionType,
   matchTransactionsToPositions,
+  planSecurityBackfill,
   resolveTransactionSecurity,
   type LocalTransactionType,
   type PlaidSecurityLike,
@@ -372,6 +373,85 @@ function main() {
   check(
     "so it cannot attach itself to the position it is named after",
     (feeJoin.get("h_intl") ?? []).length === 0
+  );
+
+  // ---- rows stored before the security id existed -------------------------
+  /**
+   * The migration had nothing to backfill from, and this sync never revisits
+   * a row it has already stored — so without a backfill the 727 rows already
+   * in the table keep a null security id for good, the match falls back to
+   * the ticker spelling that never agreed, and the eight positions stay
+   * broken while every run reports "fetched 727, inserted 0".
+   */
+  const storedBefore = [
+    // Stored with the transactions-side spelling and no id.
+    { plaidTransactionId: "itx_1", plaidSecurityId: null, ticker: "RERGX" },
+    // Stored with neither: its security went undescribed in that page.
+    { plaidTransactionId: "itx_2", plaidSecurityId: null, ticker: null },
+    // Already identified by an earlier run.
+    { plaidTransactionId: "itx_3", plaidSecurityId: "sec_eupac", ticker: "RERGX" },
+  ];
+  const refetched = [
+    { plaidTransactionId: "itx_1", security: { ticker: "RERGX", plaidSecurityId: "sec_eupac" } },
+    { plaidTransactionId: "itx_2", security: { ticker: "RERGX", plaidSecurityId: "sec_eupac" } },
+    { plaidTransactionId: "itx_3", security: { ticker: "RERGX", plaidSecurityId: "sec_eupac" } },
+    // Not stored at all: this run inserts it, and it needs no backfill.
+    { plaidTransactionId: "itx_4", security: { ticker: "RERGX", plaidSecurityId: "sec_eupac" } },
+    // A fee row, which carries no identity to write.
+    { plaidTransactionId: "itx_5", security: { ticker: null, plaidSecurityId: null } },
+  ];
+
+  const plannedBackfill = planSecurityBackfill(refetched, storedBefore);
+  check(
+    "a stored row with no security id is given one from the re-fetched window",
+    plannedBackfill.length === 2,
+    plannedBackfill.map((b) => b.plaidTransactionId).join(",")
+  );
+  check(
+    "a row that already has one is left alone",
+    !plannedBackfill.some((b) => b.plaidTransactionId === "itx_3")
+  );
+  check(
+    "a row this run is inserting anyway is not backfilled",
+    !plannedBackfill.some((b) => b.plaidTransactionId === "itx_4")
+  );
+  check(
+    "a fee row carries no identity to write",
+    !plannedBackfill.some((b) => b.plaidTransactionId === "itx_5")
+  );
+  check(
+    "a stored ticker is not rewritten: the id is what matching uses",
+    plannedBackfill.find((b) => b.plaidTransactionId === "itx_1")?.ticker === null
+  );
+  check(
+    "but a row stored with no ticker at all gets the one now resolvable",
+    plannedBackfill.find((b) => b.plaidTransactionId === "itx_2")?.ticker === "RERGX"
+  );
+  check(
+    "and the backfill is self-extinguishing: nothing to do on the next run",
+    planSecurityBackfill(
+      refetched,
+      storedBefore.map((r) => ({ ...r, plaidSecurityId: r.plaidSecurityId ?? "sec_eupac" }))
+    ).length === 0
+  );
+
+  // The point of it, stated as the join it restores.
+  const beforeBackfill = matchTransactionsToPositions(
+    [eupacHolding],
+    [{ accountId: "acct", ticker: "RERGX", plaidSecurityId: null, label: "stored in April" }]
+  );
+  check(
+    "which matters because until then that row matches nothing",
+    (beforeBackfill.get("h_eupac") ?? []).length === 0,
+    "holding GG.EUPAC.TRUST.R1, row RERGX, no id on either side of the join"
+  );
+  const afterBackfill = matchTransactionsToPositions(
+    [eupacHolding],
+    [{ accountId: "acct", ticker: "RERGX", plaidSecurityId: "sec_eupac", label: "backfilled" }]
+  );
+  check(
+    "and joins once the id is written",
+    (afterBackfill.get("h_eupac") ?? []).length === 1
   );
 
   // ---- securities accumulate across pages ---------------------------------
