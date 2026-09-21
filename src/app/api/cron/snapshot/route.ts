@@ -1,6 +1,6 @@
 import { eq } from "drizzle-orm";
 import { getDb } from "@/lib/db";
-import { accounts, holdings, portfolioSnapshots, accountSnapshots, cronRuns } from "@/lib/db/schema";
+import { accounts, holdings, portfolioSnapshots, accountSnapshots, holdingSnapshots, cronRuns } from "@/lib/db/schema";
 import { calculateAllocation } from "@/lib/utils/calculations";
 import { gainLossFor, rollupBasis } from "@/lib/utils/cost-basis";
 import { getLatestSnapshot } from "@/lib/queries/snapshots";
@@ -136,6 +136,31 @@ async function handleGet(request: Request) {
        * fabricated a basis equal to market value, exactly nothing. Either
        * way a year of snapshots would carry a number nobody measured.
        */
+      /**
+       * Positions, not just the total.
+       *
+       * Share counts are what make tomorrow's performance figure a return
+       * rather than a balance change: shares that rise without the market
+       * rising are money paid in, and a return excludes it. Recorded here
+       * because the sync already has them and nothing else keeps them.
+       */
+      if (data.holdings.length > 0) {
+        await db
+          .insert(holdingSnapshots)
+          .values(
+            data.holdings.map((h) => ({
+              clerkId,
+              accountId: acctId,
+              snapshotDate: today,
+              ticker: h.ticker,
+              shares: String(h.shares),
+              price: String(h.currentPrice),
+              value: String(h.currentValue),
+            }))
+          )
+          .onConflictDoNothing();
+      }
+
       const rollup = rollupBasis(data.holdings);
       const gl = gainLossFor(data.value, rollup.basis);
       await db.insert(accountSnapshots).values({

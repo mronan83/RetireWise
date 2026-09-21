@@ -92,6 +92,13 @@
       "when": 1789943351437,
       "tag": "0012_cost_basis_nullable",
       "breakpoints": true
+    },
+    {
+      "idx": 13,
+      "version": "7",
+      "when": 1789949932917,
+      "tag": "0013_holding_snapshots",
+      "breakpoints": true
     }
   ]
 }

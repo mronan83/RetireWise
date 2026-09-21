@@ -70,6 +70,11 @@ jobs:
       # return computed from five months of snapshots.
       - run: pnpm exec tsx scripts/test-cost-basis.ts
 
+      # Time-weighted return: the difference between how the investments did
+      # and how much more is in the account. The cards showed the second and
+      # called it the first.
+      - run: pnpm exec tsx scripts/test-performance.ts
+
   mobile:
     name: Mobile layout
     runs-on: ubuntu-latest

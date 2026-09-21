@@ -86,6 +86,9 @@ export function AccountCard({
     gainLoss !== undefined && gainLossPct !== undefined && costBasis !== undefined && costBasis > 0;
   const isPositive = (gainLoss ?? 0) >= 0;
   const returns = periodReturns?.returns;
+  const flowsFrom = periodReturns?.flowsKnownFrom
+    ? sinceLabel(periodReturns.flowsKnownFrom).replace("Since ", "")
+    : null;
   const hasPeriodData = returns && Object.values(returns).some((v) => v !== null);
   const isLinked = account.plaidAccountId !== null;
 
@@ -127,19 +130,18 @@ export function AccountCard({
           )}
 
           {/* Time-period returns.
-              These are the change in the account's BALANCE between two daily
-              snapshots, which is not the same thing as investment return: a
-              contribution raises the balance and therefore raises the
-              figure. Separating the two needs transaction history, which
-              this app does not yet pull from Plaid — so the row says what it
-              is rather than implying performance it cannot measure. */}
+              Time-weighted: money paid in is excluded, so these are how the
+              investments performed rather than how much more is in the
+              account. Flows are detected from share counts — shares that
+              rise without the market rising were bought — so no transaction
+              feed is needed. See lib/performance/twr.ts. */}
           {hasPeriodData && (
             <div
               className="flex flex-wrap gap-x-2 gap-y-0.5 mt-2"
               title={
-                account.isActivelyContributing
-                  ? "Change in balance over each period. This account is still being contributed to, so these include contributions as well as market movement."
-                  : "Change in balance over each period, from daily snapshots."
+                flowsFrom
+                  ? `Time-weighted return. Contributions and withdrawals are excluded, tracked from ${flowsFrom}.`
+                  : "Time-weighted return from daily snapshots. Contributions before share tracking began cannot be separated out."
               }
             >
               {Object.entries(PERIOD_LABELS).map(([key, label]) => {
@@ -180,9 +182,11 @@ export function AccountCard({
               )}
             </div>
           )}
-          {hasPeriodData && account.isActivelyContributing && (
+          {/* Only where it is still true. Once share counts cover the whole
+              window the figure is a clean return and needs no caveat. */}
+          {hasPeriodData && account.isActivelyContributing && !flowsFrom && (
             <p className="mt-1 text-[10px] leading-tight text-muted-foreground">
-              Includes contributions, not market movement alone
+              Contributions not yet separated out
             </p>
           )}
 

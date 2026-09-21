@@ -1,6 +1,7 @@
 import { eq, desc, and, gte, asc } from "drizzle-orm";
 import { getDb } from "../db";
-import { portfolioSnapshots, accountSnapshots, netWorthSnapshots, netWorthItemHistory } from "../db/schema";
+import { portfolioSnapshots, accountSnapshots, holdingSnapshots, netWorthSnapshots, netWorthItemHistory } from "../db/schema";
+import { twrSince, timeWeightedReturn, type AccountDay } from "../performance/twr";
 
 /**
  * Fetch all item history records for a user, ordered by date ASC.
@@ -131,8 +132,24 @@ function addDays(isoDate: string, days: number): string {
 }
 
 export type AccountPerformance = {
-  /** Percent change per period key. Null where the history cannot reach it. */
+  /**
+   * Time-weighted return per period key, as a percentage. Null where the
+   * history cannot reach the period.
+   *
+   * A return, not a balance change: money paid in is excluded, so this is
+   * how the investments performed rather than how much more is in the
+   * account. See lib/performance/twr.ts.
+   */
   returns: Record<string, number | null>;
+  /**
+   * The date from which share counts exist, so flows could be measured.
+   *
+   * Before it, a contribution is indistinguishable from a gain. Exact for
+   * an account receiving no contributions, optimistic for one that is.
+   */
+  flowsKnownFrom: string | null;
+  /** Net external money in (positive) or out, over the whole record. */
+  netFlow: number;
   /**
    * The first date this account was ever snapshotted.
    *
@@ -169,22 +186,52 @@ export async function getAccountPerformanceMap(clerkId: string): Promise<
   const tenYearsAgo = new Date(now);
   tenYearsAgo.setFullYear(tenYearsAgo.getFullYear() - 10);
 
-  // Fetch all account snapshots for this user (ordered by date asc)
-  const allSnaps = await db
-    .select({
-      accountId: accountSnapshots.accountId,
-      snapshotDate: accountSnapshots.snapshotDate,
-      value: accountSnapshots.value,
-    })
-    .from(accountSnapshots)
-    .where(eq(accountSnapshots.clerkId, clerkId))
-    .orderBy(asc(accountSnapshots.snapshotDate));
+  const [allSnaps, allPositions] = await Promise.all([
+    db
+      .select({
+        accountId: accountSnapshots.accountId,
+        snapshotDate: accountSnapshots.snapshotDate,
+        value: accountSnapshots.value,
+      })
+      .from(accountSnapshots)
+      .where(eq(accountSnapshots.clerkId, clerkId))
+      .orderBy(asc(accountSnapshots.snapshotDate)),
+    db
+      .select({
+        accountId: holdingSnapshots.accountId,
+        snapshotDate: holdingSnapshots.snapshotDate,
+        ticker: holdingSnapshots.ticker,
+        shares: holdingSnapshots.shares,
+        price: holdingSnapshots.price,
+      })
+      .from(holdingSnapshots)
+      .where(eq(holdingSnapshots.clerkId, clerkId))
+      .orderBy(asc(holdingSnapshots.snapshotDate)),
+  ]);
+
+  // Positions by account and date, so each day can carry the share counts
+  // that make its flow measurable.
+  const positionsByAccountDate = new Map<string, Map<string, { ticker: string; shares: number; price: number }[]>>();
+  for (const p of allPositions) {
+    let byDate = positionsByAccountDate.get(p.accountId);
+    if (!byDate) {
+      byDate = new Map();
+      positionsByAccountDate.set(p.accountId, byDate);
+    }
+    const list = byDate.get(p.snapshotDate) || [];
+    list.push({ ticker: p.ticker, shares: Number(p.shares), price: Number(p.price) });
+    byDate.set(p.snapshotDate, list);
+  }
 
   // Group by account
-  const byAccount = new Map<string, { date: string; value: number }[]>();
+  const byAccount = new Map<string, AccountDay[]>();
   for (const s of allSnaps) {
     const list = byAccount.get(s.accountId) || [];
-    list.push({ date: s.snapshotDate, value: Number(s.value) });
+    list.push({
+      date: s.snapshotDate,
+      value: Number(s.value),
+      positions: positionsByAccountDate.get(s.accountId)?.get(s.snapshotDate),
+    });
     byAccount.set(s.accountId, list);
   }
 
@@ -195,33 +242,27 @@ export async function getAccountPerformanceMap(clerkId: string): Promise<
   for (const [accountId, snaps] of byAccount) {
     if (snaps.length === 0) continue;
     const latest = snaps[snaps.length - 1];
-    const latestVal = latest.value;
+    // Retained for the "Since <date>" label; the returns themselves are TWR.
     const earliest = snaps[0];
 
     /**
-     * The value at a date, or null when the history does not reach it.
+     * Time-weighted return over a period, or null when the history does
+     * not reach it.
      *
-     * This returned "the first snapshot on or after the target", with no
-     * check that any snapshot preceded the target at all. An account with
-     * five months of history therefore answered the 10-year question with
-     * its oldest row — so "10Y", "5Y", "3Y" and "1Y" all showed the same
-     * five-month number, each under a label claiming a period the app had
-     * never observed. Nothing looked broken: the figures were small,
-     * plausible, and identical to one another.
+     * Two things changed here. The old version computed
+     * (value_now - value_then) / value_then, which is a balance change and
+     * counts every contribution as performance. And it found "the first
+     * snapshot on or after the target" without checking that any snapshot
+     * preceded the target at all — so five months of history answered the
+     * ten-year question with its oldest row, and 1Y, 3Y, 5Y and 10Y all
+     * showed the same number under four labels.
      *
-     * GRACE_DAYS exists because a target date can land on a weekend or a
-     * market holiday, when no snapshot is taken. It absorbs that and
-     * nothing more.
+     * GRACE_DAYS exists because a period boundary can land on a weekend or
+     * a market holiday, when no snapshot is taken. It absorbs that and not
+     * a missing year.
      */
-    function valueAt(targetDate: string): number | null {
-      if (earliest.date > addDays(targetDate, GRACE_DAYS)) return null;
-      const snap = snaps.find((s) => s.date >= targetDate);
-      return snap ? snap.value : null;
-    }
-
-    function calcReturn(startVal: number | null): number | null {
-      if (startVal === null || startVal === 0) return null;
-      return ((latestVal - startVal) / startVal) * 100;
+    function periodReturn(targetDate: string): number | null {
+      return twrSince(snaps, targetDate, GRACE_DAYS)?.pct ?? null;
     }
 
     /**
@@ -229,12 +270,12 @@ export async function getAccountPerformanceMap(clerkId: string): Promise<
      *
      * snaps[length - 2] is the previous ROW, not the previous day. After a
      * weekend, an outage, or a spell of failed cron runs it can be weeks
-     * back, and the move over those weeks was being labelled "Day".
+     * back, and the move over those weeks was still labelled "Day".
      */
     const prevSnap = snaps.length >= 2 ? snaps[snaps.length - 2] : null;
     const daily =
-      prevSnap && prevSnap.value > 0 && latest.date <= addDays(prevSnap.date, GRACE_DAYS)
-        ? ((latestVal - prevSnap.value) / prevSnap.value) * 100
+      prevSnap && latest.date <= addDays(prevSnap.date, GRACE_DAYS)
+        ? timeWeightedReturn([prevSnap, latest])?.pct ?? null
         : null;
 
     /**
@@ -244,23 +285,22 @@ export async function getAccountPerformanceMap(clerkId: string): Promise<
      * honest and useless. Labelled with the start date on the card, so it
      * states its own scope rather than borrowing a period name.
      */
-    const inception =
-      snaps.length >= 2 && earliest.value > 0
-        ? ((latestVal - earliest.value) / earliest.value) * 100
-        : null;
+    const whole = timeWeightedReturn(snaps);
 
     result.set(accountId, {
       returns: {
         daily,
-        "30d": calcReturn(valueAt(iso(thirtyDaysAgo))),
-        "90d": calcReturn(valueAt(iso(ninetyDaysAgo))),
-        ytd: calcReturn(valueAt(ytdStart)),
-        "1yr": calcReturn(valueAt(iso(oneYearAgo))),
-        "3yr": calcReturn(valueAt(iso(threeYearsAgo))),
-        "5yr": calcReturn(valueAt(iso(fiveYearsAgo))),
-        "10yr": calcReturn(valueAt(iso(tenYearsAgo))),
-        inception,
+        "30d": periodReturn(iso(thirtyDaysAgo)),
+        "90d": periodReturn(iso(ninetyDaysAgo)),
+        ytd: periodReturn(ytdStart),
+        "1yr": periodReturn(iso(oneYearAgo)),
+        "3yr": periodReturn(iso(threeYearsAgo)),
+        "5yr": periodReturn(iso(fiveYearsAgo)),
+        "10yr": periodReturn(iso(tenYearsAgo)),
+        inception: whole?.pct ?? null,
       },
+      flowsKnownFrom: whole?.flowsKnownFrom ?? null,
+      netFlow: whole?.netFlow ?? 0,
       since: earliest.date,
     });
   }

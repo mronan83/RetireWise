@@ -629,6 +629,43 @@ export const contributions = pgTable("contributions", {
 });
 
 // Per-account daily snapshots (for time-period performance tracking)
+/**
+ * Per-position shares and price, daily.
+ *
+ * The piece that makes real performance possible. An account's value can
+ * rise because the market rose or because money was paid in, and the two
+ * are indistinguishable from the value alone — which is why the period
+ * figures on the cards were balance change rather than return.
+ *
+ * Share counts separate them without any transaction feed: shares that
+ * increase between two days are a purchase, and the cash that bought them
+ * is an external flow to be excluded from return. That is all a
+ * time-weighted return needs.
+ */
+export const holdingSnapshots = pgTable(
+  "holding_snapshots",
+  {
+    id: uuid("id").defaultRandom().primaryKey(),
+    clerkId: text("clerk_id").notNull(),
+    accountId: uuid("account_id").notNull(),
+    snapshotDate: date("snapshot_date").notNull(),
+    ticker: text("ticker").notNull(),
+    shares: decimal("shares", { precision: 20, scale: 8 }).notNull(),
+    price: decimal("price", { precision: 20, scale: 4 }).notNull(),
+    value: decimal("value", { precision: 20, scale: 2 }).notNull(),
+    createdAt: timestamp("created_at").defaultNow().notNull(),
+  },
+  (table) => [
+    uniqueIndex("holding_snapshots_unique_idx").on(
+      table.accountId,
+      table.snapshotDate,
+      table.ticker
+    ),
+    index("holding_snapshots_account_date_idx").on(table.accountId, table.snapshotDate),
+    index("holding_snapshots_clerk_date_idx").on(table.clerkId, table.snapshotDate),
+  ]
+);
+
 export const accountSnapshots = pgTable("account_snapshots", {
   id: uuid("id").defaultRandom().primaryKey(),
   clerkId: text("clerk_id").notNull(),
