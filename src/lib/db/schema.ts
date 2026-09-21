@@ -258,6 +258,22 @@ export const holdings = pgTable("holdings", {
     .references(() => accounts.id, { onDelete: "cascade" })
     .notNull(),
   ticker: text("ticker").notNull(),
+  /**
+   * Plaid's own id for the security, when this position came from Plaid.
+   *
+   * The ticker above is a derived string — `ticker_symbol || cusip || name`
+   * — and Plaid does not spell it the same way in every endpoint. The same
+   * American Funds EuroPacific position arrives as `GG.EUPAC.TRUST.R1` from
+   * /investments/holdings/get and as `RERGX` from
+   * /investments/transactions/get, so matching a transaction to a position
+   * on that string joined eight of thirteen positions to nothing and
+   * reported "no transactions in the window" for a window full of them.
+   *
+   * The security id is stable within an Item, so it is what the two sides
+   * are matched on. Null for rows a person typed in, which have no Plaid
+   * identity at all.
+   */
+  plaidSecurityId: text("plaid_security_id"),
   name: text("name").notNull(),
   assetClass: assetClassEnum("asset_class").notNull(),
   shares: decimal("shares", { precision: 20, scale: 8 }).notNull(),
@@ -305,6 +321,17 @@ export const transactions = pgTable(
     }),
     type: transactionTypeEnum("type").notNull(),
     ticker: text("ticker"),
+    /**
+     * The security this row moved, by Plaid's id rather than by the ticker
+     * spelling above. See the column of the same name on holdings: this is
+     * the side that has to agree with it for a position's transactions to
+     * be found at all.
+     *
+     * It is also the only identity 97 of one account's 727 rows had — their
+     * security was not described in the page being processed, so the ticker
+     * came out null while the id was there the whole time.
+     */
+    plaidSecurityId: text("plaid_security_id"),
     shares: decimal("shares", { precision: 20, scale: 8 }),
     pricePerShare: decimal("price_per_share", { precision: 20, scale: 4 }),
     amount: decimal("amount", { precision: 20, scale: 2 }).notNull(),

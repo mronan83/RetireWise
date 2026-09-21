@@ -240,6 +240,11 @@ function main() {
     noBasis[0].costBasisPerShare !== 34.84
   );
   check("the price and shares are still recorded", noBasis[0].currentPrice === 34.84);
+  check(
+    "and Plaid's security id is carried through, not just its spelling of the ticker",
+    noBasis[0].plaidSecurityId === "sec_plt",
+    "the transactions side spells this fund differently and joins on the id"
+  );
 
   const withBasis = aggregateHoldings(
     [{ security_id: "sec_voo", quantity: 10, institution_price: 701.78, cost_basis: 4190.215 }],
