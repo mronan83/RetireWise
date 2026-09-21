@@ -27,7 +27,7 @@ import {
 } from "../src/lib/utils/cost-basis";
 import { calculateGainLoss, calculatePortfolioSummary } from "../src/lib/utils/calculations";
 import type { Holding } from "../src/lib/types";
-import { aggregateHoldings } from "../src/lib/plaid/sync";
+import { aggregateHoldings, resolveBasisUpdate } from "../src/lib/plaid/sync";
 
 let failures = 0;
 function check(label: string, ok: boolean, detail = "") {
@@ -266,6 +266,45 @@ function main() {
     "averaging the lots that have one understates cost and overstates gain"
   );
   check("though the shares from both lots are still counted", mixedLots[0].shares === 15);
+
+  // ---- who wins when two sources disagree ---------------------------------
+  // The precedence rule, stated as the losses it prevents.
+  const manualRow = { costBasisSource: "manual" };
+  const plaidRow = { costBasisSource: "plaid" };
+  const derivedRow = { costBasisSource: "derived" };
+
+  check(
+    "a basis typed by hand survives a sync that reports one",
+    Object.keys(resolveBasisUpdate(99.99, manualRow)).length === 0
+  );
+  check(
+    "and survives a sync that reports nothing",
+    Object.keys(resolveBasisUpdate(null, manualRow)).length === 0
+  );
+  check(
+    "a basis Plaid reports replaces one Plaid reported before",
+    (resolveBasisUpdate(120, plaidRow) as { costBasisPerShare?: string }).costBasisPerShare === "120"
+  );
+  check(
+    "and replaces one derived from transactions, being the better evidence",
+    (resolveBasisUpdate(120, derivedRow) as { costBasisPerShare?: string }).costBasisPerShare === "120"
+  );
+  check(
+    "a written basis records that Plaid is where it came from",
+    (resolveBasisUpdate(120, null) as { costBasisSource?: string }).costBasisSource === "plaid"
+  );
+  check(
+    "a silent sync leaves an existing row alone rather than clearing it",
+    Object.keys(resolveBasisUpdate(null, plaidRow)).length === 0
+  );
+  check(
+    "a new position with no reported basis gets none, not a stand-in",
+    (resolveBasisUpdate(null, null) as { costBasisPerShare?: string | null }).costBasisPerShare === null
+  );
+  check(
+    "and specifically never shares * price, which is what it used to get",
+    !("costBasisSource" in resolveBasisUpdate(null, manualRow))
+  );
 
   console.log(failures === 0 ? "\nALL PASS" : `\n${failures} FAILED`);
   return failures;

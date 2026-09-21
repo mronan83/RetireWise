@@ -63,6 +63,7 @@ async function AccountDetailPageContent({
       assetClass: h.assetClass,
       shares: h.shares,
       costBasisPerShare: h.costBasisPerShare,
+      costBasisSource: h.costBasisSource,
       currentPrice: h.currentPrice,
       currentValue: h.currentValue,
       accountName: account.name,

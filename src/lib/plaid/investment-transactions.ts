@@ -401,6 +401,8 @@ export async function deriveMissingCostBasis(
       .update(holdings)
       .set({
         costBasisPerShare: String(derived.costBasisPerShare),
+        costBasisSource: "derived",
+        costBasisUpdatedAt: new Date(),
         updatedAt: new Date(),
       })
       .where(eq(holdings.id, c.id));

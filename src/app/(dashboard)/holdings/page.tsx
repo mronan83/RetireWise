@@ -26,6 +26,7 @@ async function HoldingsPageContent() {
       assetClass: h.assetClass,
       shares: h.shares,
       costBasisPerShare: h.costBasisPerShare,
+      costBasisSource: h.costBasisSource,
       currentPrice: h.currentPrice,
       currentValue: h.currentValue,
       accountName: h.accountName,

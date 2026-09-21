@@ -36,6 +36,20 @@ export const taxTreatmentEnum = pgEnum("tax_treatment", [
   "taxable",
 ]);
 
+/**
+ * Where a cost basis came from.
+ *
+ * Provenance, because losing it is what let a fabricated figure be written
+ * over a real one without anything noticing. "manual" outranks the rest:
+ * a person who typed a basis from their statement did so deliberately, and
+ * a later sync that happens to have an opinion must not quietly replace it.
+ */
+export const costBasisSourceEnum = pgEnum("cost_basis_source", [
+  "plaid",
+  "manual",
+  "derived",
+]);
+
 export const dataSourceEnum = pgEnum("data_source", [
   "manual",
   "csv_import",
@@ -262,6 +276,9 @@ export const holdings = pgTable("holdings", {
     precision: 20,
     scale: 4,
   }),
+  /** Where the figure above came from. Null alongside a null basis. */
+  costBasisSource: costBasisSourceEnum("cost_basis_source"),
+  costBasisUpdatedAt: timestamp("cost_basis_updated_at"),
   currentPrice: decimal("current_price", {
     precision: 20,
     scale: 4,

@@ -13,6 +13,7 @@ export async function getHoldingsByClerkId(clerkId: string) {
       assetClass: holdings.assetClass,
       shares: holdings.shares,
       costBasisPerShare: holdings.costBasisPerShare,
+      costBasisSource: holdings.costBasisSource,
       currentPrice: holdings.currentPrice,
       currentValue: holdings.currentValue,
       lastPriceUpdate: holdings.lastPriceUpdate,

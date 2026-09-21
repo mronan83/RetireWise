@@ -1,5 +1,19 @@
-import type { Holding } from "../types";
 import { gainLossFor, positionBasis, rollupBasis } from "./cost-basis";
+
+/**
+ * The fields these calculations actually read.
+ *
+ * Typed structurally rather than as the whole `Holding` row: every column
+ * added to the table used to break every caller here, which is pressure to
+ * widen the queries instead of narrowing the contract. Nothing below needs
+ * a created_at or a data source.
+ */
+type ValuedHolding = {
+  shares: string | number;
+  costBasisPerShare: string | number | null;
+  currentValue: string | number;
+  assetClass: string;
+};
 
 /**
  * Gain and loss for one position, or null when the basis is unknown.
@@ -9,7 +23,7 @@ import { gainLossFor, positionBasis, rollupBasis } from "./cost-basis";
  * whole position counted as profit, at a stated 0%. Two wrong numbers that
  * happened to look like a rounding artefact.
  */
-export function calculateGainLoss(holding: Holding): {
+export function calculateGainLoss(holding: ValuedHolding): {
   gainLoss: number;
   gainLossPct: number;
 } | null {
@@ -17,7 +31,7 @@ export function calculateGainLoss(holding: Holding): {
 }
 
 export function calculateAllocation(
-  holdings: Holding[]
+  holdings: ValuedHolding[]
 ): Record<string, { value: number; pct: number }> {
   const totalValue = holdings.reduce(
     (sum, h) => sum + Number(h.currentValue),
@@ -40,7 +54,7 @@ export function calculateAllocation(
   return allocation;
 }
 
-export function calculatePortfolioSummary(holdings: Holding[]) {
+export function calculatePortfolioSummary(holdings: ValuedHolding[]) {
   const totalValue = holdings.reduce(
     (sum, h) => sum + Number(h.currentValue),
     0

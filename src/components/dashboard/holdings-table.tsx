@@ -18,6 +18,7 @@ import {
 } from "@/lib/utils/format";
 import { cn } from "@/lib/utils";
 import { absoluteTimestamp, freshnessOf, relativeAge } from "@/lib/utils/freshness";
+import { CostBasisDialog } from "@/components/forms/cost-basis-dialog";
 
 type HoldingRow = {
   id: string;
@@ -30,6 +31,8 @@ type HoldingRow = {
   currentPrice: string;
   currentValue: string;
   accountName: string;
+  /** Where the basis came from, so the reader knows who to believe. */
+  costBasisSource?: "plaid" | "manual" | "derived" | null;
   /** Null when there is no basis to measure against. */
   gainLoss: number | null;
   gainLossPct: number | null;
@@ -115,7 +118,17 @@ export function HoldingsTable({ holdings }: { holdings: HoldingRow[] }) {
               {holding.gainLoss === null || holding.gainLossPct === null ? (
                 <TableCell className="text-right font-mono text-muted-foreground">
                   <div>&mdash;</div>
-                  <div className="text-xs">no cost basis</div>
+                  {/* Actionable, not just absent. The institution did not
+                      report a basis; the owner can supply one from their
+                      statement and it will survive every later sync. */}
+                  <CostBasisDialog
+                    holdingId={holding.id}
+                    ticker={holding.ticker}
+                    shares={Number(holding.shares)}
+                    currentValue={Number(holding.currentValue)}
+                    costBasisPerShare={null}
+                    source={holding.costBasisSource ?? null}
+                  />
                 </TableCell>
               ) : (
                 <TableCell
@@ -128,6 +141,28 @@ export function HoldingsTable({ holdings }: { holdings: HoldingRow[] }) {
                   <div className="text-xs">
                     {formatGainLossPct(holding.gainLossPct)}
                   </div>
+                  {holding.costBasisSource === "manual" && (
+                    <div className="text-[10px] font-sans text-muted-foreground">
+                      basis entered by you
+                    </div>
+                  )}
+                  {holding.costBasisSource === "derived" && (
+                    <div className="text-[10px] font-sans text-muted-foreground">
+                      basis from transactions
+                    </div>
+                  )}
+                  <CostBasisDialog
+                    holdingId={holding.id}
+                    ticker={holding.ticker}
+                    shares={Number(holding.shares)}
+                    currentValue={Number(holding.currentValue)}
+                    costBasisPerShare={
+                      holding.costBasisPerShare === null
+                        ? null
+                        : Number(holding.costBasisPerShare)
+                    }
+                    source={holding.costBasisSource ?? null}
+                  />
                 </TableCell>
               )}
               <TableCell className="hidden lg:table-cell text-muted-foreground">

@@ -280,6 +280,41 @@ export function aggregateHoldings(
   }));
 }
 
+export type BasisUpdate =
+  | Record<string, never>
+  | { costBasisPerShare: string; costBasisSource: "plaid"; costBasisUpdatedAt: Date }
+  | { costBasisPerShare: null; costBasisSource: null };
+
+/**
+ * What a sync may write to a position's cost basis. Three rules, in order.
+ *
+ *  1. A basis a person typed is never replaced. They read it off a statement
+ *     for a position the institution had declined to report, which is better
+ *     evidence than the institution later changing its mind — and replacing
+ *     it silently is exactly the failure that cost this household two
+ *     accounts' worth of recorded gain.
+ *  2. A basis Plaid reports is written, with its provenance, over anything
+ *     that is not manual.
+ *  3. Plaid reporting nothing leaves an existing basis alone and gives a new
+ *     position none. `shares * currentPrice` used to stand in here, which
+ *     made cost equal value and every employer-plan position read as having
+ *     never moved.
+ */
+export function resolveBasisUpdate(
+  incoming: number | null,
+  existing: { costBasisSource: string | null } | null
+): BasisUpdate {
+  if (existing?.costBasisSource === "manual") return {};
+  if (incoming !== null) {
+    return {
+      costBasisPerShare: String(incoming),
+      costBasisSource: "plaid",
+      costBasisUpdatedAt: new Date(),
+    };
+  }
+  return existing ? {} : { costBasisPerShare: null, costBasisSource: null };
+}
+
 /**
  * Make the account's holdings match what Plaid reports: update what is held,
  * add what is new, drop what was sold. Plaid is authoritative for an account
@@ -322,12 +357,7 @@ async function reconcileHoldings(
      * in by hand survives for the same reason: Plaid never reported it, and
      * Plaid saying nothing is not Plaid disagreeing.
      */
-    const basis =
-      h.costBasisPerShare !== null
-        ? { costBasisPerShare: String(h.costBasisPerShare) }
-        : match
-          ? {}
-          : { costBasisPerShare: null };
+    const basis = resolveBasisUpdate(h.costBasisPerShare, match ?? null);
 
     const values = {
       name: h.name,

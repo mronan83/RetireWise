@@ -19,6 +19,8 @@ export type AuditAction =
   | "plaid.disconnected"
   | "account.deleted"
   | "holdings.replaced_by_sync"
+  | "cost_basis.set"
+  | "cost_basis.cleared"
   | "billing.subscribed"
   | "billing.cancelled"
   | "data.exported"
