@@ -6,6 +6,7 @@ import { getAccountPerformanceMap } from "@/lib/queries/snapshots";
 import { AccountCard } from "@/components/dashboard/account-card";
 import { FidelityImport } from "@/components/forms/fidelity-import";
 import { AddAccountButton } from "./add-account-button";
+import { SyncNowButton } from "@/components/plaid/sync-now-button";
 import { DuplicateReview, type ReviewPair } from "./duplicate-review";
 import { findDuplicateCandidates } from "@/lib/accounts/duplicates";
 import { gainLossFor, missingBasisNote, rollupBasis } from "@/lib/utils/cost-basis";
@@ -59,7 +60,11 @@ async function AccountsPageContent() {
             Your household investment accounts
           </p>
         </div>
-        <AddAccountButton />
+        <div className="flex flex-col items-end gap-3">
+          <AddAccountButton />
+          {/* Beside the accounts it refreshes, not buried in settings. */}
+          <SyncNowButton />
+        </div>
       </div>
 
       {duplicatePairs.length > 0 && <DuplicateReview pairs={duplicatePairs} />}

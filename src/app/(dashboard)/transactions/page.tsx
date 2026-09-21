@@ -15,6 +15,7 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import { ArrowUpRight, ArrowDownRight, Minus } from "lucide-react";
+import { SyncNowButton } from "@/components/plaid/sync-now-button";
 
 function TransactionIcon({ type }: { type: string }) {
   switch (type) {
@@ -51,12 +52,18 @@ async function TransactionsPageContent() {
       accountName: accounts.name,
       accountOwner: accounts.owner,
       accountType: accounts.accountType,
+      dataSource: transactions.dataSource,
     })
     .from(transactions)
     .innerJoin(accounts, eq(transactions.accountId, accounts.id))
     .where(eq(accounts.clerkId, userId))
     .orderBy(desc(transactions.date))
     .limit(500);
+
+  const coverage =
+    txns.length > 0
+      ? { earliest: txns[txns.length - 1].date, latest: txns[0].date }
+      : null;
 
   // Summary stats
   const totalBuys = txns
@@ -74,11 +81,27 @@ async function TransactionsPageContent() {
 
   return (
     <div className="space-y-6">
-      <div>
-        <h1 className="text-2xl font-bold tracking-tight">Transactions</h1>
-        <p className="text-muted-foreground">
-          Transaction history across all household accounts
-        </p>
+      <div className="flex flex-wrap items-start justify-between gap-4">
+        <div>
+          <h1 className="text-2xl font-bold tracking-tight">Transactions</h1>
+          <p className="text-muted-foreground">
+            Buys, sales, dividends and fees across all household accounts
+          </p>
+          {/* The window, stated. Plaid returns at most two years before an
+              institution was linked, so a reader looking for a purchase from
+              2019 should be told why it is not here rather than conclude it
+              never happened. */}
+          {coverage && (
+            <p className="mt-1 text-xs text-muted-foreground">
+              {formatDate(coverage.earliest)} to {formatDate(coverage.latest)} ·{" "}
+              {txns.length}
+              {txns.length === 500 ? "+ (most recent 500)" : ""} recorded.
+              Linked institutions report up to two years before they were
+              connected.
+            </p>
+          )}
+        </div>
+        <SyncNowButton className="shrink-0" />
       </div>
 
       {txns.length > 0 && (
@@ -135,13 +158,22 @@ async function TransactionsPageContent() {
       )}
 
       {txns.length === 0 ? (
-        <div className="flex h-[300px] flex-col items-center justify-center rounded-lg border border-dashed text-center">
-          <p className="text-muted-foreground font-medium">Transaction tracking coming soon</p>
-          <p className="text-sm text-muted-foreground mt-2 max-w-md">
-            Transaction history will be available when Plaid transaction syncing
-            is fully implemented. For now, use the Holdings and Dashboard pages
-            to track your portfolio.
+        <div className="flex min-h-[260px] flex-col items-center justify-center rounded-lg border border-dashed p-8 text-center">
+          <p className="font-medium">No transactions recorded yet</p>
+          {/* This used to read "coming soon ... when Plaid transaction
+              syncing is fully implemented". It is implemented; what is
+              actually true is that nothing has been pulled yet, or that the
+              institutions reported nothing. Those are different and the
+              reader can act on the first. */}
+          <p className="mt-2 max-w-md text-sm text-muted-foreground">
+            Sync pulls buys, sales, dividends and fees from each linked
+            institution, going back up to two years before it was connected.
+            Employer plan record-keepers often report none — the sync says so
+            per institution rather than leaving you to guess.
           </p>
+          <div className="mt-5">
+            <SyncNowButton />
+          </div>
         </div>
       ) : (
         <div className="rounded-lg border overflow-x-auto">
@@ -152,6 +184,8 @@ async function TransactionsPageContent() {
                 <TableHead>Date</TableHead>
                 <TableHead>Type</TableHead>
                 <TableHead>Ticker</TableHead>
+                <TableHead className="hidden lg:table-cell text-right">Shares</TableHead>
+                <TableHead className="hidden lg:table-cell text-right">Price</TableHead>
                 <TableHead className="text-right">Amount</TableHead>
                 <TableHead className="hidden sm:table-cell">Account</TableHead>
                 <TableHead className="hidden sm:table-cell">Owner</TableHead>
@@ -177,7 +211,15 @@ async function TransactionsPageContent() {
                   <TableCell className="font-mono font-medium">
                     {txn.ticker || "—"}
                   </TableCell>
-                  <TableCell className="text-right font-mono">
+                  <TableCell className="hidden lg:table-cell text-right font-mono text-muted-foreground tabular-nums">
+                    {txn.shares === null ? "—" : Number(txn.shares).toFixed(4)}
+                  </TableCell>
+                  <TableCell className="hidden lg:table-cell text-right font-mono text-muted-foreground tabular-nums">
+                    {txn.pricePerShare === null
+                      ? "—"
+                      : formatCurrency(Number(txn.pricePerShare))}
+                  </TableCell>
+                  <TableCell className="text-right font-mono tabular-nums">
                     {formatCurrency(Number(txn.amount))}
                   </TableCell>
                   <TableCell className="hidden sm:table-cell text-muted-foreground">
