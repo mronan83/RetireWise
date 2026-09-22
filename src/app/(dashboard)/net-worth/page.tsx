@@ -29,7 +29,7 @@ export default async function NetWorthPage() {
 }
 
 async function NetWorthPageContent() {
-  const { dataClerkId: userId } = await getAuthContext();
+  const { dataClerkId: userId, isDemo } = await getAuthContext();
 
   const db = getDb();
   const [holdings, properties, cash, debtsList, vehiclesList, nwSnapshots, itemHistoryMap] = await Promise.all([
@@ -45,11 +45,28 @@ async function NetWorthPageContent() {
   // Convert Map to plain object for client component props
   const historyRecord = Object.fromEntries(itemHistoryMap);
 
-  // Seed today's snapshot if none exists for today (first visit of the day)
+  /**
+   * Seed today's point if the nightly cron has not written one yet.
+   *
+   * Awaited. Started and abandoned, the write raced the response: the render
+   * finished, the function was torn down, and the insert never landed — so
+   * the chart's last point stayed on yesterday while the card beside it read
+   * today, which looks exactly like the two disagreeing. One insert, at most
+   * once a day.
+   *
+   * Not in demo mode: that household is read-only and, since the demo is
+   * public, every visitor would otherwise trigger a write against it.
+   */
   const today = new Date().toISOString().split("T")[0];
   const hasTodaySnapshot = nwSnapshots.some((s) => s.snapshotDate === today);
-  if (!hasTodaySnapshot) {
-    snapshotNetWorth(userId).catch(() => {});
+  if (!hasTodaySnapshot && !isDemo) {
+    try {
+      await snapshotNetWorth(userId);
+    } catch (e) {
+      // Swallowed silently before, so a chart stuck a day behind had no
+      // trace anywhere explaining why.
+      console.error(`Net worth snapshot failed for ${userId}:`, e);
+    }
   }
 
   /**
