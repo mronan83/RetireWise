@@ -93,6 +93,12 @@ jobs:
       # annual figure.
       - run: pnpm exec tsx scripts/test-dividends.ts
 
+      # Goal progress measured over each goal's OWN linked accounts. Every
+      # goal used to show portfolioValue / target, clamped to 100% — so a
+      # household carrying $78,116.19 of debt was shown a completed
+      # "pay off all debt" goal.
+      - run: pnpm exec tsx scripts/test-goals.ts
+
   mobile:
     name: Mobile layout
     runs-on: ubuntu-latest

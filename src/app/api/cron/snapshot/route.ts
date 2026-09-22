@@ -190,27 +190,32 @@ async function handleGet(request: Request) {
       console.error(`Alert generation failed for ${clerkId}:`, e);
     }
 
-    // Step 5: Update goal progress
+    /**
+     * Step 5: Close goals whose linked accounts have reached the target.
+     *
+     * This step used to write the household's portfolio value into
+     * `currentAmount` on EVERY goal and set `isCompleted` from it, so a goal
+     * to clear $31,200 of debt completed itself the moment the portfolio
+     * passed $31,200 — while the household carried $78,116.19. Progress is
+     * now derived from each goal's own links and nothing is written here but
+     * the closure.
+     *
+     * Closure is latched once and never cleared: a payoff goal that re-opened
+     * when a card was charged would erase the fact that it was ever met, and
+     * debt accrued afterwards belongs to a new goal.
+     */
     try {
       const { goals: goalsTable } = await import("@/lib/db/schema");
-      const userGoals = await db
-        .select()
-        .from(goalsTable)
-        .where(eq(goalsTable.clerkId, clerkId));
+      const { findGoalsToClose } = await import("@/lib/queries/goals");
 
-      for (const goal of userGoals) {
-        const isCompleted = totalValue >= Number(goal.targetAmount);
+      for (const goal of await findGoalsToClose(clerkId)) {
         await db
           .update(goalsTable)
-          .set({
-            currentAmount: String(totalValue),
-            isCompleted,
-            updatedAt: new Date(),
-          })
+          .set({ closedAt: new Date(), updatedAt: new Date() })
           .where(eq(goalsTable.id, goal.id));
       }
     } catch (e) {
-      console.error(`Goal update failed for ${clerkId}:`, e);
+      console.error(`Goal close check failed for ${clerkId}:`, e);
     }
   }
 

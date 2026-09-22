@@ -13,11 +13,12 @@ import { calculatePortfolioSummary, calculateGainLoss } from "@/lib/utils/calcul
 import { gainLossFor, missingBasisNote, rollupBasis } from "@/lib/utils/cost-basis";
 import { RefreshPricesButton } from "@/components/dashboard/refresh-prices-button";
 import { GoalsPanel } from "@/components/dashboard/goals-panel";
+import { getGoalsWithProgress, getLinkableItems } from "@/lib/queries/goals";
 import { ExportButtons } from "@/components/dashboard/export-buttons";
 import { NetWorthCard } from "@/components/dashboard/net-worth-card";
 import { eq } from "drizzle-orm";
 import { getDb } from "@/lib/db";
-import { goals as goalsTable, realEstate, cashReserves, debts, vehicles } from "@/lib/db/schema";
+import { realEstate, cashReserves, debts, vehicles } from "@/lib/db/schema";
 import { withHousehold } from "@/lib/auth-helpers";
 import { redirect } from "next/navigation";
 import { getOnboardingState } from "@/lib/onboarding";
@@ -34,11 +35,15 @@ async function DashboardContentScoped() {
   if (setup.empty) redirect("/onboarding");
 
   const db = getDb();
-  const [accountsList, holdingsWithAccounts, snapshots, userGoals, properties, cashAccounts, debtsList, vehiclesList, periodReturnsMap] = await Promise.all([
+  const [accountsList, holdingsWithAccounts, snapshots, userGoals, linkableItems, properties, cashAccounts, debtsList, vehiclesList, periodReturnsMap] = await Promise.all([
     getAccountsWithFreshness(userId),
     getHoldingsByClerkId(userId),
     getSnapshots(userId, 90),
-    db.select().from(goalsTable).where(eq(goalsTable.clerkId, userId)),
+    // Each goal rolled up over its OWN linked accounts. It used to be the raw
+    // rows, with the panel dividing the whole portfolio by each target — so
+    // every goal drew the same bar.
+    getGoalsWithProgress(userId),
+    getLinkableItems(userId),
     db.select().from(realEstate).where(eq(realEstate.clerkId, userId)),
     db.select().from(cashReserves).where(eq(cashReserves.clerkId, userId)),
     db.select().from(debts).where(eq(debts.clerkId, userId)),
@@ -161,7 +166,7 @@ async function DashboardContentScoped() {
         <PerformanceChart data={snapshotChartData} />
       </div>
 
-      <GoalsPanel goals={userGoals} portfolioValue={summary.totalValue} />
+      <GoalsPanel goals={userGoals} linkable={linkableItems} />
 
       {accountsList.length > 0 && (
         <div>

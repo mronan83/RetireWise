@@ -236,10 +236,10 @@ async function main(sql: postgres.Sql) {
   console.log("  Created 3 cash accounts");
 
   // 9. Debts
-  await db.insert(schema.debts).values([
+  const demoDebts = await db.insert(schema.debts).values([
     { clerkId: DEMO_ID, owner: "self", name: "Auto Loan - RAV4", debtType: "auto_loan", originalBalance: "32000", currentBalance: "18400", interestRate: "4.9", monthlyPayment: "580", payoffDate: "2028-06-01" },
     { clerkId: DEMO_ID, owner: "spouse", name: "Student Loan", debtType: "student_loan", originalBalance: "45000", currentBalance: "12800", interestRate: "3.5", monthlyPayment: "420", payoffDate: "2029-03-01" },
-  ]);
+  ]).returning({ id: schema.debts.id, balance: schema.debts.currentBalance });
   console.log("  Created 2 debts");
 
   // 10. Vehicles
@@ -267,19 +267,42 @@ async function main(sql: postgres.Sql) {
   console.log("  Created 3 vehicles");
 
   // 11. Goals
-  await db.insert(schema.goals).values([
+  //
+  // Each one is linked to the accounts it is actually about. A goal with no
+  // links has nothing to measure — which is the whole point of the change:
+  // progress used to be portfolioValue / targetAmount for every goal alike,
+  // so "Pay off all debt" completed itself once the portfolio passed $31,200.
+  const goalBaselineDate = new Date().toISOString().split("T")[0];
+  const [retireGoal, debtGoal] = await db.insert(schema.goals).values([
     {
       clerkId: DEMO_ID, name: "Retire by 62", targetAmount: "2500000",
-      currentAmount: String(Math.round(totalPortfolio)), targetDate: "2050-01-01",
-      isCompleted: false,
+      direction: "accumulate", baselineDate: goalBaselineDate, targetDate: "2050-01-01",
     },
     {
-      clerkId: DEMO_ID, name: "Pay off all debt", targetAmount: "31200",
-      currentAmount: "0", targetDate: "2029-06-01",
-      isCompleted: false,
+      clerkId: DEMO_ID, name: "Pay off all debt", targetAmount: "0",
+      direction: "reduce", baselineDate: goalBaselineDate, targetDate: "2029-06-01",
     },
+  ]).returning({ id: schema.goals.id });
+
+  // The retirement goal measures up from nothing toward the target, so each
+  // account's baseline is zero and progress is the portfolio against $2.5m.
+  const demoAccountIds = await db
+    .select({ id: schema.accounts.id })
+    .from(schema.accounts)
+    .where(eq(schema.accounts.clerkId, DEMO_ID));
+
+  await db.insert(schema.goalLinks).values([
+    ...demoAccountIds.map((a) => ({
+      clerkId: DEMO_ID, goalId: retireGoal.id,
+      itemType: "account" as const, itemId: a.id, baselineAmount: "0",
+    })),
+    // The payoff goal's basis is what these debts owed the day it was made.
+    ...demoDebts.map((d) => ({
+      clerkId: DEMO_ID, goalId: debtGoal.id,
+      itemType: "debt" as const, itemId: d.id, baselineAmount: d.balance,
+    })),
   ]);
-  console.log("  Created 2 goals");
+  console.log("  Created 2 goals with linked accounts");
 
   // 12. Alerts
   await db.insert(schema.alerts).values([

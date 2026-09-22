@@ -33,7 +33,8 @@
     "test:performance": "tsx scripts/test-performance.ts",
     "test:investment-transactions": "tsx scripts/test-investment-transactions.ts",
     "test:analysis-cards": "tsx scripts/test-analysis-cards.ts",
-    "test:dividends": "tsx scripts/test-dividends.ts"
+    "test:dividends": "tsx scripts/test-dividends.ts",
+    "test:goals": "tsx scripts/test-goals.ts"
   },
   "dependencies": {
     "@ai-sdk/anthropic": "^3.0.71",

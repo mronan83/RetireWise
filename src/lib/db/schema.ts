@@ -30,6 +30,20 @@ export const accountTypeEnum = pgEnum("account_type", [
   "other",
 ]);
 
+export const goalDirectionEnum = pgEnum("goal_direction", [
+  "accumulate",
+  "reduce",
+]);
+
+/** What a goal can be linked to. Mirrors net_worth_item_history's addressing. */
+export const goalItemTypeEnum = pgEnum("goal_item_type", [
+  "account",
+  "debt",
+  "cash_reserve",
+  "real_estate",
+  "vehicle",
+]);
+
 export const taxTreatmentEnum = pgEnum("tax_treatment", [
   "tax_deferred",
   "tax_free",
@@ -574,13 +588,76 @@ export const goals = pgTable("goals", {
   clerkId: text("clerk_id").notNull(),
   name: text("name").notNull(),
   targetAmount: decimal("target_amount", { precision: 20, scale: 2 }).notNull(),
-  currentAmount: decimal("current_amount", { precision: 20, scale: 2 }).default("0"),
+  /**
+   * Which way progress counts.
+   *
+   * "reduce" is a payoff goal: the basis is what the linked accounts owed on
+   * the day the goal was made, and progress is how far that sum has fallen.
+   * "accumulate" is the original kind, measured up toward a target.
+   */
+  direction: goalDirectionEnum("direction").notNull().default("accumulate"),
+  /** The day the basis was struck. It is fixed from here. */
+  baselineDate: date("baseline_date"),
+  /**
+   * Latched when the goal is first reported satisfied, never cleared.
+   *
+   * Stored rather than derived on purpose. Derived, a finished payoff goal
+   * would re-open the moment a charge landed on one of its cards; the rule is
+   * that debt accrued after a goal closes belongs to a new goal.
+   */
+  closedAt: timestamp("closed_at"),
+  /**
+   * Dead. Progress is computed from goal_links and the linked items' current
+   * values — see src/lib/goals/progress.ts. This column held the household's
+   * whole portfolio value, written into every goal by the snapshot cron
+   * regardless of what the goal was about.
+   */
+  currentAmount: decimal("current_amount", { precision: 20, scale: 2 }),
   targetDate: date("target_date"),
   category: text("category").default("retirement"),
+  /** Dead; superseded by closedAt, which records when rather than whether. */
   isCompleted: boolean("is_completed").default(false),
   createdAt: timestamp("created_at").defaultNow().notNull(),
   updatedAt: timestamp("updated_at").defaultNow().notNull(),
 });
+
+/**
+ * The accounts a goal is measured over, and what each owed when it joined.
+ *
+ * Polymorphic by item_type + item_id, the same addressing
+ * net_worth_item_history already uses, so a goal can span debts, investment
+ * accounts and cash without a column per kind.
+ *
+ * baseline_amount is the whole mechanism: the goal's basis is the SUM of
+ * these, fixed at creation. Stored per link rather than as one scalar on the
+ * goal so the panel can say which account moved, and so an account joining
+ * later is visible rather than absorbed.
+ *
+ * A link with a baseline of zero is meaningful, not a no-op: a card sitting
+ * at zero inside a debt-elimination goal is a commitment that it stays there.
+ * It adds nothing to the basis and full weight to the current sum, so
+ * charging it is real backwards movement.
+ */
+export const goalLinks = pgTable(
+  "goal_links",
+  {
+    id: uuid("id").defaultRandom().primaryKey(),
+    clerkId: text("clerk_id").notNull(),
+    goalId: uuid("goal_id")
+      .references(() => goals.id, { onDelete: "cascade" })
+      .notNull(),
+    itemType: goalItemTypeEnum("item_type").notNull(),
+    itemId: uuid("item_id").notNull(),
+    baselineAmount: decimal("baseline_amount", { precision: 20, scale: 2 }).notNull(),
+    linkedAt: timestamp("linked_at").defaultNow().notNull(),
+    createdAt: timestamp("created_at").defaultNow().notNull(),
+  },
+  (table) => [
+    uniqueIndex("goal_links_unique_idx").on(table.goalId, table.itemType, table.itemId),
+    index("goal_links_goal_idx").on(table.goalId),
+    index("goal_links_clerk_idx").on(table.clerkId),
+  ]
+);
 
 export const contributions = pgTable("contributions", {
   id: uuid("id").defaultRandom().primaryKey(),
