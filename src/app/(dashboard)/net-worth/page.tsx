@@ -291,10 +291,16 @@ async function NetWorthPageContent() {
           </CardHeader>
           <CardContent>
             <p className="text-lg font-bold font-mono text-red-500">-{formatCurrency(debtTotal)}</p>
+            {/* The split, because the headline jumped from $12,836.07 to
+                $282,545.22 and the difference is the four loans secured
+                against the house and the vehicles above. */}
+            {securedDebt > 0 && (
+              <p className="text-xs text-muted-foreground">
+                {formatCurrency(securedDebt)} secured · {formatCurrency(unsecuredDebt)} unsecured
+              </p>
+            )}
             <p className="text-xs text-muted-foreground">
-              {securedDebt > 0
-                ? `${formatCurrency(securedDebt)} secured · ${formatCurrency(unsecuredDebt)} unsecured`
-                : `${formatCurrency(monthlyDebtPayments)}/mo payments`}
+              {formatCurrency(monthlyDebtPayments)}/mo payments
             </p>
           </CardContent>
         </Card>
