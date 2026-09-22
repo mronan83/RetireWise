@@ -143,6 +143,29 @@ function tokens(name: string): Set<string> {
   );
 }
 
+/**
+ * Whether two records look like the same borrowing.
+ *
+ * Evidence, not category. The debts page used to pair any synced debt with
+ * any hand-entered debt of the same `debt_type`, so a $155,589.18 primary
+ * mortgage and a $34,114.38 second lien were offered as duplicates of each
+ * other for being mortgages — a prompt that could not be answered, because
+ * they are both real, and so came back every visit.
+ */
+export function looksLikeSameLoan(
+  a: { name: string; balance: number },
+  b: { name: string; balance: number }
+): { same: true; reason: string } | { same: false } {
+  if (Math.abs(a.balance - b.balance) < 0.01) {
+    return { same: true, reason: "the balances match to the cent" };
+  }
+  const shared = sharedTokens(a.name, b.name);
+  if (shared.length >= 2) {
+    return { same: true, reason: `both name ${shared.slice(0, 3).join(", ")}` };
+  }
+  return { same: false };
+}
+
 function sharedTokens(a: string, b: string): string[] {
   const t = tokens(b);
   return [...tokens(a)].filter((x) => t.has(x));
@@ -234,9 +257,11 @@ export function composeNetWorth(input: {
     for (const l of unsecuredList) {
       if (!PLAUSIBLE[p.kind].includes(l.debtType)) continue;
 
-      const exact = Math.abs(n(l.balance) - p.embeddedLoan) < 0.01;
-      const shared = sharedTokens(p.name, l.name);
-      if (!exact && shared.length < 2) continue;
+      const verdict = looksLikeSameLoan(
+        { name: p.name, balance: p.embeddedLoan },
+        { name: l.name, balance: n(l.balance) }
+      );
+      if (!verdict.same) continue;
 
       suspectedDuplicates.push({
         assetKind: p.kind,
@@ -246,9 +271,7 @@ export function composeNetWorth(input: {
         debtId: l.id,
         debtName: l.name,
         debtBalance: n(l.balance),
-        reason: exact
-          ? "the balances match to the cent"
-          : `both name ${shared.slice(0, 3).join(", ")}`,
+        reason: verdict.reason,
         // The typed figure is what would stop being subtracted a second time.
         overcount: p.embeddedLoan,
       });

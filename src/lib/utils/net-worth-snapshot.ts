@@ -8,6 +8,7 @@ import {
   netWorthSnapshots,
   portfolioSnapshots,
 } from "../db/schema";
+import { composeNetWorth } from "../net-worth/compose";
 
 /**
  * Upsert a net worth snapshot for today.
@@ -41,19 +42,57 @@ export async function snapshotNetWorth(
   const investments =
     investmentValue ?? Number(latestPortfolio?.[0]?.totalValue ?? 0);
 
-  const realEstateEquity = properties.reduce(
-    (s, p) => s + Number(p.estimatedValue) - Number(p.mortgageBalance || 0),
-    0
-  );
-  const cashTotal = cash.reduce((s, c) => s + Number(c.balance), 0);
-  const vehicleEquity = vehiclesList.reduce(
-    (s, v) =>
-      s + Number(v.estimatedValue) - (v.hasLoan ? Number(v.loanBalance || 0) : 0),
-    0
-  );
-  const totalDebts = debtsList.reduce((s, d) => s + Number(d.currentBalance), 0);
-  const totalAssets = investments + realEstateEquity + cashTotal + vehicleEquity;
-  const netWorth = totalAssets - totalDebts;
+  /**
+   * Composed in src/lib/net-worth/compose.ts, the same way the pages do it.
+   *
+   * This block summed net worth in its own words — the fourth place that did,
+   * and the one that outlived the other three being consolidated. It netted
+   * each asset's own loan figure out of its equity and then subtracted the
+   * whole debts table on top, so the day a bank connection brought in loans
+   * already typed onto the assets, the chart recorded a fall of $236,191.73
+   * that never happened while the card beside it read correctly.
+   */
+  const composed = composeNetWorth({
+    investments,
+    cash: cash.reduce((s, c) => s + Number(c.balance), 0),
+    assets: [
+      ...properties.map((p) => ({
+        kind: "real_estate" as const,
+        id: p.id,
+        name: p.name,
+        value: Number(p.estimatedValue),
+        embeddedLoan: Number(p.mortgageBalance ?? 0),
+      })),
+      ...vehiclesList.map((v) => ({
+        kind: "vehicle" as const,
+        id: v.id,
+        name: v.name,
+        value: Number(v.estimatedValue),
+        embeddedLoan: v.hasLoan ? Number(v.loanBalance ?? 0) : 0,
+      })),
+    ],
+    liabilities: debtsList.map((d) => ({
+      id: d.id,
+      name: d.name,
+      balance: Number(d.currentBalance),
+      debtType: d.debtType,
+      securedByType: d.securedByType,
+      securedById: d.securedById,
+      fromPlaid: d.plaidAccountId !== null,
+    })),
+  });
+
+  const realEstateEquity = composed.assets
+    .filter((a) => a.kind === "real_estate")
+    .reduce((s, a) => s + a.equity, 0);
+  const vehicleEquity = composed.assets
+    .filter((a) => a.kind === "vehicle")
+    .reduce((s, a) => s + a.equity, 0);
+  const cashTotal = composed.cash;
+  // Only what is not already netted out of an asset's equity above.
+  const totalDebts = composed.unsecured;
+  const totalAssets = composed.totalAssets;
+  const netWorth = composed.netWorth;
 
   // Delete any existing snapshot for today, then insert fresh
   await db

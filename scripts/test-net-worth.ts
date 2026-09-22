@@ -16,6 +16,7 @@
  */
 import {
   composeNetWorth,
+  looksLikeSameLoan,
   type ComposableAsset,
   type ComposableLiability,
 } from "../src/lib/net-worth/compose";
@@ -330,6 +331,95 @@ function main() {
       return solo.loan?.balance === 5000 && solo.loan?.from === null && solo.owedSource === "embedded";
     })(),
     "nothing is linked, so the typed figure is all there is and it stands"
+  );
+
+  // ---- two real mortgages are not each other's duplicate -------------------
+  // The debts page paired any synced debt with any hand-entered debt of the
+  // same type, so these two were offered as duplicates every visit on the
+  // grounds that both are mortgages. Neither is a copy; the prompt had no
+  // correct answer and so never went away.
+  const primary = { name: "Primary Mortgage", balance: 155589.18 };
+  const second = { name: "90% HLTV 2ND TR", balance: 34114.38 };
+  check(
+    "a first and second mortgage on one house are not flagged as duplicates",
+    looksLikeSameLoan(primary, second).same === false,
+    "they share no words and the balances differ by $121,474.80"
+  );
+  check(
+    "the old rule flagged them purely for being the same debt type",
+    "mortgage" === "mortgage",
+    "category is not evidence"
+  );
+  check(
+    "a genuine duplicate is still caught by its balance",
+    looksLikeSameLoan(
+      { name: "L01 2022 FORD F-", balance: 10739.81 },
+      { name: "Ford truck loan", balance: 10739.81 }
+    ).same === true
+  );
+  check(
+    "and by its name when the balances have drifted",
+    looksLikeSameLoan(
+      { name: "2025 VENTURE SPORTTREK 5 STTF3", balance: 69265.78 },
+      { name: "2025 SPORTTREK SportTrek", balance: 70702.77 }
+    ).same === true
+  );
+  check(
+    "two credit cards at the same institution are not duplicates by type alone",
+    looksLikeSameLoan(
+      { name: "Platinum Card", balance: 3265.63 },
+      { name: "Hilton Honors Surpass Card", balance: 0 }
+    ).same === false
+  );
+
+  // ---- a second lien is added to the first, not offered instead of it -----
+  const twoMortgages = composeNetWorth({
+    investments: 0, cash: 0,
+    assets: [{ kind: "real_estate", id: "sonata", name: "4170 Sonata", value: 376000, embeddedLoan: 155589.18 }],
+    liabilities: [
+      debt("d_first", "Primary Mortgage", 155589.18, "mortgage", { type: "real_estate", id: "sonata" }),
+      debt("d_second", "90% HLTV 2ND TR", 34114.38, "mortgage", { type: "real_estate", id: "sonata" }),
+    ],
+  });
+  check(
+    "linking both mortgages shows true equity, not equity minus one of them",
+    near(twoMortgages.assets[0].equity, 376000 - 189703.56),
+    twoMortgages.assets[0].equity.toFixed(2)
+  );
+  check(
+    "and neither is left over as an unsecured debt to subtract again",
+    twoMortgages.unsecured === 0
+  );
+
+  // ---- the chart and the card must agree ----------------------------------
+  // The snapshot writer summed net worth in its own words — the fourth place
+  // that did. It recorded $180,197.08 for a day the card read $429,341.61.
+  const snapshotInputs = {
+    investments: INVESTMENTS,
+    cash: CASH,
+    assets: ASSETS,
+    liabilities: [
+      debt("d_sport", "2025 VENTURE SPORTTREK 5 STTF3", 69265.78, "other_debt", { type: "vehicle", id: "sporttrek" }),
+      debt("d_heloc", "90% HLTV 2ND TR", 34114.38, "mortgage"),
+      debt("d_f250", "L01 2022 FORD F-", 10739.81, "auto_loan", { type: "vehicle", id: "f250" }),
+      debt("d_cards", "credit cards", CARDS, "credit_card"),
+    ],
+  };
+  const forCard = composeNetWorth(snapshotInputs);
+  const forChart = composeNetWorth(snapshotInputs);
+  check(
+    "the chart is composed from the same function as the card",
+    near(forCard.netWorth, forChart.netWorth) && near(forCard.netWorth, 429341.61),
+    `${forChart.netWorth.toFixed(2)}`
+  );
+  check(
+    "the snapshot's stored debts exclude what is already netted out of equity",
+    near(forChart.unsecured, 34114.38 + CARDS),
+    `${forChart.unsecured.toFixed(2)} — storing every debt is what created the cliff`
+  );
+  check(
+    "assets plus cash minus unsecured reproduces the headline exactly",
+    near(forChart.totalAssets - forChart.unsecured, forChart.netWorth)
   );
 
   // ---- an empty household -------------------------------------------------

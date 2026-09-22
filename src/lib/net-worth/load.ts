@@ -16,7 +16,15 @@ import {
  * agreed, which is the only reason the double-counted car loans looked like a
  * real drop rather than a bug in one of them.
  */
-export async function loadNetWorth(clerkId: string): Promise<NetWorth> {
+export async function loadNetWorth(
+  clerkId: string,
+  /**
+   * The portfolio total, when the caller already has it. The snapshot cron
+   * computes it while writing the day's portfolio row and passing it avoids
+   * summing the holdings a second time.
+   */
+  investmentValue?: number
+): Promise<NetWorth> {
   const db = getDb();
 
   const [investmentRows, cashRows, propertyRows, vehicleRows, debtRows] = await Promise.all([
@@ -66,7 +74,7 @@ export async function loadNetWorth(clerkId: string): Promise<NetWorth> {
   }));
 
   return composeNetWorth({
-    investments: Number(investmentRows[0]?.total ?? 0),
+    investments: investmentValue ?? Number(investmentRows[0]?.total ?? 0),
     cash: cashRows.reduce((s, c) => s + Number(c.balance), 0),
     assets,
     liabilities,

@@ -11,6 +11,7 @@ import { PlaidLinkButton } from "@/components/plaid/plaid-link-button";
 import { DuplicateCashReview, type DuplicatePair } from "./duplicate-cash-review";
 import { SecuredDebtReview } from "./secured-debt-review";
 import { loadNetWorth } from "@/lib/net-worth/load";
+import { looksLikeSameLoan } from "@/lib/net-worth/compose";
 import { normalizeName } from "@/lib/plaid/sync";
 import {
   TrendingUp,
@@ -124,21 +125,40 @@ async function NetWorthPageContent() {
             institution: linked.institution ?? "",
           }))
       ),
+    /**
+     * Debts that look like the same borrowing recorded twice.
+     *
+     * This used to pair any synced debt with any hand-entered debt of the
+     * same `debt_type`. A $155,589.18 primary mortgage and a $34,114.38
+     * second lien were therefore offered as duplicates of each other, every
+     * visit, on the grounds that both are mortgages — a prompt with no
+     * correct answer, since neither is a copy of the other.
+     *
+     * It now needs evidence: balances that agree to the cent, or names with
+     * words in common. Same rule the asset-loan check uses.
+     */
     ...debtsList
-      .filter((d) => d.plaidAccountId !== null)
+      .filter((d) => d.plaidAccountId !== null && !d.securedById)
       .flatMap((linked) =>
         debtsList
-          .filter((m) => m.plaidAccountId === null && m.debtType === linked.debtType)
-          .map<DuplicatePair>((m) => ({
-            kind: "debt",
-            linkedId: linked.id,
-            linkedName: linked.name,
-            linkedValue: Number(linked.currentBalance),
-            manualId: m.id,
-            manualName: m.name,
-            manualValue: Number(m.currentBalance),
-            institution: linked.name,
-          }))
+          .filter((m) => m.plaidAccountId === null && !m.securedById && m.debtType === linked.debtType)
+          .flatMap<DuplicatePair>((m) => {
+            const verdict = looksLikeSameLoan(
+              { name: linked.name, balance: Number(linked.currentBalance) },
+              { name: m.name, balance: Number(m.currentBalance) }
+            );
+            if (!verdict.same) return [];
+            return [{
+              kind: "debt",
+              linkedId: linked.id,
+              linkedName: linked.name,
+              linkedValue: Number(linked.currentBalance),
+              manualId: m.id,
+              manualName: m.name,
+              manualValue: Number(m.currentBalance),
+              institution: linked.name,
+            }];
+          })
       ),
   ];
 
