@@ -77,6 +77,17 @@ export type AssetLoanView = {
   } | null;
 };
 
+/**
+ * Which list a section renders is decided by the section, not by which arrays
+ * the caller happened to fill.
+ *
+ * It used to be decided by array length alone, so every caller had to pass
+ * `[]` for the three lists its section does not show. That convention is what
+ * hid the debt form's "secured against" picker: the debts section was given
+ * `properties={[]} vehicles={[]}` to keep those rows out, the picker's own
+ * guard saw no assets to offer, and the linking feature could not be reached
+ * from anywhere in the app.
+ */
 type Props = {
   section: "real_estate" | "cash" | "vehicle" | "debt";
   properties: RealEstateItem[];
@@ -195,9 +206,9 @@ export function NetWorthForms({ section, properties, cash, debts, vehicles, asse
     );
 
   return (
-    <>
+    <div data-testid="nw-section" data-section={section} className="contents">
       {/* Real Estate rows */}
-      {properties.length > 0 && (
+      {section === "real_estate" && properties.length > 0 && (
         <div className="space-y-2 mb-4">
           {properties.map((p) => {
             const history = historyMap.get(p.id) || [];
@@ -269,7 +280,7 @@ export function NetWorthForms({ section, properties, cash, debts, vehicles, asse
       )}
 
       {/* Cash rows */}
-      {cash.length > 0 && (
+      {section === "cash" && cash.length > 0 && (
         <div className="space-y-2 mb-4">
           {cash.map((c) => {
             const history = historyMap.get(c.id) || [];
@@ -321,7 +332,7 @@ export function NetWorthForms({ section, properties, cash, debts, vehicles, asse
       )}
 
       {/* Vehicle rows */}
-      {vehicles.length > 0 && (
+      {section === "vehicle" && vehicles.length > 0 && (
         <div className="space-y-2 mb-4">
           {vehicles.map((v) => {
             const equity = assetLoans[v.id]?.equity ?? Number(v.estimatedValue);
@@ -395,7 +406,7 @@ export function NetWorthForms({ section, properties, cash, debts, vehicles, asse
       )}
 
       {/* Debt rows */}
-      {debts.length > 0 && (
+      {section === "debt" && debts.length > 0 && (
         <div className="space-y-2 mb-4">
           {debts.map((d) => {
             const history = historyMap.get(d.id) || [];
@@ -517,7 +528,7 @@ export function NetWorthForms({ section, properties, cash, debts, vehicles, asse
           )}
         </DialogContent>
       </Dialog>
-    </>
+    </div>
   );
 }
 

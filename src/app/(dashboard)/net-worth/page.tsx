@@ -404,13 +404,16 @@ async function NetWorthPageContent() {
           </CardTitle>
         </CardHeader>
         <CardContent>
+          {/* The debt form offers "secured against", so it needs the assets
+              to offer. Passed empty, the picker's own guard hid it and the
+              linking feature could not be reached from anywhere in the app. */}
           <NetWorthForms
             section="debt"
-            properties={[]}
+            properties={properties}
             cash={[]}
             debts={debtsList}
             assetLoans={assetLoans}
-            vehicles={[]}
+            vehicles={vehiclesList}
             historyRecord={historyRecord}
           />
         </CardContent>
