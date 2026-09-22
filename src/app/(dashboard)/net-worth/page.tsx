@@ -85,6 +85,16 @@ async function NetWorthPageContent() {
   const netWorth = nw.netWorth;
   const monthlyDebtPayments = debtsList.reduce((s, d) => s + Number(d.monthlyPayment), 0);
 
+  // What each asset owes and is worth, keyed for the cards. They used to read
+  // the asset's own loan column, which goes stale the moment a linked debt
+  // syncs a new balance.
+  const assetLoans = Object.fromEntries(
+    nw.assets.map((a) => [
+      a.id,
+      { owed: a.owed, equity: a.equity, owedSource: a.owedSource, loan: a.loan },
+    ])
+  );
+
   // Shown so it is obvious which figures keep themselves current and which
   // are only as fresh as the last time someone typed them.
   const linkedCash = cash.filter((c) => c.plaidAccountId !== null).length;
@@ -299,6 +309,7 @@ async function NetWorthPageContent() {
             properties={properties}
             cash={[]}
             debts={[]}
+            assetLoans={assetLoans}
             vehicles={[]}
             historyRecord={historyRecord}
           />
@@ -319,6 +330,7 @@ async function NetWorthPageContent() {
             properties={[]}
             cash={cash}
             debts={[]}
+            assetLoans={assetLoans}
             vehicles={[]}
             historyRecord={historyRecord}
           />
@@ -339,6 +351,7 @@ async function NetWorthPageContent() {
             properties={[]}
             cash={[]}
             debts={[]}
+            assetLoans={assetLoans}
             vehicles={vehiclesList}
             historyRecord={historyRecord}
           />
@@ -359,6 +372,7 @@ async function NetWorthPageContent() {
             properties={[]}
             cash={[]}
             debts={debtsList}
+            assetLoans={assetLoans}
             vehicles={[]}
             historyRecord={historyRecord}
           />

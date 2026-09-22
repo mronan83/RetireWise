@@ -38,6 +38,8 @@ export async function loadNetWorth(clerkId: string): Promise<NetWorth> {
       name: p.name,
       value: Number(p.estimatedValue),
       embeddedLoan: Number(p.mortgageBalance ?? 0),
+      embeddedRate: p.mortgageRate === null ? null : Number(p.mortgageRate),
+      embeddedPayment: p.monthlyPayment === null ? null : Number(p.monthlyPayment),
     })),
     ...vehicleRows.map<ComposableAsset>((v) => ({
       kind: "vehicle",
@@ -46,6 +48,8 @@ export async function loadNetWorth(clerkId: string): Promise<NetWorth> {
       value: Number(v.estimatedValue),
       // hasLoan false means there is no loan, whatever is left in the column.
       embeddedLoan: v.hasLoan ? Number(v.loanBalance ?? 0) : 0,
+      embeddedRate: v.loanRate === null ? null : Number(v.loanRate),
+      embeddedPayment: v.loanMonthlyPayment === null ? null : Number(v.loanMonthlyPayment),
     })),
   ];
 
@@ -57,6 +61,8 @@ export async function loadNetWorth(clerkId: string): Promise<NetWorth> {
     securedByType: d.securedByType,
     securedById: d.securedById,
     fromPlaid: d.plaidAccountId !== null,
+    rate: Number(d.interestRate),
+    monthlyPayment: Number(d.monthlyPayment),
   }));
 
   return composeNetWorth({

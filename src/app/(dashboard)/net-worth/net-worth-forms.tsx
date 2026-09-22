@@ -2,7 +2,7 @@
 
 import { useState, useActionState } from "react";
 import { useState as useLocalState } from "react";
-import { Home, PiggyBank, CreditCard, Car, ExternalLink, Search, Pencil, Trash2, TrendingUp } from "lucide-react";
+import { Home, PiggyBank, CreditCard, Car, ExternalLink, Search, Pencil, Trash2, TrendingUp, Link2 } from "lucide-react";
 import { ItemHistoryChart, type HistoryPoint } from "./item-history-chart";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -57,12 +57,34 @@ type VehicleItem = {
   purchasePrice: string | null;
 };
 
+/**
+ * What each asset actually owes, composed in src/lib/net-worth/compose.ts.
+ *
+ * Read through the linked debt rather than copied into the asset's own
+ * columns, so the card follows the synced balance without the same number
+ * living in two places — which is the arrangement that had net worth
+ * subtracting these loans twice.
+ */
+export type AssetLoanView = {
+  owed: number;
+  equity: number;
+  owedSource: "linked" | "embedded" | "none";
+  loan: {
+    balance: number;
+    rate: number | null;
+    monthlyPayment: number | null;
+    from: { id: string; name: string } | null;
+  } | null;
+};
+
 type Props = {
   section: "real_estate" | "cash" | "vehicle" | "debt";
   properties: RealEstateItem[];
   cash: CashItem[];
   debts: DebtItem[];
   vehicles: VehicleItem[];
+  /** Keyed by asset id. Absent for an asset the composer did not see. */
+  assetLoans?: Record<string, AssetLoanView>;
   historyRecord?: Record<string, HistoryPoint[]>;
 };
 
@@ -148,7 +170,7 @@ function ItemAge({
   );
 }
 
-export function NetWorthForms({ section, properties, cash, debts, vehicles, historyRecord = {} }: Props) {
+export function NetWorthForms({ section, properties, cash, debts, vehicles, assetLoans = {}, historyRecord = {} }: Props) {
   const [mode, setMode] = useState<FormMode>(null);
   const [expandedChart, setExpandedChart] = useState<string | null>(null);
   const close = () => setMode(null);
@@ -201,18 +223,29 @@ export function NetWorthForms({ section, properties, cash, debts, vehicles, hist
                     {p.address && <p className="text-xs text-muted-foreground truncate">{p.address}</p>}
                     <p className="text-xs text-muted-foreground mt-0.5">
                       Value: {formatCurrency(Number(p.estimatedValue))}
-                      {Number(p.mortgageBalance) > 0 && (
-                        <> | Mortgage: {formatCurrency(Number(p.mortgageBalance))}
-                        {p.mortgageRate && <> @ {Number(p.mortgageRate)}%</>}
-                        {p.monthlyPayment && <> | {formatCurrency(Number(p.monthlyPayment))}/mo</>}
+                      {assetLoans[p.id]?.loan && (
+                        <> | Mortgage: {formatCurrency(assetLoans[p.id].loan!.balance)}
+                        {assetLoans[p.id].loan!.rate !== null && <> @ {assetLoans[p.id].loan!.rate}%</>}
+                        {assetLoans[p.id].loan!.monthlyPayment !== null && (
+                          <> | {formatCurrency(assetLoans[p.id].loan!.monthlyPayment!)}/mo</>
+                        )}
                         </>
                       )}
                     </p>
+                    {/* Which debt the figure above is coming from, so the card
+                        says whose number it is showing rather than implying
+                        it was typed here. */}
+                    {assetLoans[p.id]?.loan?.from && (
+                      <p className="mt-0.5 flex items-center gap-1 text-[11px] text-muted-foreground">
+                        <Link2 className="h-3 w-3 shrink-0" />
+                        tracking <span className="font-mono">{assetLoans[p.id].loan!.from!.name}</span>
+                      </p>
+                    )}
                   </div>
                   <div className="flex items-center gap-2">
                     <div className="text-right">
                       <p className="font-mono font-medium text-sm text-green-500">
-                        {formatCurrency(Number(p.estimatedValue) - Number(p.mortgageBalance || 0))}
+                        {formatCurrency(assetLoans[p.id]?.equity ?? Number(p.estimatedValue))}
                       </p>
                       <p className="text-xs text-muted-foreground">equity</p>
                     </div>
@@ -291,7 +324,8 @@ export function NetWorthForms({ section, properties, cash, debts, vehicles, hist
       {vehicles.length > 0 && (
         <div className="space-y-2 mb-4">
           {vehicles.map((v) => {
-            const equity = Number(v.estimatedValue) - (v.hasLoan ? Number(v.loanBalance || 0) : 0);
+            const equity = assetLoans[v.id]?.equity ?? Number(v.estimatedValue);
+            const vLoan = assetLoans[v.id]?.loan ?? null;
             const val = getValuationUrl(v);
             const history = historyMap.get(v.id) || [];
             const hasHistory = history.length >= 2;
@@ -318,13 +352,21 @@ export function NetWorthForms({ section, properties, cash, debts, vehicles, hist
                     </p>
                     <p className="text-xs text-muted-foreground">
                       Value: {formatCurrency(Number(v.estimatedValue))}
-                      {v.hasLoan && Number(v.loanBalance) > 0 && (
-                        <> | Loan: {formatCurrency(Number(v.loanBalance))}
-                        {v.loanRate && <> @ {Number(v.loanRate)}%</>}
-                        {v.loanMonthlyPayment && <> | {formatCurrency(Number(v.loanMonthlyPayment))}/mo</>}
+                      {vLoan && (
+                        <> | Loan: {formatCurrency(vLoan.balance)}
+                        {vLoan.rate !== null && <> @ {vLoan.rate}%</>}
+                        {vLoan.monthlyPayment !== null && (
+                          <> | {formatCurrency(vLoan.monthlyPayment)}/mo</>
+                        )}
                         </>
                       )}
                     </p>
+                    {vLoan?.from && (
+                      <p className="mt-0.5 flex items-center gap-1 text-[11px] text-muted-foreground">
+                        <Link2 className="h-3 w-3 shrink-0" />
+                        tracking <span className="font-mono">{vLoan.from.name}</span>
+                      </p>
+                    )}
                   </div>
                   <div className="flex items-center gap-2">
                     <div className="text-right shrink-0">
@@ -447,6 +489,7 @@ export function NetWorthForms({ section, properties, cash, debts, vehicles, hist
           </DialogHeader>
           {mode?.type === "real_estate" && (
             <RealEstateForm
+              linkedLoan={mode.kind === "edit" ? assetLoans[mode.item.id]?.loan : undefined}
               item={mode.kind === "edit" ? mode.item : undefined}
               onSuccess={close}
             />
@@ -459,6 +502,7 @@ export function NetWorthForms({ section, properties, cash, debts, vehicles, hist
           )}
           {mode?.type === "vehicle" && (
             <VehicleForm
+              linkedLoan={mode.kind === "edit" ? assetLoans[mode.item.id]?.loan : undefined}
               item={mode.kind === "edit" ? mode.item : undefined}
               onSuccess={close}
             />
@@ -478,7 +522,15 @@ export function NetWorthForms({ section, properties, cash, debts, vehicles, hist
 }
 
 // --- Real Estate Form ---
-function RealEstateForm({ item, onSuccess }: { item?: RealEstateItem; onSuccess: () => void }) {
+function RealEstateForm({
+  item,
+  onSuccess,
+  linkedLoan,
+}: {
+  item?: RealEstateItem;
+  onSuccess: () => void;
+  linkedLoan?: AssetLoanView["loan"];
+}) {
   const [address, setAddress] = useLocalState(item?.address || "");
   const [isPrimary, setIsPrimary] = useLocalState(item?.isPrimaryResidence ?? true);
 
@@ -548,6 +600,16 @@ function RealEstateForm({ item, onSuccess }: { item?: RealEstateItem; onSuccess:
           <Label>Mortgage Balance ($)</Label>
           <Input name="mortgageBalance" type="number" step="0.01" placeholder="280000"
             defaultValue={item?.mortgageBalance ? Number(item.mortgageBalance) : undefined} />
+          {/* A field that no longer decides anything should say so, rather
+              than accept a number that will be ignored. */}
+          {linkedLoan?.from && (
+            <p className="text-xs text-amber-600 dark:text-amber-500">
+              Currently showing {formatCurrency(linkedLoan.balance)} from{" "}
+              <span className="font-mono">{linkedLoan.from.name}</span>, which
+              updates on its own. Anything entered here is kept but not used
+              while that debt is linked.
+            </p>
+          )}
           <p className="text-xs text-muted-foreground">0 if paid off</p>
         </div>
       </div>
@@ -780,7 +842,15 @@ function DebtForm({
 }
 
 // --- Vehicle Form ---
-function VehicleForm({ item, onSuccess }: { item?: VehicleItem; onSuccess: () => void }) {
+function VehicleForm({
+  item,
+  onSuccess,
+  linkedLoan,
+}: {
+  item?: VehicleItem;
+  onSuccess: () => void;
+  linkedLoan?: AssetLoanView["loan"];
+}) {
   const [vin, setVin] = useLocalState(item?.vin || "");
   const [vinLoading, setVinLoading] = useLocalState(false);
   const [vinResult, setVinResult] = useLocalState<string | null>(null);
@@ -955,6 +1025,14 @@ function VehicleForm({ item, onSuccess }: { item?: VehicleItem; onSuccess: () =>
         <div className="grid grid-cols-2 gap-3">
           <div className="space-y-1">
             <Label>Loan Balance ($)</Label>
+            {linkedLoan?.from && (
+              <p className="text-xs text-amber-600 dark:text-amber-500">
+                Currently showing {formatCurrency(linkedLoan.balance)} from{" "}
+                <span className="font-mono">{linkedLoan.from.name}</span>, which
+                updates on its own. Anything entered here is kept but not used
+                while that debt is linked.
+              </p>
+            )}
             <Input name="loanBalance" type="number" step="0.01" placeholder="18000"
               defaultValue={item?.loanBalance ? Number(item.loanBalance) : undefined} required />
           </div>

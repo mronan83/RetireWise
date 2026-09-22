@@ -221,6 +221,117 @@ function main() {
     twoLiens.netWorth.toFixed(2)
   );
 
+  // ---- what the asset card shows ------------------------------------------
+  // The card used to read the asset's own loan column, which stops moving the
+  // moment a linked debt starts syncing. It reads through the link instead —
+  // read, not copied: writing the balance back would put the same number in
+  // two places again, which is the arrangement that caused the double-count.
+  const withTerms = composeNetWorth({
+    investments: 0,
+    cash: 0,
+    assets: [
+      {
+        kind: "real_estate", id: "sonata", name: "4170 Sonata", value: 376000,
+        // 3.375% survives here at three decimal places.
+        embeddedLoan: 155589.18, embeddedRate: 3.375, embeddedPayment: 1161.93,
+      },
+      {
+        kind: "vehicle", id: "sporttrek", name: "2025 SPORTTREK SportTrek", value: 70000,
+        embeddedLoan: 70702.77, embeddedRate: 8.45, embeddedPayment: 727.63,
+      },
+      {
+        kind: "vehicle", id: "jeep", name: "2017 JEEP Grand Cherokee", value: 13770,
+        embeddedLoan: 0, embeddedRate: null, embeddedPayment: null,
+      },
+    ],
+    liabilities: [
+      {
+        id: "d_mortgage", name: "Primary Mortgage", balance: 155589.18, debtType: "mortgage",
+        securedByType: "real_estate", securedById: "sonata", fromPlaid: false,
+        // decimal(5,2) on the debt row, so the same rate arrives rounded.
+        rate: 3.37, monthlyPayment: 1161.93,
+      },
+      {
+        id: "d_sport", name: "2025 VENTURE SPORTTREK 5 STTF3", balance: 69265.78,
+        debtType: "other_debt", securedByType: "vehicle", securedById: "sporttrek",
+        fromPlaid: true, rate: 8.45, monthlyPayment: 727.63,
+      },
+    ],
+  });
+
+  const sonataCard = withTerms.assets.find((a) => a.id === "sonata")!;
+  const sportCard = withTerms.assets.find((a) => a.id === "sporttrek")!;
+  const jeepCard = withTerms.assets.find((a) => a.id === "jeep")!;
+
+  check(
+    "the card shows the linked debt's balance, not the asset's stale column",
+    sportCard.loan?.balance === 69265.78,
+    `${sportCard.loan?.balance} — the column still reads 70,702.77`
+  );
+  check(
+    "and names the debt it is tracking",
+    sportCard.loan?.from?.name === "2025 VENTURE SPORTTREK 5 STTF3",
+    sportCard.loan?.from?.name
+  );
+  check(
+    "the rate keeps the asset's three decimal places",
+    sonataCard.loan?.rate === 3.375,
+    `${sonataCard.loan?.rate} — reading it off the debt row would report 3.37`
+  );
+  check(
+    "a rate the asset does not have falls back to the debt's",
+    composeNetWorth({
+      investments: 0, cash: 0,
+      assets: [{ kind: "vehicle", id: "v", name: "Truck", value: 100, embeddedLoan: 0, embeddedRate: null }],
+      liabilities: [{
+        id: "l", name: "Truck loan", balance: 50, debtType: "auto_loan",
+        securedByType: "vehicle", securedById: "v", fromPlaid: true,
+        rate: 2.99, monthlyPayment: 100,
+      }],
+    }).assets[0].loan?.rate === 2.99
+  );
+  check(
+    "a rate of zero is not reported as a 0% loan",
+    composeNetWorth({
+      investments: 0, cash: 0,
+      assets: [{ kind: "vehicle", id: "v", name: "Truck", value: 100, embeddedLoan: 0, embeddedRate: null }],
+      liabilities: [{
+        id: "l", name: "Truck loan", balance: 50, debtType: "auto_loan",
+        securedByType: "vehicle", securedById: "v", fromPlaid: true,
+        rate: 0, monthlyPayment: 0,
+      }],
+    }).assets[0].loan?.rate === null,
+    "Plaid reports no rate for these accounts and stores it as 0.00"
+  );
+  check(
+    "an asset owned outright shows no loan block at all",
+    jeepCard.loan === null,
+    "not a loan of zero"
+  );
+  check(
+    "two liens on one asset sum their payments",
+    composeNetWorth({
+      investments: 0, cash: 0,
+      assets: [{ kind: "real_estate", id: "h", name: "House", value: 376000, embeddedLoan: 0 }],
+      liabilities: [
+        { id: "a", name: "First", balance: 155589.18, debtType: "mortgage", securedByType: "real_estate", securedById: "h", fromPlaid: false, rate: 3.37, monthlyPayment: 1161.93 },
+        { id: "b", name: "Second", balance: 34114.38, debtType: "mortgage", securedByType: "real_estate", securedById: "h", fromPlaid: true, rate: 7.5, monthlyPayment: 451 },
+      ],
+    }).assets[0].loan?.monthlyPayment === 1612.93
+  );
+  check(
+    "an unlinked asset still shows its own typed figures",
+    (() => {
+      const solo = composeNetWorth({
+        investments: 0, cash: 0,
+        assets: [{ kind: "vehicle", id: "v", name: "Van", value: 20000, embeddedLoan: 5000, embeddedRate: 4.25, embeddedPayment: 300 }],
+        liabilities: [],
+      }).assets[0];
+      return solo.loan?.balance === 5000 && solo.loan?.from === null && solo.owedSource === "embedded";
+    })(),
+    "nothing is linked, so the typed figure is all there is and it stands"
+  );
+
   // ---- an empty household -------------------------------------------------
   const empty = composeNetWorth({ investments: 0, cash: 0, assets: [], liabilities: [] });
   check("an empty household is worth nothing, not NaN", empty.netWorth === 0);

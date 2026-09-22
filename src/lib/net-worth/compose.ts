@@ -34,6 +34,14 @@ export type ComposableAsset = {
    * secured against this asset, and used only when there is none.
    */
   embeddedLoan: number;
+  /**
+   * Rate and payment as typed onto the asset. The rate is kept at three
+   * decimal places here and only two on the debt row, so 3.375% survives on
+   * the asset and arrives as 3.37 on the debt — which is why the asset's own
+   * rate is preferred when it has one.
+   */
+  embeddedRate?: number | null;
+  embeddedPayment?: number | null;
 };
 
 export type ComposableLiability = {
@@ -44,6 +52,8 @@ export type ComposableLiability = {
   securedByType: AssetKind | null;
   securedById: string | null;
   fromPlaid: boolean;
+  rate?: number | null;
+  monthlyPayment?: number | null;
 };
 
 export type AssetPosition = ComposableAsset & {
@@ -52,6 +62,24 @@ export type AssetPosition = ComposableAsset & {
   /** Where `owed` came from, so the UI can say which figure it is showing. */
   owedSource: "linked" | "embedded" | "none";
   securedBy: { id: string; name: string; balance: number }[];
+  /**
+   * The loan terms to show on the asset's card.
+   *
+   * Read through the link rather than copied into the asset's own columns.
+   * Writing the balance back would put the same number in two places again,
+   * which is the arrangement that produced the double-count — and it would go
+   * stale the moment a write failed or a sync raced one.
+   *
+   * The balance follows the debt because it changes; the rate stays with the
+   * asset because it does not, and is stored there more precisely.
+   */
+  loan: {
+    balance: number;
+    rate: number | null;
+    monthlyPayment: number | null;
+    /** Null when nothing is linked, so the card can say the figure is typed. */
+    from: { id: string; name: string } | null;
+  } | null;
 };
 
 /**
@@ -146,12 +174,37 @@ export function composeNetWorth(input: {
       ? linked.reduce((s, l) => s + n(l.balance), 0)
       : n(a.embeddedLoan);
 
+    // A rate or payment of zero is "not reported", not a real 0% loan — the
+    // same reading that turned a missing cost basis into a gain of exactly
+    // nothing. So a zero on the debt falls back to the asset's own figure
+    // rather than overwriting it.
+    const positive = (v: number | null | undefined) =>
+      v !== null && v !== undefined && Number(v) > 0 ? Number(v) : null;
+
+    const principal = linked[0];
+    const loan =
+      owed > 0 || linked.length > 0
+        ? {
+            balance: owed,
+            rate: positive(a.embeddedRate) ?? positive(principal?.rate) ?? null,
+            monthlyPayment:
+              linked.reduce((s, l) => s + (positive(l.monthlyPayment) ?? 0), 0) ||
+              positive(a.embeddedPayment) ||
+              null,
+            from:
+              linked.length > 0
+                ? { id: linked[0].id, name: linked.map((l) => l.name).join(", ") }
+                : null,
+          }
+        : null;
+
     return {
       ...a,
       owed,
       equity: n(a.value) - owed,
       owedSource: linked.length > 0 ? "linked" : owed > 0 ? "embedded" : "none",
       securedBy: linked.map((l) => ({ id: l.id, name: l.name, balance: n(l.balance) })),
+      loan,
     };
   });
 
