@@ -23,6 +23,8 @@ import {
 import { Badge } from "@/components/ui/badge";
 import { parseFidelityCSV, parseGenericCSV, parseQFX, isQFXFormat } from "@/lib/utils/csv-parser";
 import type { ParsedHolding } from "@/lib/utils/csv-parser";
+import { parseOfxStatements, type OfxStatement } from "@/lib/import/ofx";
+import { StatementImport, type ExistingAccount } from "./statement-import";
 import { importHoldings } from "@/lib/actions/import";
 import { ASSET_CLASS_LABELS } from "@/lib/constants";
 import { formatCurrency, formatNumber } from "@/lib/utils/format";
@@ -30,12 +32,18 @@ import type { Account } from "@/lib/types";
 
 type Props = {
   accounts: Account[];
+  debts: ExistingAccount[];
+  cash: ExistingAccount[];
 };
 
-export function CsvImportForm({ accounts }: Props) {
+export function CsvImportForm({ accounts, debts, cash }: Props) {
   const [accountId, setAccountId] = useState(accounts[0]?.id || "");
   const [format, setFormat] = useState<"fidelity" | "generic" | "qfx">("fidelity");
   const [parsed, setParsed] = useState<ParsedHolding[] | null>(null);
+  // Statements that are not investment accounts — a card, a loan, a bank
+  // account. These were previously run through the holdings reader, which
+  // found no positions and reported the file as malformed.
+  const [statements, setStatements] = useState<OfxStatement[] | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState<string | null>(null);
   const [importing, setImporting] = useState(false);
@@ -49,23 +57,53 @@ export function CsvImportForm({ accounts }: Props) {
       reader.onload = (event) => {
         const text = event.target?.result as string;
         try {
-          let result: ParsedHolding[];
-          if (format === "qfx" || isQFXFormat(text)) {
-            result = parseQFX(text);
-          } else {
-            result = format === "fidelity"
-              ? parseFidelityCSV(text)
-              : parseGenericCSV(text);
+          setStatements(null);
+          setParsed(null);
+
+          /**
+           * OFX says what each statement in it is, so the file is routed on
+           * its own markers rather than on the dropdown above or on a guess.
+           * An Apple Card export used to reach the holdings reader, which
+           * looked for positions, found none, and said "No holdings found in
+           * the file. Check the format" — a correct file blamed for a gap.
+           */
+          if (isQFXFormat(text)) {
+            const { statements: found, problem } = parseOfxStatements(text);
+            const balances = found.filter((s) => s.target !== "investment");
+            if (balances.length > 0) {
+              setStatements(balances);
+              return;
+            }
+            if (found.length === 0) {
+              setError(problem ?? "Nothing could be read from this file.");
+              return;
+            }
+            // Investment statements fall through to the holdings reader.
           }
+
+          const result =
+            format === "qfx" || isQFXFormat(text)
+              ? parseQFX(text)
+              : format === "fidelity"
+                ? parseFidelityCSV(text)
+                : parseGenericCSV(text);
+
           if (result.length === 0) {
-            setError("No holdings found in the file. Check the format.");
-            setParsed(null);
+            // Naming the likely cause, because this message used to appear
+            // for a perfectly good credit card statement and read as if the
+            // file were at fault.
+            setError(
+              "No holdings found in this file. If it is a credit card, loan or " +
+                "bank statement, export it as QFX or OFX — a CSV export of one " +
+                "usually lists transactions with no balance to import."
+            );
           } else {
             setParsed(result);
           }
         } catch {
           setError("Failed to parse file. Check the format.");
           setParsed(null);
+          setStatements(null);
         }
       };
       reader.readAsText(file);
@@ -119,26 +157,18 @@ export function CsvImportForm({ accounts }: Props) {
     }
   };
 
-  if (accounts.length === 0) {
-    return (
-      <Card>
-        <CardContent className="flex h-[200px] items-center justify-center">
-          <p className="text-muted-foreground">
-            Create an account first before importing data.
-          </p>
-        </CardContent>
-      </Card>
-    );
-  }
-
   return (
     <div className="space-y-6">
       <Card>
         <CardHeader>
-          <CardTitle>Upload Holdings File</CardTitle>
+          <CardTitle>Upload a File</CardTitle>
         </CardHeader>
         <CardContent className="space-y-4">
-          <div className="grid gap-4 sm:grid-cols-2">
+          {/* Both pickers describe the HOLDINGS path only. A statement
+              routes itself, and a household importing only a credit card has
+              no investment account to choose — which is why the page no
+              longer refuses to render without one. */}
+          <div className={accounts.length === 0 ? "hidden" : "grid gap-4 sm:grid-cols-2"}>
             <div className="space-y-2">
               <Label>Target Account</Label>
               <Select value={accountId} onValueChange={(v) => v && setAccountId(v)}>
@@ -188,7 +218,12 @@ export function CsvImportForm({ accounts }: Props) {
             <label className="flex cursor-pointer flex-col items-center gap-2">
               <Upload className={`h-8 w-8 ${isDragging ? "text-primary" : "text-muted-foreground"}`} />
               <span className="text-sm text-muted-foreground">
-                {isDragging ? "Drop file here" : "Click to upload or drag and drop a CSV or QFX file"}
+                {isDragging
+                  ? "Drop file here"
+                  : "Click to upload or drag and drop a CSV, QFX or OFX file"}
+              </span>
+              <span className="text-xs text-muted-foreground">
+                Holdings, or a credit card, loan or bank balance
               </span>
               <input
                 type="file"
@@ -215,7 +250,19 @@ export function CsvImportForm({ accounts }: Props) {
         </CardContent>
       </Card>
 
-      {parsed && (
+      {statements && <StatementImport statements={statements} debts={debts} cash={cash} />}
+
+      {parsed && accounts.length === 0 && (
+        <Card>
+          <CardContent className="flex h-[120px] items-center justify-center">
+            <p className="text-muted-foreground">
+              Create an investment account first to import holdings into.
+            </p>
+          </CardContent>
+        </Card>
+      )}
+
+      {parsed && accounts.length > 0 && (
         <Card>
           <CardHeader className="flex flex-row items-center justify-between">
             <CardTitle className="flex items-center gap-2">
