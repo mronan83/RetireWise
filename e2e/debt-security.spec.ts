@@ -23,39 +23,41 @@ test.describe("securing a debt against an asset", () => {
   });
 
   test("the debt form offers the household's assets", async ({ page }) => {
-    // The Debts card's own add button, not another section's.
-    const debtsCard = page
-      .locator("div")
-      .filter({ has: page.getByRole("heading", { name: /debts/i }) })
-      .last();
-    await expect(debtsCard, "the debts section is not on the page").toBeVisible();
-
-    await debtsCard.getByRole("button", { name: /add/i }).first().click();
+    // The add button is labelled per section, so it identifies the debts form
+    // without depending on how the section's card heading is marked up — the
+    // first version of this test looked for a `heading` role that CardTitle
+    // does not render, and failed for that rather than for the feature.
+    await page.getByRole("button", { name: "Add Debt" }).click();
 
     const dialog = page.getByRole("dialog");
     await expect(dialog).toBeVisible();
 
+    const picker = dialog.getByTestId("secured-by");
     await expect(
-      dialog.getByText(/secured against/i),
+      picker,
       "the debt form has no way to name the asset a loan is secured against — " +
         "the picker is guarded on the household having assets, and the page " +
         "passed it none"
     ).toBeVisible();
 
-    // And it must actually list something. A picker whose only option is
+    // And it must actually list them. A picker whose only option is
     // "not secured" is the same dead end wearing a label.
-    await dialog.getByText(/secured against/i).click();
+    await picker.click();
     const options = page.getByRole("option");
     await expect
-      .poll(async () => options.count(), {
+      .poll(() => options.count(), {
         message: "the picker opened with no assets to choose from",
       })
       .toBeGreaterThan(1);
 
     const labels = await options.allInnerTexts();
     expect(
-      labels.some((l) => /property|vehicle/i.test(l)),
-      `no property or vehicle offered — got ${JSON.stringify(labels)}`
+      labels.some((l) => /property/i.test(l)),
+      `the household's property is not offered — got ${JSON.stringify(labels)}`
+    ).toBe(true);
+    expect(
+      labels.some((l) => /vehicle/i.test(l)),
+      `the household's vehicles are not offered — got ${JSON.stringify(labels)}`
     ).toBe(true);
   });
 

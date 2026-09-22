@@ -802,7 +802,7 @@ function DebtForm({
                 : "none"
             }
           >
-            <SelectTrigger><SelectValue /></SelectTrigger>
+            <SelectTrigger data-testid="secured-by"><SelectValue /></SelectTrigger>
             <SelectContent>
               <SelectItem value="none">Not secured against an asset</SelectItem>
               {properties.map((p) => (
