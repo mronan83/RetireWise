@@ -87,6 +87,12 @@ jobs:
       # differently.
       - run: pnpm exec tsx scripts/test-analysis-cards.ts
 
+      # Dividend income from the record of it being paid, rather than from a
+      # table of guessed yields that could not return "unknown" — so a
+      # household whose custodians report nothing still got a confident
+      # annual figure.
+      - run: pnpm exec tsx scripts/test-dividends.ts
+
   mobile:
     name: Mobile layout
     runs-on: ubuntu-latest

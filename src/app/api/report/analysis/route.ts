@@ -10,6 +10,8 @@ import {
 import { getHoldingsByClerkId } from "@/lib/queries/holdings";
 import { getAccounts } from "@/lib/queries/accounts";
 import { getSnapshots } from "@/lib/queries/snapshots";
+import { getDividendRecord } from "@/lib/queries/dividends";
+import { summarizeDividends } from "@/lib/utils/dividends";
 import {
   calculatePortfolioSummary,
   calculateGainLoss,
@@ -89,7 +91,7 @@ const ANALYSIS_TYPES: Record<string, {
   dividend: {
     title: "Dividend Income Analysis",
     subtitle: "Passive income projections from your portfolio",
-    prompt: (ctx) => `Analyze dividend income for this portfolio. Estimate annual income, monthly passive income, identify top dividend payers, and suggest whether the dividend allocation is appropriate for the retirement timeline.\n\n${ctx.portfolioSummaryText}`,
+    prompt: (ctx) => `Analyze this household's RECORDED distribution income. The figures below are actual transactions, not estimates — use them and do not substitute typical yields for any fund. Where an account is listed as having no figure, say so plainly and do not estimate one for it; an employer plan that does not report distributions is not a plan that paid none. Distinguish reinvested distributions from those paid as cash, since only the latter is income available to spend. Comment on what the recorded income means for the retirement timeline.\n\n${ctx.dividendText}\n\n${ctx.portfolioSummaryText}`,
     sections: ["stats", "holdings", "allocation"],
   },
   rmd_roth: {
@@ -117,6 +119,8 @@ type DataContext = {
   driftText: string;
   taxBucketText: string;
   taxableLossesText: string;
+  /** Recorded distributions, and which accounts they do not speak for. */
+  dividendText: string;
   retirementText: string;
   taxDeferredTotal: string;
 };
@@ -136,7 +140,7 @@ async function handleGet(request: Request) {
   if (!config) return Response.json({ error: "Invalid analysis type" }, { status: 400 });
 
   const db = getDb();
-  const [holdings, accountsList, prefs, selfSS, spouseSS, snapshots, contribs] =
+  const [holdings, accountsList, prefs, selfSS, spouseSS, snapshots, contribs, dividendRecord] =
     await Promise.all([
       getHoldingsByClerkId(userId),
       getAccounts(userId),
@@ -149,6 +153,7 @@ async function handleGet(request: Request) {
       ).limit(1),
       getSnapshots(userId, 90),
       db.select().from(contributions).where(eq(contributions.clerkId, userId)),
+      getDividendRecord(userId, new Date().toISOString().split("T")[0]),
     ]);
 
   const pref = prefs[0];
@@ -236,6 +241,56 @@ async function handleGet(request: Request) {
     .map(([cls, d]) => `${ASSET_CLASS_LABELS[cls] || cls}: ${d.pct.toFixed(1)}%`)
     .join(", ");
 
+  /**
+   * The distribution record as prose, so the model is given measurements
+   * rather than asked to supply them. The prompt used to say "estimate
+   * annual income" over a portfolio summary, which is how the report button
+   * produced confident yields for funds nobody has a yield for — while the
+   * chat tool beside it reported what was actually paid.
+   */
+  const dividends = summarizeDividends(
+    dividendRecord.rows,
+    dividendRecord.accounts,
+    new Date().toISOString().split("T")[0]
+  );
+  const money = (n: number) => `$${n.toFixed(2)}`;
+  const dividendText = [
+    `RECORDED DISTRIBUTIONS, ${dividends.windowFrom} to ${dividends.asOf}`,
+    `Total (accounts with a full year on record): ${money(dividends.total)}`,
+    `Monthly average: ${money(dividends.monthly)}`,
+    `Reinvested: ${money(dividends.reinvested)} · paid as cash: ${money(dividends.cash)}`,
+    `This total covers ${(dividends.valueCovered * 100).toFixed(1)}% of portfolio value.`,
+    dividends.observedOutsideWindow > 0
+      ? `A further ${money(dividends.observedOutsideWindow)} was recorded in accounts whose history is shorter than a year. It is real but is not an annual figure.`
+      : "",
+    "",
+    "BY ACCOUNT",
+    ...dividends.accounts.map(
+      (a) =>
+        `- ${a.account} (${a.owner === "spouse" ? "Spouse" : "Self"}, ${money(a.value)}): ` +
+        (a.total === null
+          ? `NO FIGURE — ${a.note}`
+          : `${money(a.total)} over ${a.payments} payments${
+              a.trailingYield === null ? "" : `, ${a.trailingYield.toFixed(2)}% trailing yield`
+            }. ${a.note}`)
+    ),
+    "",
+    "TOP PAYERS",
+    ...dividends.topPayers
+      .slice(0, 12)
+      .map(
+        (p) =>
+          `- ${p.payer} (${p.account}): ${money(p.total)} over ${p.payments} payments, ${p.first} to ${p.last}`
+      ),
+    dividends.gaps.length > 0
+      ? `\nACCOUNTS THE TOTAL DOES NOT SPEAK FOR:\n${dividends.gaps
+          .map((g) => `- ${g.account}: ${g.reason}`)
+          .join("\n")}`
+      : "",
+  ]
+    .filter(Boolean)
+    .join("\n");
+
   const ctx: DataContext = {
     portfolioSummaryText: [
       `Portfolio: ${formatCurrency(summary.totalValue)} | Gain/Loss: ${summary.totalGainLoss === null ? NO_BASIS : `${formatCurrency(summary.totalGainLoss)} (${formatPercent(summary.totalGainLossPct!)})`}`,
@@ -250,6 +305,7 @@ async function handleGet(request: Request) {
     taxBucketText: Object.entries(taxBuckets)
       .map(([t, d]) => `${t.replace("_", "-")}: ${formatCurrency(d.value)} (${d.holdings.length} holdings)`)
       .join("\n"),
+    dividendText,
     taxableLossesText: taxableLosses.length > 0
       ? `Taxable holdings with losses:\n${taxableLosses.map((h) => `${h.ticker}: ${formatCurrency(h.value)} | Loss: ${formatCurrency(h.gainLoss)} (${formatPercent(h.gainLossPct)})`).join("\n")}`
       : "No unrealized losses in taxable accounts.",

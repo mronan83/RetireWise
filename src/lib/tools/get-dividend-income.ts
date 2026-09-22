@@ -1,131 +1,117 @@
 import { tool } from "ai";
 import { z } from "zod";
 import { getApiUserId } from "@/lib/auth-helpers";
-import { getHoldingsByClerkId } from "../queries/holdings";
-import { ASSET_CLASS_LABELS } from "../constants";
+import { getDividendRecord } from "../queries/dividends";
+import { summarizeDividends, WINDOW_DAYS } from "../utils/dividends";
 
-// Approximate dividend yields for common funds/ETFs (as of typical values)
-// In production, these would come from Yahoo Finance API
-const APPROXIMATE_YIELDS: Record<string, number> = {
-  // US Total Market
-  VTI: 1.3, FSKAX: 1.3, ITOT: 1.3, SCHB: 1.3, SPTM: 1.3,
-  // S&P 500
-  VOO: 1.3, FXAIX: 1.3, IVV: 1.3, SPY: 1.3, SPLG: 1.3,
-  // Growth (lower yield)
-  QQQ: 0.6, VUG: 0.5, SCHG: 0.5, MGK: 0.5,
-  // Value (higher yield)
-  VTV: 2.3, SCHV: 2.3, VLUE: 2.5,
-  // International
-  VXUS: 3.0, IXUS: 2.8, FZILX: 2.5, VEA: 3.1, VWO: 3.2,
-  FTIHX: 2.8, FSPSX: 2.9,
-  // Bonds
-  BND: 3.5, AGG: 3.4, VBTLX: 3.5, FXNAX: 3.3, SCHZ: 3.4,
-  TLT: 3.8, IEF: 3.2, SHY: 4.0, TIPS: 2.5,
-  // REITs (higher yield)
-  VNQ: 3.8, VGSLX: 3.8, IYR: 3.5, SCHH: 3.2,
-  // High Dividend
-  VYM: 2.8, SCHD: 3.4, HDV: 3.5, DVY: 3.6, VHYAX: 2.9,
-  // Money Market
-  SPAXX: 4.5, FDRXX: 4.5, VMFXX: 4.5, SWVXX: 4.5, FMPXX: 4.5,
-};
+const round = (n: number) => Math.round(n * 100) / 100;
 
-// Default yield by asset class when ticker not found
-const DEFAULT_YIELDS: Record<string, number> = {
-  us_stock: 1.5,
-  intl_stock: 2.8,
-  bond: 3.5,
-  reit: 3.5,
-  commodity: 0,
-  crypto: 0,
-  cash: 4.5,
-  other: 1.0,
-};
-
+/**
+ * What the portfolio actually paid over the trailing year.
+ *
+ * This used to multiply current value by a hardcoded yield table — a fixed
+ * 1.3% for VTI, 3.5% for BND, and a per-asset-class default for every ticker
+ * the table had never heard of, which is most of an employer plan. It always
+ * produced a number, so a household whose custodians report no distributions
+ * at all still received a confident annual income figure.
+ *
+ * There is now a real record: 182 distributions over two years. Where it
+ * covers a year, this reports what was paid. Where it does not, it says so
+ * and reports nothing for that account, because an estimate presented beside
+ * measurements is indistinguishable from one.
+ */
 export const getDividendIncomeTool = tool({
   description:
-    "Estimate annual dividend income for the household portfolio. Shows per-holding dividend estimates, total annual income, and monthly income projection.",
-  inputSchema: z.object({}),
-  execute: async () => {
+    "Report the household's actual dividend and distribution income over the trailing 12 months, from recorded transactions. Shows per-account and per-payer totals, the split between reinvested and cash distributions, the trailing yield on current value, and — explicitly — which accounts the figure does not cover and why. Does not estimate: an account whose transaction history is too short, or whose custodian reports no distributions, is named as a gap rather than assigned a yield.",
+  inputSchema: z.object({
+    windowDays: z
+      .number()
+      .optional()
+      .describe(
+        `Trailing window in days. Default ${WINDOW_DAYS}. Only change this if the user asks for a period other than the last year.`
+      ),
+  }),
+  execute: async ({ windowDays = WINDOW_DAYS }) => {
     // Holdings are keyed by the household id, not the signed-in account's own
     // id; the raw id reads back an empty portfolio instead of an error.
     const userId = await getApiUserId();
     if (!userId) return { error: "Not authenticated" };
 
-    const holdings = await getHoldingsByClerkId(userId);
+    const asOf = new Date().toISOString().split("T")[0];
+    const { rows, accounts } = await getDividendRecord(userId, asOf);
 
-    let totalAnnualDividends = 0;
-    let selfDividends = 0;
-    let spouseDividends = 0;
-
-    const holdingDividends: {
-      ticker: string;
-      name: string;
-      value: number;
-      estimatedYield: number;
-      annualDividend: number;
-      quarterlyDividend: number;
-      account: string;
-      owner: string;
-    }[] = [];
-
-    for (const h of holdings) {
-      const value = Number(h.currentValue);
-      const yieldPct =
-        APPROXIMATE_YIELDS[h.ticker] ||
-        DEFAULT_YIELDS[h.assetClass] ||
-        1.0;
-      const annualDiv = value * (yieldPct / 100);
-      const quarterlyDiv = annualDiv / 4;
-
-      totalAnnualDividends += annualDiv;
-      if (h.accountOwner === "spouse") {
-        spouseDividends += annualDiv;
-      } else {
-        selfDividends += annualDiv;
-      }
-
-      holdingDividends.push({
-        ticker: h.ticker,
-        name: h.name,
-        value: Math.round(value * 100) / 100,
-        estimatedYield: yieldPct,
-        annualDividend: Math.round(annualDiv * 100) / 100,
-        quarterlyDividend: Math.round(quarterlyDiv * 100) / 100,
-        account: h.accountName,
-        owner: h.accountOwner === "spouse" ? "Spouse" : "Self",
-      });
+    if (accounts.length === 0) {
+      return { error: "No accounts found for this household." };
     }
 
-    // Sort by annual dividend (biggest payers first)
-    holdingDividends.sort((a, b) => b.annualDividend - a.annualDividend);
+    const s = summarizeDividends(rows, accounts, asOf, windowDays);
 
-    // Breakdown by asset class
-    const byAssetClass: Record<string, number> = {};
-    for (const h of holdings) {
-      const yieldPct =
-        APPROXIMATE_YIELDS[h.ticker] ||
-        DEFAULT_YIELDS[h.assetClass] ||
-        1.0;
-      const label = ASSET_CLASS_LABELS[h.assetClass] || h.assetClass;
-      byAssetClass[label] =
-        (byAssetClass[label] || 0) +
-        Number(h.currentValue) * (yieldPct / 100);
-    }
-
-    for (const key of Object.keys(byAssetClass)) {
-      byAssetClass[key] = Math.round(byAssetClass[key] * 100) / 100;
-    }
+    const reporting = s.accounts.filter((a) => a.status === "reported");
+    const coveredPct = round(s.valueCovered * 100);
 
     return {
-      totalAnnualDividends: Math.round(totalAnnualDividends * 100) / 100,
-      monthlyDividendIncome:
-        Math.round((totalAnnualDividends / 12) * 100) / 100,
-      selfAnnualDividends: Math.round(selfDividends * 100) / 100,
-      spouseAnnualDividends: Math.round(spouseDividends * 100) / 100,
-      byAssetClass,
-      topDividendPayers: holdingDividends.slice(0, 10),
-      allHoldings: holdingDividends,
-      note: "Yields are estimates based on recent distribution rates. Actual dividends may vary. Money market yields fluctuate with interest rates.",
+      window: { from: s.windowFrom, to: s.asOf, days: windowDays },
+
+      // The headline, and immediately beside it what it speaks for. A total
+      // covering 61% of the portfolio is not the household's income, and the
+      // two numbers must not be separable.
+      totalDistributions: round(s.total),
+      monthlyAverage: round(s.monthly),
+      // Real distributions from accounts whose record is shorter than the
+      // window. Not part of the annual total, not thrown away either.
+      alsoObservedButNotAFullYear: round(s.observedOutsideWindow),
+      coversPercentOfPortfolio: coveredPct,
+      coversAccounts: `${reporting.length} of ${s.accounts.length}`,
+
+      // 80% of this household's distributions bought more shares rather than
+      // settling as spendable cash. Reporting only the total invites the
+      // conclusion that it is income available to live on.
+      reinvested: round(s.reinvested),
+      paidAsCash: round(s.cash),
+
+      selfDistributions: round(s.self),
+      spouseDistributions: round(s.spouse),
+
+      trailingYieldOnCoveredValue:
+        s.valueCovered > 0 && s.valueTotal > 0
+          ? round(
+              (s.total / (s.valueCovered * s.valueTotal)) * 100
+            )
+          : null,
+
+      byAccount: s.accounts.map((a) => ({
+        account: a.account,
+        owner: a.owner === "spouse" ? "Spouse" : "Self",
+        value: round(a.value),
+        distributions: a.total === null ? null : round(a.total),
+        trailingYieldPct:
+          a.trailingYield === null ? null : round(a.trailingYield),
+        payments: a.payments,
+        reinvested: round(a.reinvested),
+        paidAsCash: round(a.cash),
+        status: a.status,
+        observedFrom: a.observedFrom,
+        note: a.note,
+      })),
+
+      topPayers: s.topPayers.slice(0, 15).map((p) => ({
+        payer: p.payer,
+        account: p.account,
+        owner: p.owner === "spouse" ? "Spouse" : "Self",
+        total: round(p.total),
+        payments: p.payments,
+        reinvested: round(p.reinvested),
+        paidAsCash: round(p.cash),
+        from: p.first,
+        to: p.last,
+      })),
+
+      // Named, so "we don't know" cannot be read as "zero".
+      gaps: s.gaps,
+      rowsExcludedAsNotIncome: s.excluded,
+
+      note:
+        "Figures are recorded distributions, not estimates — no yield table is used. Dividends, capital gain distributions and interest are counted together, which is what the custodian reports. Accounts listed under `gaps` contribute nothing to the total: an employer plan that does not report distributions to Plaid is indistinguishable from one that paid none, so neither is assumed.",
     };
   },
 });
