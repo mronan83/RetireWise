@@ -239,11 +239,18 @@ async function main(sql: postgres.Sql) {
   const demoDebts = await db.insert(schema.debts).values([
     { clerkId: DEMO_ID, owner: "self", name: "Auto Loan - RAV4", debtType: "auto_loan", originalBalance: "32000", currentBalance: "18400", interestRate: "4.9", monthlyPayment: "580", payoffDate: "2028-06-01" },
     { clerkId: DEMO_ID, owner: "spouse", name: "Student Loan", debtType: "student_loan", originalBalance: "45000", currentBalance: "12800", interestRate: "3.5", monthlyPayment: "420", payoffDate: "2029-03-01" },
-  ]).returning({ id: schema.debts.id, balance: schema.debts.currentBalance });
+  ]).returning({ id: schema.debts.id, name: schema.debts.name, balance: schema.debts.currentBalance });
   console.log("  Created 2 debts");
 
   // 10. Vehicles
-  await db.insert(schema.vehicles).values([
+  /**
+   * The RAV4 carries its loan in two places, which is how a real household
+   * ends up here: the loan was typed onto the vehicle, and the same loan also
+   * exists as a debt row. They are linked below so net worth subtracts it
+   * once — without the link the demo understates itself by $18,400 and shows
+   * the duplicate-loan prompt on its own net worth page.
+   */
+  const demoVehicles = await db.insert(schema.vehicles).values([
     {
       clerkId: DEMO_ID, owner: "self", name: "2023 Toyota RAV4 Hybrid",
       vehicleType: "suv", year: 2023, make: "Toyota", model: "RAV4 Hybrid", trim: "XLE Premium",
@@ -263,8 +270,20 @@ async function main(sql: postgres.Sql) {
       mileage: 8500, condition: "excellent", estimatedValue: "6800",
       hasLoan: false,
     },
-  ]);
+  ]).returning({ id: schema.vehicles.id, name: schema.vehicles.name });
   console.log("  Created 3 vehicles");
+
+  // The debt that secures the RAV4, named so the balance on the vehicle's card
+  // follows the loan rather than the figure typed onto the vehicle.
+  const rav4 = demoVehicles.find((v) => v.name === "2023 Toyota RAV4 Hybrid");
+  const rav4Loan = demoDebts.find((d) => d.name === "Auto Loan - RAV4");
+  if (rav4 && rav4Loan) {
+    await db
+      .update(schema.debts)
+      .set({ securedByType: "vehicle", securedById: rav4.id })
+      .where(eq(schema.debts.id, rav4Loan.id));
+    console.log("  Secured the RAV4 loan against the vehicle");
+  }
 
   // 11. Goals
   //
