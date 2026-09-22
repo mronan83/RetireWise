@@ -66,7 +66,7 @@ export function GoalsPanel({
   const [editingGoal, setEditingGoal] = useState<GoalView | null>(null);
 
   return (
-    <Card>
+    <Card data-testid="goals-panel">
       <CardHeader className="flex flex-row items-center justify-between pb-2">
         <CardTitle className="text-base flex items-center gap-2">
           <Target className="h-5 w-5 text-primary" />
@@ -134,7 +134,20 @@ function GoalRow({ goal, onEdit }: { goal: GoalView; onEdit: () => void }) {
   const behind = p !== null && p.pct !== null && p.pct < 0;
 
   return (
-    <div className="space-y-1.5">
+    /* The computed figures are exposed as data attributes for the end-to-end
+       suite. The unit tests prove the arithmetic on hand-built inputs; the
+       browser suite is the only place the query feeding it is checked against
+       a real database, which is where this broke. */
+    <div
+      className="space-y-1.5"
+      data-testid="goal-row"
+      data-goal-name={goal.name}
+      data-goal-direction={goal.direction}
+      data-goal-linked={p === null ? "0" : String(p.linkedCount)}
+      data-goal-pct={p === null || p.pct === null ? "" : p.pct.toFixed(4)}
+      data-goal-current={p === null ? "" : String(p.current)}
+      data-goal-baseline={p === null ? "" : String(p.baseline)}
+    >
       <div className="flex items-center justify-between gap-2 text-sm">
         <div className="flex min-w-0 items-center gap-2">
           {closed ? (

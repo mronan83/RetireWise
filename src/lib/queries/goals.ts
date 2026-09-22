@@ -31,20 +31,31 @@ export type LinkableItem = {
 export async function getLinkableItems(clerkId: string): Promise<LinkableItem[]> {
   const db = getDb();
 
-  const [accountRows, debtRows, cashRows, propertyRows, vehicleRows] = await Promise.all([
+  const [accountRows, accountValues, debtRows, cashRows, propertyRows, vehicleRows] = await Promise.all([
     db
       .select({
         id: accounts.id,
         name: accounts.name,
         institution: accounts.institution,
         accountType: accounts.accountType,
-        value: sql<string>`coalesce((
-          select sum(${holdings.currentValue}) from ${holdings}
-          where ${holdings.accountId} = ${accounts.id}
-        ), 0)`,
       })
       .from(accounts)
       .where(eq(accounts.clerkId, clerkId)),
+    // Account values come from a grouped join rather than a correlated
+    // subquery in the select list. The subquery form returned NULL for every
+    // account — coalesced to 0 — so a retirement goal linked to six funded
+    // accounts reported a current value of nothing. This is the same shape
+    // getAccountsWithFreshness uses, and it is exercised by the rest of the
+    // dashboard.
+    db
+      .select({
+        accountId: holdings.accountId,
+        value: sql<string>`coalesce(sum(${holdings.currentValue}), 0)`,
+      })
+      .from(holdings)
+      .innerJoin(accounts, eq(holdings.accountId, accounts.id))
+      .where(eq(accounts.clerkId, clerkId))
+      .groupBy(holdings.accountId),
     db
       .select({
         id: debts.id,
@@ -69,6 +80,7 @@ export async function getLinkableItems(clerkId: string): Promise<LinkableItem[]>
   ]);
 
   const items: LinkableItem[] = [];
+  const valueByAccount = new Map(accountValues.map((v) => [v.accountId, Number(v.value)]));
 
   for (const a of accountRows) {
     items.push({
@@ -76,7 +88,9 @@ export async function getLinkableItems(clerkId: string): Promise<LinkableItem[]>
       itemId: a.id,
       label: a.name,
       detail: `${a.institution} · ${a.accountType}`,
-      value: Number(a.value),
+      // An account with no holdings is worth nothing, which is true rather
+      // than a stand-in: there is no position in it to value.
+      value: valueByAccount.get(a.id) ?? 0,
     });
   }
   for (const d of debtRows) {
