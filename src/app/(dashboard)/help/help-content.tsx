@@ -576,16 +576,22 @@ export function HelpContent() {
           <SubSection title="What Counts as Assets">
             <UL>
               <li><B>Investments</B> — Live value from your portfolio holdings. Updates daily.</li>
-              <li><B>Real Estate Equity</B> — Home value minus mortgage balance. Equity = what you&apos;d walk away with if you sold.</li>
+              <li><B>Real Estate</B> — What the property is worth. Each card also shows your equity: value minus whatever is secured against it.</li>
               <li><B>Cash Reserves</B> — Checking, savings, money market, CDs, I Bonds, emergency fund.</li>
-              <li><B>Vehicle Equity</B> — Vehicle value minus any loan balance.</li>
+              <li><B>Vehicles</B> — What the vehicle is worth, with its equity shown the same way.</li>
             </UL>
           </SubSection>
           <SubSection title="What Counts as Debts">
             <P>
-              Standalone debts not already embedded in an asset (like student loans, credit cards, personal loans).
-              Mortgages and auto loans are already subtracted from their associated asset&apos;s equity, so they&apos;re
-              not double-counted here.
+              Everything you owe — mortgages, home equity loans, auto and RV loans, student loans, credit cards,
+              personal loans. A loan secured against a property or vehicle is still a debt, so it is counted here
+              in full, and the asset it secures is counted at its full value above.
+            </P>
+            <P>
+              The card shows the split: <B>secured</B> against something you own, and <B>unsecured</B>. Each
+              liability is counted exactly once. If the same loan is recorded twice — typed onto a vehicle and
+              also synced from your bank — the app flags the pair and asks you which record is real rather than
+              subtracting both.
             </P>
           </SubSection>
           <SubSection title="Vehicle Valuations">

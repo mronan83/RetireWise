@@ -5,22 +5,32 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { formatCurrency } from "@/lib/utils/format";
 import { cn } from "@/lib/utils";
 
+/**
+ * Gross assets and every liability — the same basis as the net worth page.
+ *
+ * This took equity for real estate and vehicles and a debt figure that
+ * excluded the loans already netted out of them. The net worth it produced
+ * was right; the row of chips under it told the household it owed $12,836.07
+ * when the mortgages, the camper and the truck brought the real total to
+ * $282,545.22.
+ */
 type Props = {
   investmentTotal: number;
-  realEstateEquity: number;
+  realEstateValue: number;
   cashTotal: number;
-  vehicleEquity?: number;
+  vehicleValue?: number;
+  /** Every liability, secured or not. */
   debtTotal: number;
 };
 
 export function NetWorthCard({
   investmentTotal,
-  realEstateEquity,
+  realEstateValue,
   cashTotal,
-  vehicleEquity = 0,
+  vehicleValue = 0,
   debtTotal,
 }: Props) {
-  const totalAssets = investmentTotal + realEstateEquity + cashTotal + vehicleEquity;
+  const totalAssets = investmentTotal + realEstateValue + cashTotal + vehicleValue;
   const netWorth = totalAssets - debtTotal;
 
   return (
@@ -28,7 +38,7 @@ export function NetWorthCard({
       <Card className="transition-colors hover:bg-accent/50">
         <CardHeader className="flex flex-row items-center justify-between pb-2">
           <CardTitle className="text-sm font-medium text-muted-foreground flex items-center gap-1">
-            Household Net Worth <HelpTip text="Total assets (investments + real estate equity + cash + vehicle equity) minus debts. Click for the full breakdown." />
+            Household Net Worth <HelpTip text="Everything you own (investments + real estate + cash + vehicles) minus everything you owe, mortgages and auto loans included. Click for the full breakdown." />
           </CardTitle>
           <Landmark className="h-4 w-4 text-muted-foreground" />
         </CardHeader>
@@ -48,16 +58,16 @@ export function NetWorthCard({
             </div>
             <div className="flex items-center gap-1">
               <Home className="h-3 w-3 shrink-0 text-green-500" />
-              <span className="text-muted-foreground whitespace-nowrap">{formatCurrency(realEstateEquity)}</span>
+              <span className="text-muted-foreground whitespace-nowrap">{formatCurrency(realEstateValue)}</span>
             </div>
             <div className="flex items-center gap-1">
               <PiggyBank className="h-3 w-3 shrink-0 text-yellow-500" />
               <span className="text-muted-foreground whitespace-nowrap">{formatCurrency(cashTotal)}</span>
             </div>
-            {vehicleEquity > 0 && (
+            {vehicleValue > 0 && (
               <div className="flex items-center gap-1">
                 <Car className="h-3 w-3 shrink-0 text-purple-500" />
-                <span className="text-muted-foreground whitespace-nowrap">{formatCurrency(vehicleEquity)}</span>
+                <span className="text-muted-foreground whitespace-nowrap">{formatCurrency(vehicleValue)}</span>
               </div>
             )}
             <div className="flex items-center gap-1">

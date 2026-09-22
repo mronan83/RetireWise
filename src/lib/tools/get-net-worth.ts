@@ -43,17 +43,22 @@ export const getNetWorthTool = tool({
       .filter((a) => a.kind === "vehicle")
       .reduce((s, a) => s + a.equity, 0);
     const cashTotal = composed.cash;
-    // Only the debts not already netted out of an asset's equity above.
-    const debtTotal = composed.unsecured;
+    // Every liability. This returned only the unsecured ones, under the name
+    // totalDebts, with a note explaining why — so asked "how much do we owe",
+    // the assistant answered $12,836.07 for a household owing $282,545.22 and
+    // had a paragraph ready to justify it.
+    const debtTotal = composed.liabilities;
     const monthlyDebtPayments = debtsList.reduce((s, d) => s + Number(d.monthlyPayment), 0);
 
-    const totalAssets = composed.totalAssets;
+    const totalAssets = composed.grossAssets;
     const netWorth = composed.netWorth;
 
     return {
       netWorth: Math.round(netWorth),
       totalAssets: Math.round(totalAssets),
       totalDebts: Math.round(debtTotal),
+      securedDebts: Math.round(composed.secured),
+      unsecuredDebts: Math.round(composed.unsecured),
       breakdown: {
         investments: Math.round(investmentTotal),
         realEstate: Math.round(realEstateTotal),
@@ -63,8 +68,10 @@ export const getNetWorthTool = tool({
         cashReserves: Math.round(cashTotal),
       },
       note:
-        "totalDebts counts only liabilities not secured against a tracked asset; " +
-        "a loan secured against a property or vehicle is already netted out of that asset's equity.",
+        "totalAssets is gross — the full value of investments, cash, property and vehicles. " +
+        "totalDebts is every liability, secured and unsecured, so netWorth = totalAssets - totalDebts. " +
+        "Per-asset equity is given separately as realEstateEquity and vehicleEquity; do not subtract " +
+        "those loans a second time.",
       properties: properties.map((p) => ({
         name: p.name,
         owner: ACCOUNT_OWNER_LABELS[p.owner],

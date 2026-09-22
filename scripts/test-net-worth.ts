@@ -421,7 +421,91 @@ function main() {
   );
   check(
     "assets plus cash minus unsecured reproduces the headline exactly",
-    near(forChart.totalAssets - forChart.unsecured, forChart.netWorth)
+    near(
+      forChart.investments + forChart.cash + forChart.assetEquity - forChart.unsecured,
+      forChart.netWorth
+    )
+  );
+  check(
+    "and the snapshot records the secured half too, so the row can be read either way",
+    near(forChart.secured + forChart.unsecured, forChart.liabilities) &&
+      near(forChart.secured, 155589.18 + 69265.78 + 10739.81),
+    forChart.secured.toFixed(2)
+  );
+
+  // ---- what "Total Debts" means -------------------------------------------
+  // The card headed "Total Debts" showed $12,836.07 — five credit cards —
+  // for a household owing $282,545.22. Not a rounding slip: `unsecured` is
+  // the figure that makes the EQUITY-basis arithmetic come out right, and it
+  // was bound straight to a label that promises the whole. A mortgage is a
+  // debt whether or not the house is worth more than it.
+  const owed = composeNetWorth(snapshotInputs);
+
+  check(
+    "Total Debts is every liability: 282,545.22",
+    near(owed.liabilities, 282545.22),
+    owed.liabilities.toFixed(2)
+  );
+  check(
+    "which is the four secured balances plus the cards, each counted once",
+    near(owed.liabilities, 155589.18 + 69265.78 + 10739.81 + 34114.38 + CARDS),
+    owed.liabilities.toFixed(2)
+  );
+  check(
+    "reporting the unsecured figure instead understates it by 235,594.77",
+    near(owed.liabilities - owed.unsecured, 235594.77),
+    `${owed.unsecured.toFixed(2)} was on the card`
+  );
+  check(
+    "secured and unsecured partition it — nothing lost, nothing doubled",
+    near(owed.secured + owed.unsecured, owed.liabilities)
+  );
+
+  // ---- the two bases reach the same net worth ------------------------------
+  // This is the invariant the card set now rests on. Gross assets against
+  // every debt, and equity against what is left over, must agree to the cent;
+  // if they ever drift, one of the six cards on the page is wrong.
+  check(
+    "gross assets are 711,886.83",
+    near(owed.grossAssets, INVESTMENTS + CASH + 376000 + 70000 + 51006 + 13770) &&
+      near(owed.grossAssets, 711886.83),
+    owed.grossAssets.toFixed(2)
+  );
+  check(
+    "gross assets minus every debt is the headline, to the cent",
+    near(owed.grossAssets - owed.liabilities, owed.netWorth) &&
+      near(owed.netWorth, 429341.61),
+    (owed.grossAssets - owed.liabilities).toFixed(2)
+  );
+  check(
+    "and it agrees with the equity basis, so the fix moved no headline",
+    near(
+      owed.grossAssets - owed.liabilities,
+      owed.investments + owed.cash + owed.assetEquity - owed.unsecured
+    )
+  );
+  check(
+    "pairing gross assets with the unsecured figure would inflate it by 235,594.77",
+    near(owed.grossAssets - owed.unsecured - owed.netWorth, 235594.77),
+    "the mismatch a screen shows if it takes one basis' assets and the other's debts"
+  );
+
+  // A household owing only cards: the two bases are the same thing, and the
+  // fix must not change anything for it.
+  const cardsOnly = composeNetWorth({
+    investments: INVESTMENTS,
+    cash: CASH,
+    assets: [{ kind: "vehicle", id: "jeep", name: "2017 JEEP Grand Cherokee", value: 13770, embeddedLoan: 0 }],
+    liabilities: [debt("d_cards", "credit cards", CARDS, "credit_card")],
+  });
+  check(
+    "with nothing secured, Total Debts and the unsecured figure are the same number",
+    near(cardsOnly.liabilities, cardsOnly.unsecured) && near(cardsOnly.liabilities, CARDS),
+    cardsOnly.liabilities.toFixed(2)
+  );
+  check(
+    "and its net worth is unaffected by any of this",
+    near(cardsOnly.netWorth, INVESTMENTS + CASH + 13770 - CARDS)
   );
 
   // ---- every surface composes from the same function ----------------------
@@ -452,6 +536,37 @@ function main() {
       "the arithmetic that subtracted a linked loan a second time"
     );
   }
+
+  /**
+   * No screen may bind the unsecured figure to a total-debt name.
+   *
+   * Source-level, because the defect was never in the arithmetic — the
+   * composer had `liabilities` right the whole time. It was in five lines
+   * that each read `composed.unsecured` and called the result `debtTotal`,
+   * and no amount of testing `composeNetWorth` could have caught that. The
+   * snapshot writer is exempt and named here: its `total_debts` COLUMN holds
+   * the unsecured balances by definition, with `secured_debts` beside it.
+   */
+  const displaySurfaces = [
+    "src/app/(dashboard)/net-worth/page.tsx",
+    "src/app/(dashboard)/dashboard/page.tsx",
+    "src/app/api/report/infographic/route.ts",
+    "src/lib/tools/get-net-worth.ts",
+  ];
+  const bindsUnsecuredToATotal =
+    /\b(debtTotal|totalDebts|debtsTotal)\b\s*[=:]\s*[A-Za-z_$][\w$]*\.unsecured\b/;
+  for (const file of displaySurfaces) {
+    check(
+      `${file.split("/").pop()} does not call the unsecured figure a debt total`,
+      !bindsUnsecuredToATotal.test(read(file)),
+      "a mortgage is a debt whether or not the house it secures is worth more"
+    );
+  }
+  check(
+    "the snapshot writer stores the secured half alongside the unsecured one",
+    /securedDebts:\s*String\(securedDebts\)/.test(read("src/lib/utils/net-worth-snapshot.ts")),
+    "without it a stored row cannot answer what the household owed that day"
+  );
 
   // ---- an empty household -------------------------------------------------
   const empty = composeNetWorth({ investments: 0, cash: 0, assets: [], liabilities: [] });

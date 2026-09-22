@@ -13,6 +13,19 @@ import {
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { formatCurrency, formatCompactCurrency, formatShortDate } from "@/lib/utils/format";
 
+/**
+ * The stacked bands are equity: the house less its mortgage, the cars less
+ * their loans. That is the only basis every row has — the secured split was
+ * not recorded until 2026-09-22 and cannot be reconstructed for the dates
+ * before it — so the bands and the net worth line stay continuous across the
+ * change rather than stepping up on the day the column was added.
+ *
+ * What does change is the tooltip's debt line. `totalDebts` holds only the
+ * unsecured balances, so it read -$12,836.07 for a household owing
+ * $282,545.22. Where `securedDebts` is recorded the tooltip now shows the
+ * whole of it; where it is null it says the figure is the unsecured part,
+ * rather than quietly presenting a part as the whole.
+ */
 type Snapshot = {
   snapshotDate: string;
   netWorth: string;
@@ -22,6 +35,7 @@ type Snapshot = {
   cashTotal: string;
   vehicleEquity: string;
   totalDebts: string;
+  securedDebts: string | null;
 };
 
 type ChartPoint = {
@@ -32,6 +46,8 @@ type ChartPoint = {
   cash: number;
   vehicles: number;
   debts: number;
+  /** Null where the row predates the secured split being recorded. */
+  secured: number | null;
 };
 
 const COLORS = {
@@ -67,6 +83,7 @@ export function NetWorthHistoryChart({ snapshots }: { snapshots: Snapshot[] }) {
     cash:        Number(s.cashTotal),
     vehicles:    Number(s.vehicleEquity),
     debts:       Number(s.totalDebts),
+    secured:     s.securedDebts === null ? null : Number(s.securedDebts),
   }));
 
   const first = data[0].netWorth;
@@ -88,6 +105,17 @@ export function NetWorthHistoryChart({ snapshots }: { snapshots: Snapshot[] }) {
     if (!active || !payload?.length) return null;
     const nw = payload.find((p) => p.name === "netWorth");
     const components = payload.filter((p) => p.name !== "netWorth");
+    /**
+     * Debt comes from the row, not from `payload`.
+     *
+     * There is no debts Area — the bands are assets — so the debt figure was
+     * mapped into every chart point and then never reached the tooltip,
+     * because `payload` only carries series that are drawn. The tooltip has
+     * been silent about debt the whole time it looked like it reported it.
+     */
+    const point = data.find((d) => d.date === label);
+    const unsecured = point?.debts ?? 0;
+    const secured = point?.secured ?? null;
     return (
       <div
         style={{
@@ -113,16 +141,52 @@ export function NetWorthHistoryChart({ snapshots }: { snapshots: Snapshot[] }) {
             <span key={p.name} style={{ display: "flex", justifyContent: "space-between", gap: 16 }}>
               <span style={{ color: p.color }}>
                 {p.name === "investments" ? "Investments" :
-                 p.name === "realEstate"  ? "Real Estate" :
+                 p.name === "realEstate"  ? "Real Estate (equity)" :
                  p.name === "cash"        ? "Cash" :
-                 p.name === "vehicles"    ? "Vehicles"    : "Debts"}
+                 p.name === "vehicles"    ? "Vehicles (equity)" : p.name}
               </span>
               <span style={{ color: "hsl(var(--foreground))", fontWeight: 500 }}>
-                {p.name === "debts" ? `-${formatCurrency(p.value)}` : formatCurrency(p.value)}
+                {formatCurrency(p.value)}
               </span>
             </span>
           ))}
+          <span style={{ display: "flex", justifyContent: "space-between", gap: 16 }}>
+            <span style={{ color: COLORS.debts }}>
+              {/* Named for what it is. The bands above are equity, so the
+                  mortgages and car loans are already inside them; this is
+                  what is left over. */}
+              {secured === null ? "Other debts" : "Unsecured debts"}
+            </span>
+            <span style={{ color: "hsl(var(--foreground))", fontWeight: 500 }}>
+              -{formatCurrency(unsecured)}
+            </span>
+          </span>
+          {secured !== null && (
+            <span style={{ display: "flex", justifyContent: "space-between", gap: 16 }}>
+              <span style={{ color: COLORS.debts }}>Secured debts</span>
+              <span style={{ color: "hsl(var(--foreground))", fontWeight: 500 }}>
+                -{formatCurrency(secured)}
+              </span>
+            </span>
+          )}
         </div>
+        {secured !== null && (
+          <p
+            style={{
+              marginTop: 6,
+              paddingTop: 6,
+              borderTop: "1px solid hsl(var(--border))",
+              fontWeight: 600,
+              color: "hsl(var(--foreground))",
+              display: "flex",
+              justifyContent: "space-between",
+              gap: 16,
+            }}
+          >
+            <span>Total owed</span>
+            <span>-{formatCurrency(unsecured + secured)}</span>
+          </p>
+        )}
       </div>
     );
   };
@@ -198,9 +262,9 @@ export function NetWorthHistoryChart({ snapshots }: { snapshots: Snapshot[] }) {
                 iconSize={8}
                 formatter={(value) =>
                   value === "investments" ? "Investments" :
-                  value === "realEstate"  ? "Real Estate" :
+                  value === "realEstate"  ? "Real Estate (equity)" :
                   value === "cash"        ? "Cash"        :
-                  value === "vehicles"    ? "Vehicles"    :
+                  value === "vehicles"    ? "Vehicles (equity)"    :
                   value === "debts"       ? "Debts"       : "Net Worth"
                 }
                 wrapperStyle={{ fontSize: 11, paddingTop: 8 }}

@@ -20,6 +20,21 @@
  * the asset's — and the asset's own typed-in figure is ignored rather than
  * added. Where no debt points at the asset, the typed figure is all there is,
  * so it stands. Nothing is counted in both places, and nothing is dropped.
+ *
+ * Counting each liability once leaves a second choice, and getting it wrong is
+ * what put $12,836.07 on a card headed "Total Debts" for a household owing
+ * $282,545.22. There are two consistent ways to reach the same net worth:
+ *
+ *   equity basis:  (investments + cash + asset EQUITY) - UNSECURED debts
+ *   gross basis:   (investments + cash + asset VALUE)  - ALL debts
+ *
+ * Both are offered here. `netWorth` is the same number either way. What they
+ * do not share is what a screen may display: on the equity basis the debt
+ * figure excludes every mortgage and car loan, because those are already
+ * netted out of the assets above it. That is fine as arithmetic and false as
+ * a label. Screens use the gross basis — `grossAssets` and `liabilities` —
+ * so the two sides say what they mean; the equity figures stay per-asset,
+ * where "equity" is the word actually next to them.
  */
 
 export type AssetKind = "real_estate" | "vehicle";
@@ -110,9 +125,28 @@ export type NetWorth = {
   assetEquity: number;
   /** Liabilities not secured against any tracked asset. */
   unsecured: number;
-  /** Every liability, counted once. */
+  /** Liabilities secured against a tracked asset, counted once each. */
+  secured: number;
+  /**
+   * Every liability, counted once: `unsecured + secured`.
+   *
+   * This is what "Total Debts" means. It was `unsecured` on every screen,
+   * because that is the figure that makes the equity-basis arithmetic come
+   * out right — but a mortgage is a debt whether or not the house it is
+   * secured against is worth more. Reporting $12,836.07 against $282,545.22
+   * owed is not a rounding difference, it is the wrong question answered
+   * confidently.
+   */
   liabilities: number;
-  totalAssets: number;
+  /**
+   * Investments + cash + the full market value of every tracked asset.
+   *
+   * Gross, deliberately. Pair it with `liabilities`, never with `unsecured`:
+   * `grossAssets - liabilities` and `equity basis - unsecured` give the same
+   * net worth, but only the first lets a screen show what is owned and what
+   * is owed as two honest numbers.
+   */
+  grossAssets: number;
   netWorth: number;
   suspectedDuplicates: SuspectedDuplicate[];
 };
@@ -245,7 +279,8 @@ export function composeNetWorth(input: {
     0
   );
 
-  const totalAssets = n(investments) + n(cash) + assetEquity;
+  const secured = securedTotal + embeddedTotal;
+  const grossAssets = n(investments) + n(cash) + assetValue;
 
   // ---- what looks like the same loan written down twice --------------------
   const suspectedDuplicates: SuspectedDuplicate[] = [];
@@ -285,9 +320,13 @@ export function composeNetWorth(input: {
     assetValue,
     assetEquity,
     unsecured,
-    liabilities: unsecured + securedTotal + embeddedTotal,
-    totalAssets,
-    netWorth: totalAssets - unsecured,
+    secured,
+    liabilities: unsecured + secured,
+    grossAssets,
+    // Identical to the equity-basis figure it replaced — assetEquity is
+    // assetValue less everything secured — so the headline does not move.
+    // Only the two sides of it become separately reportable.
+    netWorth: grossAssets - (unsecured + secured),
     suspectedDuplicates,
   };
 }

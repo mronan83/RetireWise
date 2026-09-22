@@ -88,11 +88,28 @@ export async function snapshotNetWorth(
   const vehicleEquity = composed.assets
     .filter((a) => a.kind === "vehicle")
     .reduce((s, a) => s + a.equity, 0);
+  const realEstateValue = composed.assets
+    .filter((a) => a.kind === "real_estate")
+    .reduce((s, a) => s + a.value, 0);
+  const vehicleValue = composed.assets
+    .filter((a) => a.kind === "vehicle")
+    .reduce((s, a) => s + a.value, 0);
   const cashTotal = composed.cash;
-  // Only what is not already netted out of an asset's equity above.
-  const totalDebts = composed.unsecured;
-  const totalAssets = composed.totalAssets;
   const netWorth = composed.netWorth;
+
+  /**
+   * Both bases, so a row can answer either question later.
+   *
+   * `totalAssets` and `totalDebts` stay on the equity basis the column names
+   * were written for — asset equity, and only the debts not netted out of it.
+   * The three columns added in 0019 record the other side: full asset value,
+   * and what is secured against those assets. Gross assets less everything
+   * owed gives the same net worth, to the cent, and only that pairing can be
+   * put on a screen labelled "Total Debts" without lying.
+   */
+  const securedDebts = composed.secured;
+  const totalDebts = composed.unsecured;
+  const totalAssets = investments + realEstateEquity + cashTotal + vehicleEquity;
 
   // Delete any existing snapshot for today, then insert fresh
   await db
@@ -114,5 +131,8 @@ export async function snapshotNetWorth(
     cashTotal: String(cashTotal),
     vehicleEquity: String(vehicleEquity),
     totalDebts: String(totalDebts),
+    realEstateValue: String(realEstateValue),
+    vehicleValue: String(vehicleValue),
+    securedDebts: String(securedDebts),
   });
 }

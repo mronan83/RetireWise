@@ -98,8 +98,21 @@ async function NetWorthPageContent() {
   const vehicleLoanTotal = nw.assets
     .filter((a) => a.kind === "vehicle")
     .reduce((s, a) => s + a.owed, 0);
-  const debtTotal = nw.unsecured;
-  const totalAssets = nw.totalAssets;
+  /**
+   * Every liability, secured or not.
+   *
+   * This card read `nw.unsecured` and was headed "Total Debts" — $12,836.07
+   * of credit cards against $282,545.22 actually owed, because the mortgages
+   * and the camper loan were netted out of the assets above and never
+   * reappeared. Equity belongs on the asset it belongs to; it does not stop
+   * the loan being a debt.
+   */
+  const debtTotal = nw.liabilities;
+  const securedDebt = nw.secured;
+  const unsecuredDebt = nw.unsecured;
+  // Gross, to pair with an all-in debt figure: the six cards now read as a
+  // balance sheet, and assets - debts lands on the headline exactly.
+  const totalAssets = nw.grossAssets;
   const netWorth = nw.netWorth;
   const monthlyDebtPayments = debtsList.reduce((s, d) => s + Number(d.monthlyPayment), 0);
 
@@ -235,13 +248,16 @@ async function NetWorthPageContent() {
         </Card>
         <Card>
           <CardHeader className="pb-2 flex flex-row items-center justify-between">
-            <CardTitle className="text-xs text-muted-foreground font-medium">Real Estate Equity</CardTitle>
+            <CardTitle className="text-xs text-muted-foreground font-medium">Real Estate</CardTitle>
             <Home className="h-4 w-4 text-muted-foreground" />
           </CardHeader>
           <CardContent>
-            <p className="text-lg font-bold font-mono">{formatCurrency(realEstateEquity)}</p>
+            <p className="text-lg font-bold font-mono">{formatCurrency(realEstateTotal)}</p>
             <p className="text-xs text-muted-foreground">
-              {formatCurrency(realEstateTotal)} value - {formatCurrency(realEstateTotal - realEstateEquity)} owed
+              {formatCurrency(realEstateEquity)} equity
+              {realEstateTotal - realEstateEquity > 0
+                ? ` · ${formatCurrency(realEstateTotal - realEstateEquity)} owed`
+                : ""}
             </p>
           </CardContent>
         </Card>
@@ -261,9 +277,10 @@ async function NetWorthPageContent() {
             <Car className="h-4 w-4 text-muted-foreground" />
           </CardHeader>
           <CardContent>
-            <p className="text-lg font-bold font-mono">{formatCurrency(vehicleEquity)}</p>
+            <p className="text-lg font-bold font-mono">{formatCurrency(vehicleValue)}</p>
             <p className="text-xs text-muted-foreground">
-              {formatCurrency(vehicleValue)} value{vehicleLoanTotal > 0 ? ` - ${formatCurrency(vehicleLoanTotal)} owed` : ""}
+              {formatCurrency(vehicleEquity)} equity
+              {vehicleLoanTotal > 0 ? ` · ${formatCurrency(vehicleLoanTotal)} owed` : ""}
             </p>
           </CardContent>
         </Card>
@@ -274,12 +291,20 @@ async function NetWorthPageContent() {
           </CardHeader>
           <CardContent>
             <p className="text-lg font-bold font-mono text-red-500">-{formatCurrency(debtTotal)}</p>
-            <p className="text-xs text-muted-foreground">{formatCurrency(monthlyDebtPayments)}/mo payments</p>
+            <p className="text-xs text-muted-foreground">
+              {securedDebt > 0
+                ? `${formatCurrency(securedDebt)} secured · ${formatCurrency(unsecuredDebt)} unsecured`
+                : `${formatCurrency(monthlyDebtPayments)}/mo payments`}
+            </p>
           </CardContent>
         </Card>
       </div>
 
       {/* Breakdown bar */}
+      {/* What is owned, by share of gross value. The segments used to be drawn
+          from gross real estate and vehicle EQUITY over an equity-basis total,
+          so the four of them summed past 100% and the last one ran off the
+          end of the bar. One basis, all four. */}
       {totalAssets > 0 && (
         <Card>
           <CardContent className="pt-6">
@@ -299,10 +324,10 @@ async function NetWorthPageContent() {
                   style={{ width: `${(cashTotal / totalAssets) * 100}%` }}
                   title={`Cash: ${formatCurrency(cashTotal)}`} />
               )}
-              {vehicleEquity > 0 && (
+              {vehicleValue > 0 && (
                 <div className="bg-purple-500 transition-all"
-                  style={{ width: `${(vehicleEquity / totalAssets) * 100}%` }}
-                  title={`Vehicles: ${formatCurrency(vehicleEquity)}`} />
+                  style={{ width: `${(vehicleValue / totalAssets) * 100}%` }}
+                  title={`Vehicles: ${formatCurrency(vehicleValue)}`} />
               )}
             </div>
             <div className="flex flex-wrap gap-x-4 gap-y-1 mt-2 text-xs text-muted-foreground">
@@ -312,16 +337,16 @@ async function NetWorthPageContent() {
               </span>
               <span className="flex items-center gap-1.5">
                 <span className="h-2.5 w-2.5 rounded-full bg-green-500" />
-                Real Estate ({((realEstateEquity / totalAssets) * 100).toFixed(0)}%)
+                Real Estate ({((realEstateTotal / totalAssets) * 100).toFixed(0)}%)
               </span>
               <span className="flex items-center gap-1.5">
                 <span className="h-2.5 w-2.5 rounded-full bg-yellow-500" />
                 Cash ({((cashTotal / totalAssets) * 100).toFixed(0)}%)
               </span>
-              {vehicleEquity > 0 && (
+              {vehicleValue > 0 && (
                 <span className="flex items-center gap-1.5">
                   <span className="h-2.5 w-2.5 rounded-full bg-purple-500" />
-                  Vehicles ({((vehicleEquity / totalAssets) * 100).toFixed(0)}%)
+                  Vehicles ({((vehicleValue / totalAssets) * 100).toFixed(0)}%)
                 </span>
               )}
             </div>

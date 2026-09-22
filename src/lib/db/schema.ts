@@ -1002,12 +1002,31 @@ export const netWorthSnapshots = pgTable(
     clerkId: text("clerk_id").notNull(),
     snapshotDate: date("snapshot_date").notNull(),
     netWorth: decimal("net_worth", { precision: 20, scale: 2 }).notNull(),
+    // Equity basis, matching the four component columns below it:
+    // investments + real estate EQUITY + cash + vehicle EQUITY. Gross assets
+    // are investmentValue + realEstateValue + cashTotal + vehicleValue.
     totalAssets: decimal("total_assets", { precision: 20, scale: 2 }).notNull(),
     investmentValue: decimal("investment_value", { precision: 20, scale: 2 }).notNull().default("0"),
+    // Equity basis: the asset less whatever is secured against it. This is
+    // what the history chart stacks, and every row ever written has it.
     realEstateEquity: decimal("real_estate_equity", { precision: 20, scale: 2 }).notNull().default("0"),
     cashTotal: decimal("cash_total", { precision: 20, scale: 2 }).notNull().default("0"),
     vehicleEquity: decimal("vehicle_equity", { precision: 20, scale: 2 }).notNull().default("0"),
+    /**
+     * UNSECURED balances only, despite the name — cards, student loans, the
+     * things not netted out of an asset above. Kept as it is so the rows
+     * already written keep meaning what they meant; `securedDebts` holds the
+     * rest, and the total owed is the two added together.
+     */
     totalDebts: decimal("total_debts", { precision: 20, scale: 2 }).notNull().default("0"),
+    /**
+     * Gross basis, added in 0019. Null on every row written before it: the
+     * split was not recorded and cannot be reconstructed, and null says so
+     * where a zero would claim the household owed nothing secured.
+     */
+    realEstateValue: decimal("real_estate_value", { precision: 20, scale: 2 }),
+    vehicleValue: decimal("vehicle_value", { precision: 20, scale: 2 }),
+    securedDebts: decimal("secured_debts", { precision: 20, scale: 2 }),
     createdAt: timestamp("created_at").defaultNow().notNull(),
   },
   (table) => [

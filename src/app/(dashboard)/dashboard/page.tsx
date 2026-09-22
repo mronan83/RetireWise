@@ -143,14 +143,14 @@ async function DashboardContentScoped() {
           twice. */}
       <NetWorthCard
         investmentTotal={netWorthFigures.investments}
-        realEstateEquity={netWorthFigures.assets
+        realEstateValue={netWorthFigures.assets
           .filter((a) => a.kind === "real_estate")
-          .reduce((s, a) => s + a.equity, 0)}
+          .reduce((s, a) => s + a.value, 0)}
         cashTotal={netWorthFigures.cash}
-        vehicleEquity={netWorthFigures.assets
+        vehicleValue={netWorthFigures.assets
           .filter((a) => a.kind === "vehicle")
-          .reduce((s, a) => s + a.equity, 0)}
-        debtTotal={netWorthFigures.unsecured}
+          .reduce((s, a) => s + a.value, 0)}
+        debtTotal={netWorthFigures.liabilities}
       />
 
       <PortfolioSummaryCards

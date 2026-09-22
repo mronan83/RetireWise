@@ -134,6 +134,13 @@
       "when": 1790013095325,
       "tag": "0018_debt_secured_by",
       "breakpoints": true
+    },
+    {
+      "idx": 19,
+      "version": "7",
+      "when": 1790013195325,
+      "tag": "0019_snapshot_gross_basis",
+      "breakpoints": true
     }
   ]
 }

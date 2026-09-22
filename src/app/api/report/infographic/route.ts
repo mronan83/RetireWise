@@ -100,12 +100,19 @@ async function handleGet() {
   // of the total entirely while the dashboard and the net worth page included
   // them. Three copies, three answers.
   const composed = await loadNetWorth(userId);
+  // Gross assets against every liability, the same basis as the screens. The
+  // breakdown printed real estate EQUITY beside a debt figure that excluded
+  // the mortgage netted out of it, and left vehicles out altogether — so the
+  // four lines did not add up to the total above them.
   const investmentTotal = composed.investments;
-  const realEstateEquity = composed.assets
+  const realEstateValue = composed.assets
     .filter((a) => a.kind === "real_estate")
-    .reduce((s, a) => s + a.equity, 0);
+    .reduce((s, a) => s + a.value, 0);
+  const vehicleValue = composed.assets
+    .filter((a) => a.kind === "vehicle")
+    .reduce((s, a) => s + a.value, 0);
   const cashTotal = composed.cash;
-  const debtTotal = composed.unsecured;
+  const debtTotal = composed.liabilities;
   const netWorth = composed.netWorth;
 
   // Owner breakdown
@@ -330,8 +337,9 @@ Focus on: concentration risk, allocation balance, actionable improvements, and a
       <div class="stat-value ${netWorth >= 0 ? "green" : "red"}">${formatCurrency(netWorth)}</div>
       <div class="nw-breakdown">
         <div class="nw-item">📈 Investments <span>${formatCurrency(investmentTotal)}</span></div>
-        <div class="nw-item">🏠 Real Estate <span>${formatCurrency(realEstateEquity)}</span></div>
+        <div class="nw-item">🏠 Real Estate <span>${formatCurrency(realEstateValue)}</span></div>
         <div class="nw-item">💰 Cash <span>${formatCurrency(cashTotal)}</span></div>
+        ${vehicleValue > 0 ? `<div class="nw-item">🚗 Vehicles <span>${formatCurrency(vehicleValue)}</span></div>` : ""}
         <div class="nw-item">💳 Debt <span class="red">-${formatCurrency(debtTotal)}</span></div>
       </div>
     </div>
