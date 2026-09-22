@@ -3,7 +3,8 @@ import { z } from "zod";
 import { getApiUserId } from "@/lib/auth-helpers";
 import { eq } from "drizzle-orm";
 import { getDb } from "../db";
-import { realEstate, cashReserves, debts } from "../db/schema";
+import { realEstate, cashReserves, debts, vehicles } from "../db/schema";
+import { loadNetWorth } from "../net-worth/load";
 import { getHoldingsByClerkId } from "../queries/holdings";
 import { DEBT_TYPE_LABELS, CASH_TYPE_LABELS } from "../constants-net-worth";
 import { ACCOUNT_OWNER_LABELS } from "../constants";
@@ -19,24 +20,35 @@ export const getNetWorthTool = tool({
     if (!userId) return { error: "Not authenticated" };
 
     const db = getDb();
-    const [holdings, properties, cash, debtsList] = await Promise.all([
-      getHoldingsByClerkId(userId),
+    const [composed, properties, cash, debtsList, vehiclesList] = await Promise.all([
+      // Composed in src/lib/net-worth/compose.ts. This tool used to sum it
+      // here — the fifth place that did — and it both subtracted asset loans
+      // twice and left vehicles out of the total altogether, so asking for
+      // the household's net worth returned a figure no screen agreed with.
+      loadNetWorth(userId),
       db.select().from(realEstate).where(eq(realEstate.clerkId, userId)),
       db.select().from(cashReserves).where(eq(cashReserves.clerkId, userId)),
       db.select().from(debts).where(eq(debts.clerkId, userId)),
+      db.select().from(vehicles).where(eq(vehicles.clerkId, userId)),
     ]);
 
-    const investmentTotal = holdings.reduce((s, h) => s + Number(h.currentValue), 0);
+    const owedBy = new Map(composed.assets.map((a) => [a.id, a]));
+    const investmentTotal = composed.investments;
     const realEstateTotal = properties.reduce((s, p) => s + Number(p.estimatedValue), 0);
-    const realEstateEquity = properties.reduce(
-      (s, p) => s + Number(p.estimatedValue) - Number(p.mortgageBalance || 0), 0
-    );
-    const cashTotal = cash.reduce((s, c) => s + Number(c.balance), 0);
-    const debtTotal = debtsList.reduce((s, d) => s + Number(d.currentBalance), 0);
+    const realEstateEquity = composed.assets
+      .filter((a) => a.kind === "real_estate")
+      .reduce((s, a) => s + a.equity, 0);
+    const vehicleTotal = vehiclesList.reduce((s, v) => s + Number(v.estimatedValue), 0);
+    const vehicleEquity = composed.assets
+      .filter((a) => a.kind === "vehicle")
+      .reduce((s, a) => s + a.equity, 0);
+    const cashTotal = composed.cash;
+    // Only the debts not already netted out of an asset's equity above.
+    const debtTotal = composed.unsecured;
     const monthlyDebtPayments = debtsList.reduce((s, d) => s + Number(d.monthlyPayment), 0);
 
-    const totalAssets = investmentTotal + realEstateEquity + cashTotal;
-    const netWorth = totalAssets - debtTotal;
+    const totalAssets = composed.totalAssets;
+    const netWorth = composed.netWorth;
 
     return {
       netWorth: Math.round(netWorth),
@@ -46,14 +58,20 @@ export const getNetWorthTool = tool({
         investments: Math.round(investmentTotal),
         realEstate: Math.round(realEstateTotal),
         realEstateEquity: Math.round(realEstateEquity),
+        vehicles: Math.round(vehicleTotal),
+        vehicleEquity: Math.round(vehicleEquity),
         cashReserves: Math.round(cashTotal),
       },
+      note:
+        "totalDebts counts only liabilities not secured against a tracked asset; " +
+        "a loan secured against a property or vehicle is already netted out of that asset's equity.",
       properties: properties.map((p) => ({
         name: p.name,
         owner: ACCOUNT_OWNER_LABELS[p.owner],
         value: Number(p.estimatedValue),
-        mortgageBalance: Number(p.mortgageBalance || 0),
-        equity: Number(p.estimatedValue) - Number(p.mortgageBalance || 0),
+        mortgageBalance: owedBy.get(p.id)?.owed ?? Number(p.mortgageBalance || 0),
+        equity: owedBy.get(p.id)?.equity ?? Number(p.estimatedValue),
+        securedBy: owedBy.get(p.id)?.securedBy.map((l) => l.name) ?? [],
         monthlyPayment: p.monthlyPayment ? Number(p.monthlyPayment) : null,
         isPrimary: p.isPrimaryResidence,
       })),
@@ -64,8 +82,19 @@ export const getNetWorthTool = tool({
         balance: Number(c.balance),
         apy: c.interestRate ? Number(c.interestRate) : null,
       })),
+      vehicleDetails: vehiclesList.map((v) => ({
+        name: v.name,
+        owner: ACCOUNT_OWNER_LABELS[v.owner],
+        value: Number(v.estimatedValue),
+        loanBalance: owedBy.get(v.id)?.owed ?? 0,
+        equity: owedBy.get(v.id)?.equity ?? Number(v.estimatedValue),
+        securedBy: owedBy.get(v.id)?.securedBy.map((l) => l.name) ?? [],
+      })),
       debtDetails: debtsList.map((d) => ({
         name: d.name,
+        securedAgainst: d.securedById
+          ? composed.assets.find((a) => a.id === d.securedById)?.name ?? null
+          : null,
         owner: ACCOUNT_OWNER_LABELS[d.owner],
         type: DEBT_TYPE_LABELS[d.debtType],
         balance: Number(d.currentBalance),

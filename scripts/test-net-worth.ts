@@ -14,6 +14,8 @@
  *
  * Every assertion below is written as that bug, using the real records.
  */
+import { readFileSync } from "node:fs";
+import { join } from "node:path";
 import {
   composeNetWorth,
   looksLikeSameLoan,
@@ -421,6 +423,35 @@ function main() {
     "assets plus cash minus unsecured reproduces the headline exactly",
     near(forChart.totalAssets - forChart.unsecured, forChart.netWorth)
   );
+
+  // ---- every surface composes from the same function ----------------------
+  // Five places summed this independently. Three were consolidated, the
+  // snapshot writer outlived that, and the AI tool outlived the snapshot
+  // writer — so "what is my net worth" answered with a figure that both
+  // double-counted the asset loans and left vehicles out of the total.
+  const read = (rel: string) =>
+    readFileSync(join(__dirname, "..", rel), "utf8");
+
+  const surfaces = [
+    "src/app/(dashboard)/net-worth/page.tsx",
+    "src/app/(dashboard)/dashboard/page.tsx",
+    "src/app/api/report/infographic/route.ts",
+    "src/lib/utils/net-worth-snapshot.ts",
+    "src/lib/tools/get-net-worth.ts",
+  ];
+  for (const file of surfaces) {
+    const src = read(file);
+    check(
+      `${file.split("/").pop()} composes rather than summing its own`,
+      /composeNetWorth|loadNetWorth/.test(src),
+      "a fifth copy is how this defect survived being fixed four times"
+    );
+    check(
+      `${file.split("/").pop()} does not net an asset's own loan out itself`,
+      !/estimatedValue\)\s*-\s*Number\((?:p\.mortgageBalance|v\.loanBalance)/.test(src),
+      "the arithmetic that subtracted a linked loan a second time"
+    );
+  }
 
   // ---- an empty household -------------------------------------------------
   const empty = composeNetWorth({ investments: 0, cash: 0, assets: [], liabilities: [] });
