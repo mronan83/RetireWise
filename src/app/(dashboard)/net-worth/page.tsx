@@ -9,6 +9,8 @@ import { formatCurrency } from "@/lib/utils/format";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { PlaidLinkButton } from "@/components/plaid/plaid-link-button";
 import { DuplicateCashReview, type DuplicatePair } from "./duplicate-cash-review";
+import { SecuredDebtReview } from "./secured-debt-review";
+import { loadNetWorth } from "@/lib/net-worth/load";
 import { normalizeName } from "@/lib/plaid/sync";
 import {
   TrendingUp,
@@ -49,21 +51,39 @@ async function NetWorthPageContent() {
     snapshotNetWorth(userId).catch(() => {});
   }
 
-  const investmentTotal = holdings.reduce((s, h) => s + Number(h.currentValue), 0);
-  const realEstateTotal = properties.reduce((s, p) => s + Number(p.estimatedValue), 0);
-  const realEstateEquity = properties.reduce(
-    (s, p) => s + Number(p.estimatedValue) - Number(p.mortgageBalance || 0), 0
-  );
-  const cashTotal = cash.reduce((s, c) => s + Number(c.balance), 0);
-  const debtTotal = debtsList.reduce((s, d) => s + Number(d.currentBalance), 0);
+  /**
+   * Composed once, in src/lib/net-worth/compose.ts.
+   *
+   * What stood here netted each asset's own typed-in loan out of its equity
+   * and then subtracted the whole debts table on top. A loan recorded in both
+   * places — which is what a bank connection produces for a car already
+   * entered by hand — came off twice.
+   */
+  const nw = await loadNetWorth(userId);
+
+  const investmentTotal = nw.investments;
+  const cashTotal = nw.cash;
+  const realEstateTotal = nw.assets
+    .filter((a) => a.kind === "real_estate")
+    .reduce((s, a) => s + a.value, 0);
+  const realEstateEquity = nw.assets
+    .filter((a) => a.kind === "real_estate")
+    .reduce((s, a) => s + a.equity, 0);
+  const vehicleValue = nw.assets
+    .filter((a) => a.kind === "vehicle")
+    .reduce((s, a) => s + a.value, 0);
+  const vehicleEquity = nw.assets
+    .filter((a) => a.kind === "vehicle")
+    .reduce((s, a) => s + a.equity, 0);
+  // What is owed against the vehicles, from whichever record is authoritative
+  // for each — the synced debt where one is linked, the typed figure where not.
+  const vehicleLoanTotal = nw.assets
+    .filter((a) => a.kind === "vehicle")
+    .reduce((s, a) => s + a.owed, 0);
+  const debtTotal = nw.unsecured;
+  const totalAssets = nw.totalAssets;
+  const netWorth = nw.netWorth;
   const monthlyDebtPayments = debtsList.reduce((s, d) => s + Number(d.monthlyPayment), 0);
-  const vehicleValue = vehiclesList.reduce((s, v) => s + Number(v.estimatedValue), 0);
-  const vehicleLoanTotal = vehiclesList.reduce(
-    (s, v) => s + (v.hasLoan ? Number(v.loanBalance || 0) : 0), 0
-  );
-  const vehicleEquity = vehicleValue - vehicleLoanTotal;
-  const totalAssets = investmentTotal + realEstateEquity + cashTotal + vehicleEquity;
-  const netWorth = totalAssets - debtTotal;
 
   // Shown so it is obvious which figures keep themselves current and which
   // are only as fresh as the last time someone typed them.
@@ -134,6 +154,14 @@ async function NetWorthPageContent() {
       </div>
 
       {duplicatePairs.length > 0 && <DuplicateCashReview pairs={duplicatePairs} />}
+
+      {/* A loan typed onto a car or a house, sitting beside a synced debt row
+          that looks like the same borrowing. Surfaced rather than merged: only
+          the owner knows whether two loans against one asset are one loan
+          written twice or a genuine second lien. */}
+      {nw.suspectedDuplicates.length > 0 && (
+        <SecuredDebtReview duplicates={nw.suspectedDuplicates} />
+      )}
 
       {/* Summary cards */}
       <div className="grid gap-3 sm:gap-4 grid-cols-2 sm:grid-cols-3 lg:grid-cols-6">

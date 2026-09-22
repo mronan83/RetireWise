@@ -127,6 +127,13 @@
       "when": 1790012995325,
       "tag": "0017_goal_links",
       "breakpoints": true
+    },
+    {
+      "idx": 18,
+      "version": "7",
+      "when": 1790013095325,
+      "tag": "0018_debt_secured_by",
+      "breakpoints": true
     }
   ]
 }

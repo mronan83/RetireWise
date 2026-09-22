@@ -5,7 +5,7 @@ import { revalidatePath } from "next/cache";
 import { eq, and } from "drizzle-orm";
 import { z } from "zod";
 import { getDb } from "../db";
-import { realEstate, cashReserves, debts } from "../db/schema";
+import { realEstate, cashReserves, debts, vehicles } from "../db/schema";
 import { snapshotNetWorth } from "../utils/net-worth-snapshot";
 import { recordItemHistory } from "../utils/record-item-history";
 
@@ -224,7 +224,40 @@ const debtSchema = z.object({
   monthlyPayment: z.coerce.number().min(0),
   payoffDate: z.string().optional(),
   notes: z.string().optional(),
+  /**
+   * The asset this loan is secured against, as "kind:id", or absent.
+   *
+   * Naming it makes this balance the amount owed on that asset and retires
+   * the loan figure stored on the asset itself. Without it both are
+   * subtracted and the household's net worth is understated by the loan —
+   * which is what a bank connection did to two car loans already typed in.
+   */
+  securedBy: z.string().optional(),
 });
+
+/** "vehicle:uuid" from the form, validated against the household's assets. */
+async function resolveSecuredBy(
+  clerkId: string,
+  raw: string | undefined
+): Promise<{ securedByType: "real_estate" | "vehicle" | null; securedById: string | null }> {
+  const none = { securedByType: null, securedById: null };
+  if (!raw || raw === "none") return none;
+
+  const [kind, id] = raw.split(":");
+  if (kind !== "real_estate" && kind !== "vehicle") return none;
+  if (!id) return none;
+
+  const table = kind === "vehicle" ? vehicles : realEstate;
+  const owned = await getDb()
+    .select({ id: table.id })
+    .from(table)
+    .where(and(eq(table.id, id), eq(table.clerkId, clerkId)))
+    .limit(1);
+  if (owned.length === 0) {
+    throw new Error("That asset is not in this household.");
+  }
+  return { securedByType: kind, securedById: id };
+}
 
 export async function createDebt(
   ...args: Parameters<typeof createDebtImpl>
@@ -244,7 +277,9 @@ async function createDebtImpl(formData: FormData) {
     monthlyPayment: formData.get("monthlyPayment"),
     payoffDate: formData.get("payoffDate") || undefined,
     notes: formData.get("notes") || undefined,
+    securedBy: formData.get("securedBy") || undefined,
   });
+  const secured = await resolveSecuredBy(userId, parsed.securedBy);
   const db = getDb();
   const [inserted] = await db.insert(debts).values({
     clerkId: userId,
@@ -256,6 +291,7 @@ async function createDebtImpl(formData: FormData) {
     monthlyPayment: String(parsed.monthlyPayment),
     payoffDate: parsed.payoffDate || null,
     notes: parsed.notes || null,
+    ...secured,
   }).returning({ id: debts.id, name: debts.name });
   if (inserted) {
     recordItemHistory(userId, "debt", inserted.id, inserted.name, parsed.currentBalance).catch(() => {});
@@ -281,7 +317,9 @@ async function updateDebtImpl(id: string, formData: FormData) {
     monthlyPayment: formData.get("monthlyPayment"),
     payoffDate: formData.get("payoffDate") || undefined,
     notes: formData.get("notes") || undefined,
+    securedBy: formData.get("securedBy") || undefined,
   });
+  const secured = await resolveSecuredBy(userId, parsed.securedBy);
   const db = getDb();
   await db.update(debts).set({
     owner: parsed.owner,
@@ -292,6 +330,7 @@ async function updateDebtImpl(id: string, formData: FormData) {
     monthlyPayment: String(parsed.monthlyPayment),
     payoffDate: parsed.payoffDate || null,
     notes: parsed.notes || null,
+    ...secured,
   }).where(and(eq(debts.id, id), eq(debts.clerkId, userId)));
   recordItemHistory(userId, "debt", id, parsed.name, parsed.currentBalance).catch(() => {});
   await snapshotNetWorth(userId).catch(() => {});

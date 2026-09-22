@@ -14,6 +14,7 @@ import { gainLossFor, missingBasisNote, rollupBasis } from "@/lib/utils/cost-bas
 import { RefreshPricesButton } from "@/components/dashboard/refresh-prices-button";
 import { GoalsPanel } from "@/components/dashboard/goals-panel";
 import { getGoalsWithProgress, getLinkableItems } from "@/lib/queries/goals";
+import { loadNetWorth } from "@/lib/net-worth/load";
 import { ExportButtons } from "@/components/dashboard/export-buttons";
 import { NetWorthCard } from "@/components/dashboard/net-worth-card";
 import { eq } from "drizzle-orm";
@@ -35,7 +36,7 @@ async function DashboardContentScoped() {
   if (setup.empty) redirect("/onboarding");
 
   const db = getDb();
-  const [accountsList, holdingsWithAccounts, snapshots, userGoals, linkableItems, properties, cashAccounts, debtsList, vehiclesList, periodReturnsMap] = await Promise.all([
+  const [accountsList, holdingsWithAccounts, snapshots, userGoals, linkableItems, netWorthFigures, properties, cashAccounts, debtsList, vehiclesList, periodReturnsMap] = await Promise.all([
     getAccountsWithFreshness(userId),
     getHoldingsByClerkId(userId),
     getSnapshots(userId, 90),
@@ -44,6 +45,7 @@ async function DashboardContentScoped() {
     // every goal drew the same bar.
     getGoalsWithProgress(userId),
     getLinkableItems(userId),
+    loadNetWorth(userId),
     db.select().from(realEstate).where(eq(realEstate.clerkId, userId)),
     db.select().from(cashReserves).where(eq(cashReserves.clerkId, userId)),
     db.select().from(debts).where(eq(debts.clerkId, userId)),
@@ -135,16 +137,20 @@ async function DashboardContentScoped() {
         </div>
       </div>
 
+      {/* Composed once, in src/lib/net-worth/compose.ts. This block used to
+          net each asset's own loan figure out of its equity and then subtract
+          the debts table on top — so a loan recorded in both places came off
+          twice. */}
       <NetWorthCard
-        investmentTotal={summary.totalValue}
-        realEstateEquity={properties.reduce(
-          (s, p) => s + Number(p.estimatedValue) - Number(p.mortgageBalance || 0), 0
-        )}
-        cashTotal={cashAccounts.reduce((s, c) => s + Number(c.balance), 0)}
-        vehicleEquity={vehiclesList.reduce(
-          (s, v) => s + Number(v.estimatedValue) - (v.hasLoan ? Number(v.loanBalance || 0) : 0), 0
-        )}
-        debtTotal={debtsList.reduce((s, d) => s + Number(d.currentBalance), 0)}
+        investmentTotal={netWorthFigures.investments}
+        realEstateEquity={netWorthFigures.assets
+          .filter((a) => a.kind === "real_estate")
+          .reduce((s, a) => s + a.equity, 0)}
+        cashTotal={netWorthFigures.cash}
+        vehicleEquity={netWorthFigures.assets
+          .filter((a) => a.kind === "vehicle")
+          .reduce((s, a) => s + a.equity, 0)}
+        debtTotal={netWorthFigures.unsecured}
       />
 
       <PortfolioSummaryCards

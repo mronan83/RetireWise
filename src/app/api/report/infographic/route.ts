@@ -12,6 +12,7 @@ import {
 import { getHoldingsByClerkId } from "@/lib/queries/holdings";
 import { getAccounts } from "@/lib/queries/accounts";
 import { getSnapshots } from "@/lib/queries/snapshots";
+import { loadNetWorth } from "@/lib/net-worth/load";
 import {
   calculatePortfolioSummary,
   calculateGainLoss,
@@ -94,22 +95,18 @@ async function handleGet() {
     day: "numeric",
   });
 
-  // Net worth
-  const investmentTotal = summary.totalValue;
-  const realEstateEquity = properties.reduce(
-    (s, p) => s + Number(p.estimatedValue) - Number(p.mortgageBalance || 0),
-    0
-  );
-  const cashTotal = cashAccounts.reduce(
-    (s, c) => s + Number(c.balance),
-    0
-  );
-  const debtTotal = debtsList.reduce(
-    (s, d) => s + Number(d.currentBalance),
-    0
-  );
-  const netWorth =
-    investmentTotal + realEstateEquity + cashTotal - debtTotal;
+  // Net worth, composed once — see src/lib/net-worth/compose.ts. This block
+  // summed it in its own words, and differently again: it left vehicles out
+  // of the total entirely while the dashboard and the net worth page included
+  // them. Three copies, three answers.
+  const composed = await loadNetWorth(userId);
+  const investmentTotal = composed.investments;
+  const realEstateEquity = composed.assets
+    .filter((a) => a.kind === "real_estate")
+    .reduce((s, a) => s + a.equity, 0);
+  const cashTotal = composed.cash;
+  const debtTotal = composed.unsecured;
+  const netWorth = composed.netWorth;
 
   // Owner breakdown
   let selfVal = 0,

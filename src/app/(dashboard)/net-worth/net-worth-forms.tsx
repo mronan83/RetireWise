@@ -43,6 +43,7 @@ type CashItem = {
 };
 type DebtItem = {
   id: string; owner: string; name: string; debtType: string;
+  securedByType?: string | null; securedById?: string | null;
   currentBalance: string; interestRate: string; monthlyPayment: string; payoffDate: string | null;
   dataSource?: string | null; lastSyncedAt?: Date | string | null;
   updatedAt?: Date | string | null;
@@ -370,6 +371,17 @@ export function NetWorthForms({ section, properties, cash, debts, vehicles, hist
                       <Badge variant="outline" className="text-xs">
                         {DEBT_TYPE_LABELS[d.debtType as keyof typeof DEBT_TYPE_LABELS]}
                       </Badge>
+                      {/* Visible on the row, because it changes which figure
+                          the asset's equity is calculated from. */}
+                      {d.securedByType && d.securedById && (
+                        <Badge variant="secondary" className="text-xs">
+                          secured ·{" "}
+                          {(d.securedByType === "vehicle"
+                            ? vehicles.find((v) => v.id === d.securedById)?.name
+                            : properties.find((p) => p.id === d.securedById)?.name) ??
+                            "asset removed"}
+                        </Badge>
+                      )}
                     </div>
                     <p className="text-xs text-muted-foreground mt-0.5">
                       {Number(d.interestRate)}% rate | {formatCurrency(Number(d.monthlyPayment))}/mo
@@ -453,6 +465,8 @@ export function NetWorthForms({ section, properties, cash, debts, vehicles, hist
           )}
           {mode?.type === "debt" && (
             <DebtForm
+              properties={properties}
+              vehicles={vehicles}
               item={mode.kind === "edit" ? mode.item : undefined}
               onSuccess={close}
             />
@@ -640,7 +654,17 @@ function CashForm({ item, onSuccess }: { item?: CashItem; onSuccess: () => void 
 }
 
 // --- Debt Form ---
-function DebtForm({ item, onSuccess }: { item?: DebtItem; onSuccess: () => void }) {
+function DebtForm({
+  item,
+  onSuccess,
+  properties,
+  vehicles,
+}: {
+  item?: DebtItem;
+  onSuccess: () => void;
+  properties: RealEstateItem[];
+  vehicles: VehicleItem[];
+}) {
   const [error, formAction, isPending] = useActionState(
     async (_prev: string | null, formData: FormData) => {
       try {
@@ -689,6 +713,43 @@ function DebtForm({ item, onSuccess }: { item?: DebtItem; onSuccess: () => void 
         <Label>Name</Label>
         <Input name="name" defaultValue={item?.name} placeholder="e.g. Primary Mortgage" required />
       </div>
+      {/* What the loan is secured against.
+          A car or a house also carries its own loan figure, typed onto the
+          asset. Naming the asset here makes this balance the one that counts
+          and retires the typed figure — without it, both are subtracted and
+          the household's net worth is understated by the loan. */}
+      {(properties.length > 0 || vehicles.length > 0) && (
+        <div className="space-y-1">
+          <Label>Secured against (optional)</Label>
+          <Select
+            name="securedBy"
+            defaultValue={
+              item?.securedByType && item?.securedById
+                ? `${item.securedByType}:${item.securedById}`
+                : "none"
+            }
+          >
+            <SelectTrigger><SelectValue /></SelectTrigger>
+            <SelectContent>
+              <SelectItem value="none">Not secured against an asset</SelectItem>
+              {properties.map((p) => (
+                <SelectItem key={p.id} value={`real_estate:${p.id}`}>
+                  {p.name} — property
+                </SelectItem>
+              ))}
+              {vehicles.map((v) => (
+                <SelectItem key={v.id} value={`vehicle:${v.id}`}>
+                  {v.name} — vehicle
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+          <p className="text-xs text-muted-foreground">
+            This balance then becomes the amount owed on that asset, in place of
+            the loan figure stored on the asset itself.
+          </p>
+        </div>
+      )}
       <div className="grid grid-cols-3 gap-4">
         <div className="space-y-1">
           <Label>Balance ($)</Label>

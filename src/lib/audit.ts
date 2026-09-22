@@ -21,6 +21,8 @@ export type AuditAction =
   | "holdings.replaced_by_sync"
   | "cost_basis.set"
   | "cost_basis.cleared"
+  | "debt.secured_by_set"
+  | "debt.secured_by_cleared"
   | "billing.subscribed"
   | "billing.cancelled"
   | "data.exported"

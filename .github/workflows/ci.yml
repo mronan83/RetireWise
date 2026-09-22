@@ -99,6 +99,12 @@ jobs:
       # "pay off all debt" goal.
       - run: pnpm exec tsx scripts/test-goals.ts
 
+      # Net worth with every liability counted once. A car loan typed onto the
+      # vehicle AND synced into the debts table was subtracted twice, so
+      # connecting a bank knocked $81,442.58 off the reported figure with
+      # nothing borrowed.
+      - run: pnpm exec tsx scripts/test-net-worth.ts
+
   mobile:
     name: Mobile layout
     runs-on: ubuntu-latest

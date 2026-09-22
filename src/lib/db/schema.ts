@@ -30,6 +30,9 @@ export const accountTypeEnum = pgEnum("account_type", [
   "other",
 ]);
 
+/** The kinds of asset a debt can be secured against. */
+export const debtSecurityEnum = pgEnum("debt_security", ["real_estate", "vehicle"]);
+
 export const goalDirectionEnum = pgEnum("goal_direction", [
   "accumulate",
   "reduce",
@@ -919,6 +922,22 @@ export const debts = pgTable("debts", {
   plaidAccountId: text("plaid_account_id"),
   dataSource: dataSourceEnum("data_source").notNull().default("manual"),
   lastSyncedAt: timestamp("last_synced_at"),
+
+  /**
+   * The asset this loan is secured against, when it is secured against one.
+   *
+   * A car loan lives in two places: typed onto the vehicle as `loan_balance`,
+   * and synced here as its own row. Net worth subtracted both, so connecting a
+   * bank knocked $81,442.58 off the reported figure overnight with nothing
+   * borrowed. Naming the asset is what lets the total count the loan once —
+   * see src/lib/net-worth/compose.ts.
+   *
+   * Polymorphic rather than two nullable foreign keys, matching goal_links and
+   * net_worth_item_history. No FK constraint for the same reason: the target
+   * lives in one of two tables.
+   */
+  securedByType: debtSecurityEnum("secured_by_type"),
+  securedById: uuid("secured_by_id"),
 
   createdAt: timestamp("created_at").defaultNow().notNull(),
   updatedAt: timestamp("updated_at").defaultNow().notNull(),
