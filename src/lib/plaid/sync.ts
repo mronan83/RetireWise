@@ -603,7 +603,9 @@ export async function syncPlaidBalances(options: {
     string,
     { rate: number | null; payment: number | null; origination: number | null }
   >();
-  if (data.accounts.some((a) => a.type === "loan" || a.type === "credit")) {
+  // Asked only when there is a mortgage, since that is all it is read for: the
+  // first call adds Liabilities to the item, and Plaid bills it from then on.
+  if (data.accounts.some((a) => a.type === "loan" && a.subtype === "mortgage")) {
     try {
       const liabilities = await client.liabilitiesGet({ access_token: accessToken });
       for (const m of liabilities.data.liabilities.mortgage ?? []) {
