@@ -36,7 +36,8 @@
     "test:dividends": "tsx scripts/test-dividends.ts",
     "test:goals": "tsx scripts/test-goals.ts",
     "test:net-worth": "tsx scripts/test-net-worth.ts",
-    "test:ofx-import": "tsx scripts/test-ofx-import.ts"
+    "test:ofx-import": "tsx scripts/test-ofx-import.ts",
+    "deploy:prod": "NODE_USE_ENV_PROXY=1 NODE_NO_WARNINGS=1 tsx scripts/deploy-production.ts"
   },
   "dependencies": {
     "@ai-sdk/anthropic": "^3.0.71",
