@@ -56,11 +56,18 @@ async function handlePost(request: Request) {
   // Transactions is the product that initializes a depository item. Balance
   // is not listed because Plaid does not accept it as a product — it comes
   // with any initialized item, and the balance is all this app reads.
-  // Liabilities moves to `required_if_supported_products`, which fetches it
-  // from a mortgage lender that offers it without hiding a bank that does not.
+  //
+  // Liabilities is only consented to here, not initialized. It used to sit in
+  // `required_if_supported_products`, which makes Plaid extract it during Link
+  // and fail the whole connection if that extraction errors. Store cards
+  // (Synchrony, Citi Retail Services) would not link while every general-
+  // purpose card did, and the only thing at stake was mortgage detail this
+  // app never reads off a credit card. Consent alone is Plaid's
+  // recommended setup for personal finance: /liabilities/get is called after
+  // linking, only for a mortgage, and is not billed until then.
   const products =
     scope === "banking" ? [Products.Transactions] : [Products.Investments];
-  const requiredIfSupported =
+  const additionalConsented =
     scope === "banking" ? [Products.Liabilities] : undefined;
 
   try {
@@ -70,8 +77,8 @@ async function handlePost(request: Request) {
       user: { client_user_id: userId },
       client_name: "RetireWise",
       products,
-      ...(requiredIfSupported
-        ? { required_if_supported_products: requiredIfSupported }
+      ...(additionalConsented
+        ? { additional_consented_products: additionalConsented }
         : {}),
       country_codes: [CountryCode.Us],
       language: "en",

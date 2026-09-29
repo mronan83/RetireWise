@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useCallback, useEffect } from "react";
-import { usePlaidLink } from "react-plaid-link";
+import { usePlaidLink, type PlaidLinkOnExit } from "react-plaid-link";
 import { Link2, Loader2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 
@@ -68,16 +68,35 @@ export function PlaidLinkButton({
     []
   );
 
+  // Link reports a failed connection here and nowhere else. Ignoring it meant
+  // the dialog just closed, leaving no trace of why a card would not link.
+  // The session id is what Plaid's dashboard logs are searchable by.
+  const onExit = useCallback<PlaidLinkOnExit>((err, metadata) => {
+    setLoading(false);
+    if (!err) return;
+    console.error("Plaid Link exited with an error", {
+      error_code: err.error_code,
+      error_type: err.error_type,
+      institution: metadata.institution,
+      link_session_id: metadata.link_session_id,
+      request_id: metadata.request_id,
+    });
+    const where = metadata.institution?.name ? `${metadata.institution.name}: ` : "";
+    const what = err.display_message || err.error_message || "The connection did not complete.";
+    setError(`${where}${what} (${err.error_code})`);
+  }, []);
+
   const { open, ready } = usePlaidLink({
     token: linkToken,
     onSuccess,
-    onExit: () => setLoading(false),
+    onExit,
   });
 
   return (
     <div>
       <Button
         onClick={() => {
+          setError(null);
           setLoading(true);
           open();
         }}
