@@ -2,7 +2,7 @@
 
 Last reviewed: 2026-10-02
 
-Items from the [delivery review](https://claude.ai/artifact/Eo9g6bEnWFi9TBoSPwohPk) (G1–G7) the Plaid investigation of 29 Sep, and the requirements traceability review of 2 Oct (#28–#52, one per gap). The page is published from this file after each successful `pnpm deploy:prod`, so it always describes what is live.
+Items from the [delivery review](https://claude.ai/artifact/Eo9g6bEnWFi9TBoSPwohPk) (G1–G7) the Plaid investigation of 29 Sep, and the requirements traceability review of 2 Oct (#28–#54, one per gap). The page is published from this file after each successful `pnpm deploy:prod`, so it always describes what is live.
 
 <!--
 How to edit
@@ -340,10 +340,10 @@ The `WITH CHECK` on memberships does not tie the household to an accepted invite
 - Priority: P2
 - Effort: M
 - Severity: Medium
-- Blocker: Your decision on Q3 in the requirements: what happens to what a leaving member added
+- Blocker: #54
 - Source: Requirements traceability, GAP-08
 
-The erase-data screen tells a member they "can leave the household instead", and there is no such action. The only way to revoke a partner's access today is to erase everything.
+The erase-data screen tells a member they "can leave the household instead", and there is no such action. The only way to revoke a partner's access today is to erase everything. You decided (Q3) that leaving deletes what the member added. So the leave and remove actions delete those rows, disconnect the member's bank connections at Plaid, and show the list before confirming. That needs #54 first.
 
 ### 36. Demo visitors and any signed-in user can trigger shared writes
 
@@ -367,16 +367,16 @@ The price refresh rewrites the demo household's prices and returns a stack trace
 
 The expected header becomes `Bearer undefined`, and the comparison is not constant-time. The secret is set in production. Fail closed when it is missing and compare with `timingSafeEqual`.
 
-### 38. A holdings file import wipes the account's holdings first
+### 38. Holdings imports overwrite without checking the file's date
 
 - Type: Defect
 - Priority: P2
 - Effort: S
 - Severity: Medium
-- Blocker: Your decision on Q5 in the requirements: replace or merge
+- Blocker: None
 - Source: Requirements traceability, GAP-11
 
-`src/lib/actions/import.ts` deletes every holding before inserting the file, so a cost basis entered by hand is lost on re-import. Fidelity quick import merges by ticker instead.
+`src/lib/actions/import.ts` deletes every holding before inserting the file, so a cost basis entered by hand is lost on re-import. Fidelity quick import merges by ticker, but removes positions missing from the file and replaces a hand-entered cost basis. You decided (Q5): review first, refuse a file older than what is recorded, merge a newer one. Both paths get the date rule the statement import already uses (`src/lib/actions/import-statement.ts`) and a review of what will be added, changed and removed. A hand-entered cost basis is kept unless the file has one, a file with no date asks for one, and Plaid-linked accounts are refused.
 
 ### 39. Holdings cannot be edited or deleted
 
@@ -421,17 +421,6 @@ Page through results and compute totals in the query.
 - Source: Requirements traceability, GAP-15
 
 Missing inputs become age 42, $7,000 a month and a 0.15% fund fee, with nothing on screen to say so. It is the guessed-figure pattern the dividend work removed.
-
-### 43. Plan limits are mostly unenforced
-
-- Type: Gap
-- Priority: P3
-- Effort: M
-- Severity: Low
-- Blocker: Your decision on Q6 in the requirements: who RetireWise is for
-- Source: Requirements traceability, GAP-16
-
-Three of eight plan features are checked, the daily AI message limit is never applied, the chat rate limit needs Redis, and only households made through "Create household" are comped. Harmless while every plan is free; not on the day billing goes on.
 
 ### 44. The README, user guide, help and architecture docs contradict the app
 
@@ -486,7 +475,7 @@ Quote and escape every field.
 - Blocker: None
 - Source: Requirements traceability, GAP-21
 
-Someone who forgets their password cannot get back in. The auth callback also ignores `next`, so a deep link lands on the dashboard after sign-in. The reset email goes through Supabase Auth, which is already configured.
+Someone who forgets their password cannot get back in. The redirect to sign-in carries the page you asked for in `next` (`src/proxy.ts`), but the sign-in form and action ignore it and always land on the dashboard. The email-link callback does honour `next`. The reset email goes through Supabase Auth, which is already configured.
 
 ### 49. The weekday snapshot skips households and can double-count a day
 
@@ -532,6 +521,28 @@ An IRS cap check that never reaches the cap, a coverage rule restated in the tes
 
 `scenario-runner.tsx`, `projection-charts.tsx` and `alerts-panel.tsx` are imported nowhere, and several server actions have no caller. Delete them, or wire them up where a gap needs them (#39 needs the holdings actions).
 
+### 53. Anyone can create an account, and no email address is confirmed
+
+- Type: Security
+- Priority: P1
+- Effort: S
+- Severity: Medium
+- Blocker: Your go-ahead for Claude to change two Supabase Auth settings, or two minutes in Supabase
+- Source: Requirements traceability, GAP-26 (found applying your answer to Q6)
+
+Supabase allows new sign-ups and confirms every new account automatically. Anyone who finds the address can open an account, in any email address's name, and link real bank accounts to your Plaid account. Households cannot see each other, so nobody's data is exposed. The fix is in Supabase → Authentication: turn off new sign-ups and turn on email confirmation. People you want in are then invited from Authentication → Users → Invite user. Before relying on that, test that an invite link lands signed in: the app's callback expects a `code`, which invite emails may not send.
+
+### 54. Record which member added each row
+
+- Type: Gap
+- Priority: P2
+- Effort: M
+- Severity: Low
+- Blocker: None
+- Source: Requirements traceability, GAP-27
+
+Your answer to Q3 deletes a leaving member's additions, but rows are keyed by household and nothing says who added them. Add the adding member's id to accounts, holdings, contributions, goals, the net-worth tables and Plaid connections, filled from the signed-in account on every insert. Rows from before then stay with the household. #35 depends on this.
+
 ## Notes on sequencing
 
 - Do #1 before #7: previews should lose production's data before they get data of their own.
@@ -542,9 +553,19 @@ An IRS cap check that never reaches the cap, a coverage rule restated in the tes
 - #28 first among the traceability items: it is the one where the app breaks a promise to users today. Fix the privacy page (#45) in the same PR.
 - #29 and #30 are one piece of work once you answer Q9. #31 touches the same engine, so it follows them.
 - #32, #33, #34, #36 and #37 are small security fixes that can ship together; #34 needs a migration, so it rides with #6.
-- Five items wait on a decision you can make in a sentence each: Q3 (#35), Q4 (#42), Q5 (#38), Q6 (#43) and Q9 (#29).
+- #53 is the quickest real risk reduction on the list: two settings, no code.
+- #54 before #35: the leave action cannot delete "what the member added" until that is recorded.
+- Two items still wait on a decision from you: Q4 (#42) and Q9 (#29). Q3, Q5 and Q6 were answered on 2 Oct.
 
 ## Done
+
+### 43. Plan limits are mostly unenforced
+
+- Type: Gap
+- Closed: 2026-10-02
+- In: Your answer to Q6: friends and family, so billing is deferred
+
+Three of eight plan features are checked, the daily AI message limit is never applied, the chat rate limit needs Redis, and only households made through "Create household" are comped. None of it is needed for a private app. It returns only if billing is ever switched on.
 
 ### 23. Store cards could not be connected
 

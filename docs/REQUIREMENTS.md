@@ -109,23 +109,24 @@ Only the household sees its data, and the household can take all of it away or e
 
 Linked accounts refresh themselves, statements import in one step, and alerts surface what changed.
 
-### BO-7. Free for friends and family now, ready to charge later
+### BO-7. A private, free tool for the owner, family and close friends
 
-- Stated in: `src/app/legal/terms/page.tsx:26` ("no paid tier"); `src/lib/billing/plans.ts:7`
-- Served by: FR-BIL, NFR-DEL
+- Stated in: `src/app/legal/terms/page.tsx:26` ("no paid tier"); Q6
+- Served by: FR-ID, FR-BIL, NFR-SEC, NFR-DEL
 
-The product is free today, and a paid plan can be switched on without rebuilding the app. Whether it ever will be is Q6.
+RetireWise is for the owner first, and for family and friends the owner lets in (Q6). It is not offered to the public, so nobody can join without the owner's say, and nothing is charged. The billing code stays, switched off; making it work is deferred.
 
 ## Functional requirements
 
-### FR-ID-01. Sign up with email and password, confirm by email, sign in and out
+### FR-ID-01. A person the owner has let in signs up with email and password, confirms by email, and signs in and out
 
 - Priority: Must
-- Status: Implemented
-- Source: `src/app/(auth)/auth-form.tsx`; `docs/USER-GUIDE.md:6`
+- Status: Partial
+- Source: `src/app/(auth)/auth-form.tsx`; `docs/USER-GUIDE.md:6`; Q6
 - Features: F-02, F-05
+- Gap: GAP-26
 
-The user guide still promises Clerk and Google sign-in; the app uses Supabase email and password only (GAP-17).
+The app handles the confirmation step, but Supabase is set to confirm every new account automatically, so an email address is never proved to belong to the person using it. The user guide still promises Clerk and Google sign-in; the app uses Supabase email and password only (GAP-17).
 
 ### FR-ID-02. A person who forgets their password can reset it
 
@@ -254,6 +255,16 @@ Positions are updated, added and removed by ticker.
 - Verified by: `scripts/test-ofx-import.ts`, `e2e/statement-import.spec.ts`
 
 The sign of a card balance is read from the card's own purchases, never forced with an absolute value. Only the last four digits of an account number are kept.
+
+### FR-IMP-04. Every import is checked against what is already recorded, and shown for review, before anything is written
+
+- Priority: Must
+- Status: Partial
+- Source: Q5
+- Features: F-20, F-21, F-22
+- Gap: GAP-11
+
+A file older than what is recorded is refused. A newer one is merged: positions are matched by ticker, and transactions already recorded are skipped, judged one by one rather than by the file's date. The review shows what will be added, changed and removed. A cost basis entered by hand is kept unless the file supplies one. A file with no date asks for one. Statement balances already work this way (F-22); holdings imports do not.
 
 ### FR-INV-01. See every holding across all accounts with its owner and account, and add holdings by hand
 
@@ -528,12 +539,15 @@ Erasure requires typing "DELETE MY DATA" and is refused in demo mode. It removes
 
 Only the owner issues and revokes codes. A code expires after seven days and works once.
 
-### FR-HH-02. A member can leave the household, and the owner can remove a member
+### FR-HH-02. A member can leave the household, and the owner can remove a member; what that member added is deleted
 
 - Priority: Should
 - Status: Planned
-- Source: `src/app/api/account/delete/route.ts:57` (tells members they can leave)
-- Backlog: #35
+- Source: `src/app/api/account/delete/route.ts:57` (tells members they can leave); Q3
+- Backlog: #35, #54
+- Gap: GAP-08, GAP-27
+
+Leaving, or being removed, deletes every row the member added and disconnects the bank connections they linked, at Plaid as well as here (Q3). Before it happens, the member is shown what will be deleted. Rows from before the app recorded who added what stay with the household.
 
 ### FR-HH-03. Household figures split by owner: self, spouse and joint
 
@@ -577,12 +591,13 @@ The thresholds are drift above 5%, a daily move above 2% and a holding above 25%
 
 ### FR-BIL-01. Every household gets the full product while billing is off, and a paid plan can be switched on by configuration
 
-- Priority: Should
-- Status: Partial
-- Source: `src/lib/billing/plans.ts:7`
+- Priority: Could
+- Status: Deferred
+- Source: `src/lib/billing/plans.ts:7`; Q6
 - Features: F-44
 - Verified by: `e2e/entitlements.spec.ts`
-- Gap: GAP-16
+
+Deferred by Q6: RetireWise is not offered to the public. Every household keeps the full product, which the entitlement check still proves; enforcing paid-plan limits is not pursued.
 
 ## Non-functional requirements
 
@@ -642,13 +657,22 @@ Codes carry 80 bits of randomness and only their hash is stored. Failed redempti
 
 ### NFR-SEC-07. Abuse limits on costly actions
 
-- Priority: Should
-- Status: Partial
+- Priority: Could
+- Status: Implemented
 - Enforced by: `src/lib/redis.ts`, `src/app/api/plaid/sync/route.ts`
 - Source: `src/app/api/chat/route.ts`
-- Gap: GAP-16
 
-AI chat is limited to 30 messages a minute per household, and an on-demand sync to once every two minutes per institution. The chat limit applies only when Redis is configured.
+AI chat is limited to 30 messages a minute per household, and an on-demand sync to once every two minutes per institution. The chat limit applies only when Redis is configured. For a private app (Q6) the defence that matters is who can get in (NFR-SEC-08); each household pays for its own AI use with its own key.
+
+### NFR-SEC-08. Only people the owner has let in can create an account
+
+- Priority: Must
+- Status: Planned
+- Enforced by: Supabase Auth settings (sign-up and email confirmation), outside the repository
+- Source: Q6
+- Gap: GAP-26
+
+Anyone who finds the address can sign up today and link real bank accounts. That stores a stranger's financial data in the owner's database and adds connections to the owner's Plaid account. The control has to sit in Supabase, not only in the app: the sign-up endpoint is public, so a check in the sign-up form alone could be bypassed.
 
 ### NFR-TEN-01. One household never sees or changes another's data
 
@@ -741,7 +765,7 @@ This applies to cost basis, gains, returns and dividend income.
 - Priority: Must
 - Status: Partial
 - Enforced by: `src/lib/plaid/sync.ts` (a manual cost basis is never overwritten)
-- Source: `.github/workflows/ci.yml` (cost-basis check)
+- Source: `.github/workflows/ci.yml` (cost-basis check); Q5
 - Gap: GAP-11
 
 ### NFR-INT-05. A check proves what its label says
@@ -1051,7 +1075,7 @@ Prices are cached for 15 minutes, when Redis is configured.
 
 - Group: Imports
 - Status: Partial
-- Requirements: FR-IMP-01, NFR-INT-04
+- Requirements: FR-IMP-01, FR-IMP-04, NFR-INT-04
 - Code: `src/app/(dashboard)/import/page.tsx`, `src/app/(dashboard)/import/csv-import-form.tsx`, `src/lib/utils/csv-parser.ts`, `src/lib/actions/import.ts`
 - Checks: `scripts/test-ofx-import.ts`
 - Gap: GAP-11
@@ -1059,16 +1083,19 @@ Prices are cached for 15 minutes, when Redis is configured.
 ### F-21. Fidelity quick import
 
 - Group: Imports
-- Status: Implemented
-- Requirements: FR-IMP-02
+- Status: Partial
+- Requirements: FR-IMP-02, FR-IMP-04
 - Code: `src/components/forms/fidelity-import.tsx`, `src/lib/actions/import.ts`
 - Checks: none
+- Gap: GAP-11
+
+Merges by ticker, but with no date check or review: a position missing from the file is removed, and the file's cost basis replaces one entered by hand.
 
 ### F-22. Statement balance import
 
 - Group: Imports
 - Status: Verified
-- Requirements: FR-IMP-03
+- Requirements: FR-IMP-03, FR-IMP-04
 - Code: `src/app/(dashboard)/import/statement-import.tsx`, `src/lib/import/ofx.ts`, `src/lib/actions/import-statement.ts`
 - Checks: `scripts/test-ofx-import.ts`, `e2e/statement-import.spec.ts`
 
@@ -1250,16 +1277,17 @@ Prices are cached for 15 minutes, when Redis is configured.
 - Requirements: FR-HH-01, NFR-SEC-06, NFR-TEN-03
 - Code: `src/lib/invites.ts`, `src/lib/household.ts`, `src/app/(dashboard)/settings/household-sharing.tsx`, `src/app/api/household/invites/route.ts`, `src/app/api/household/join/route.ts`, `src/app/api/household/create/route.ts`
 - Checks: `scripts/test-invites.ts`
-- Gap: GAP-07, GAP-08
+- Gap: GAP-07, GAP-08, GAP-27
 
 ### F-44. Plans and billing
 
 - Group: Data and sharing
-- Status: Partial
+- Status: Deferred
 - Requirements: FR-BIL-01
 - Code: `src/lib/billing/plans.ts`, `src/lib/billing/entitlements.ts`, `src/lib/billing/stripe.ts`, `src/app/(dashboard)/settings/plan-section.tsx`, `src/app/api/billing/status/route.ts`, `src/app/api/billing/checkout/route.ts`, `src/app/api/billing/portal/route.ts`, `src/app/api/billing/webhook/route.ts`
 - Checks: `e2e/entitlements.spec.ts`
-- Gap: GAP-16
+
+Built and switched off. Deferred by Q6.
 
 ### F-45. Scheduled snapshots and health probes
 
@@ -1414,15 +1442,15 @@ The price refresh rewrites the demo household's prices, and returns a stack trac
 
 The expected header becomes `Bearer undefined`, and the comparison is not constant-time. The secret is set in production today.
 
-### GAP-11. A holdings file import replaces every holding in the account
+### GAP-11. Holdings imports write without checking the file's date or showing a review
 
-- Affects: FR-IMP-01, NFR-INT-04, F-20
+- Affects: FR-IMP-01, FR-IMP-04, NFR-INT-04, F-20, F-21
 - Severity: Medium
-- Evidence: `src/lib/actions/import.ts:56`
+- Evidence: `src/lib/actions/import.ts:56`, `src/lib/actions/import.ts:71`, `src/lib/actions/import-statement.ts:144`
 - Backlog: #38
 - Status: Open
 
-Any cost basis entered by hand is lost on re-import. Fidelity quick import merges by ticker instead. Which behaviour is wanted is Q5.
+The file import deletes every holding in the account and inserts the file, so a cost basis entered by hand is lost. Fidelity quick import merges by ticker, but removes any position missing from the file and replaces a hand-entered cost basis. Neither looks at the file's date. The statement balance import already refuses a statement older than what is recorded; Q5 asks for the same rule here, plus a merge.
 
 ### GAP-12. Holdings cannot be edited or deleted in the app
 
@@ -1468,7 +1496,9 @@ The assumed values are age 42, $7,000 a month of spending, and a 0.15% fee on an
 - Severity: Low
 - Evidence: `src/lib/billing/plans.ts:8`, `src/lib/redis.ts`
 - Backlog: #43
-- Status: Open
+- Status: Closed 2026-10-02
+
+Closed by the answer to Q6: billing is deferred, so unenforced plan limits no longer fall short of a requirement. The facts below stay true and matter again only if billing is ever switched on.
 
 The shortfalls:
 - Only three of the eight plan features are checked anywhere.
@@ -1523,11 +1553,11 @@ Account deletion and billing changes are declared but never recorded. Plaid and 
 
 - Affects: FR-ID-02, FR-ID-03, F-02
 - Severity: Medium
-- Evidence: `src/lib/actions/auth.ts:26`, `src/app/auth/callback/route.ts:4`
+- Evidence: `src/lib/actions/auth.ts:26`, `src/proxy.ts:145`
 - Backlog: #48
 - Status: Open
 
-A person who forgets their password cannot get back in.
+A person who forgets their password cannot get back in. When a signed-out visitor opens a deep link, the redirect to sign-in carries the page in `next`, but sign-in ignores it and always lands on the dashboard. The email-link callback does honour `next`.
 
 ### GAP-22. The weekday snapshot skips some households and can double-count a day
 
@@ -1577,6 +1607,26 @@ Several checks read source text rather than running code. The requirements that 
 
 The scenario runner, projection charts and alerts panel are imported nowhere, and several actions have no caller.
 
+### GAP-26. Anyone can create an account, and no email address is ever confirmed
+
+- Affects: NFR-SEC-08, FR-ID-01, BO-7, F-02
+- Severity: Medium
+- Evidence: `src/lib/actions/auth.ts:40`, Supabase Auth settings on 2 Oct (sign-up allowed; new accounts confirmed automatically)
+- Backlog: #53
+- Status: Open
+
+Found while applying the answer to Q6. Households cannot see each other, so this exposes no one's data to a stranger. It does let a stranger store bank data in the owner's database and add connections to the owner's Plaid account. Because confirmation is automatic, an account can also be opened in someone else's name.
+
+### GAP-27. Nothing records which member added a row
+
+- Affects: FR-HH-02, F-43
+- Severity: Low
+- Evidence: `src/lib/db/schema.ts:255`, `src/lib/db/schema.ts:402`
+- Backlog: #54
+- Status: Open
+
+Rows are keyed by household, not by the person who added them, and Plaid connections do not record who linked them. Until that is recorded, the answer to Q3 (a leaving member's additions are deleted) cannot be carried out. Rows added before then cannot be attributed.
+
 ## Open questions
 
 ### Q1. What would show each objective is met?
@@ -1595,31 +1645,47 @@ Today every member can change everything; only invites and erasure are reserved 
 
 ### Q3. When a member leaves, what happens to what they added?
 
-- Status: Open
+- Status: Answered 2026-10-02
 - Decides: FR-HH-02
 
 Accounts and contributions are owned by the household, not the person who typed them.
+
+**Answer** (owner, 2 Oct): "It gets deleted." Applied as: leaving or being removed deletes what that member added and disconnects the bank connections they linked (FR-HH-02). The app does not yet record who added what (GAP-27), so that comes first. A joint account a partner typed in goes with them, which is why the member sees the list before confirming.
 
 ### Q4. When an input is missing, refuse or show a visible default?
 
 - Status: Open
 - Decides: FR-PLAN-09
 
-Analytics assumes age 42 and $7,000 a month today (GAP-15).
+Three inputs are filled in silently today (GAP-15):
+- **Current age** (Settings → Preferences). When blank, Analytics assumes 42. Age drives years to retirement, catch-up limits and required minimum distributions.
+- **Monthly spending in retirement** (Settings → Preferences). When blank, Analytics and Projections assume $7,000. It is the largest single driver of "on track".
+- **A fund's annual fee.** The app knows the fee for a few dozen common tickers; any other fund is assumed to cost 0.15%. It feeds the fee-drag figure.
+
+Claude's recommendation: refuse for age and spending, with a link to the field; for an unknown fund fee, leave it out of the fee total and say how many funds were left out.
 
 ### Q5. Should a holdings file import replace an account's holdings or merge into them?
 
-- Status: Open
-- Decides: FR-IMP-01, NFR-INT-04
+- Status: Answered 2026-10-02
+- Decides: FR-IMP-01, FR-IMP-04, NFR-INT-04
 
 Replacing loses any cost basis entered by hand (GAP-11).
 
+**Answer** (owner, 2 Oct): neither, blindly. "It should be reviewed and determined if it's mergeable or not. If the data is older than what's in the database already, don't import. If it's newer data or transactions, figure out the merge." Applied as FR-IMP-04. One refinement: a statement always contains older transactions, so for transactions "older" is judged one transaction at a time (skip those already recorded) rather than by the file's date.
+
 ### Q6. Who is RetireWise for: friends and family, or a paying public?
 
-- Status: Open
-- Decides: FR-BIL-01, NFR-PRIV-03, BO-7
+- Status: Answered 2026-10-02
+- Decides: FR-BIL-01, NFR-PRIV-03, NFR-SEC-07, NFR-SEC-08, BO-7
 
 The terms say there is no paid tier, while billing is built and dormant. The answer sets how much legal review, support and plan enforcement (GAP-16) are worth.
+
+**Answer** (owner, 2 Oct): "Friends and family (mainly me)." Applied as:
+- BO-7 is restated.
+- Billing (FR-BIL-01) is deferred, and GAP-16 closes.
+- Abuse limits drop to Could.
+- A new Must, NFR-SEC-08, requires that only people the owner lets in can create an account. Today anyone can (GAP-26).
+- The privacy page still has to be accurate (NFR-PRIV-03), but it does not need the review a public product would.
 
 ### Q7. Are the recovery targets right?
 
@@ -1640,7 +1706,7 @@ Only phone layouts are checked today.
 - Status: Open
 - Decides: FR-PLAN-04, FR-AI-04, FR-PLAN-07
 
-Answering yes closes GAP-02 and GAP-03, and the assistant's figures may change. It would also be the moment to model RMDs per person and from age 75 for people born in 1960 or later.
+Answering yes closes GAP-02 and GAP-03, and the assistant's figures may change. It would also be the moment to model RMDs per person and from age 75 for people born in 1960 or later. The owner asked for more context on 2 Oct.
 
 ### Q10. Should the landing page's "optimize withdrawal strategies" claim stand?
 
@@ -1652,6 +1718,7 @@ Only the assistant's older engine compares withdrawal strategies, using 2024 bra
 ## Change log
 
 - 2026-10-02 · First version, derived from the code at `c1b0b0a`, the user guide, help, legal pages, CI and the backlog. 25 gaps found and opened as backlog #28–#52. · Claude
+- 2026-10-02 · Answers to Q3, Q5 and Q6 recorded. Added FR-IMP-04 (imports are dated and reviewed) and NFR-SEC-08 (only people the owner lets in can sign up). FR-HH-02 now deletes a leaving member's additions. BO-7 restated, billing (FR-BIL-01, F-44) deferred, and GAP-16 closed. New gaps GAP-26 (open sign-up, no email confirmation) as #53 and GAP-27 (no record of who added what) as #54. GAP-21's evidence corrected: the email-link callback honours `next`, sign-in does not. Q4 spelled out. · Claude
 
 ## Sources
 

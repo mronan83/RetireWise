@@ -262,7 +262,7 @@ ${areaSections("NFR")}
 </section>
 
 <section id="features"><h2>Feature inventory</h2>
-<p class="note">Everything built or agreed, with the code that delivers it and the checks that prove it. Every page and API route belongs to exactly one feature or more; the build fails if one does not.</p>
+<p class="note">Everything built or agreed, with the code that delivers it and the checks that prove it. Every page and API route belongs to at least one feature; the build fails if one does not.</p>
 ${featureSections}
 </section>
 
