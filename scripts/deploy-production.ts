@@ -12,6 +12,11 @@
  * domain now serves the new deployment and reports healthy. A failure at any
  * step stops it, and nothing already live is touched until a build succeeds.
  *
+ * A passing failure — a dropped connection, a 5xx from Vercel or GitHub — is
+ * retried rather than fatal (scripts/lib/release.ts). And running it again
+ * after it stopped is safe: it follows a build of the same commit that is
+ * already under way instead of starting a second one.
+ *
  * Only after all of that does it build the backlog and traceability pages
  * (.pages/backlog.html, .pages/traceability.html) from docs/BACKLOG.md and
  * docs/REQUIREMENTS.md at the released commit, so the published pages always
@@ -28,6 +33,7 @@ import { execFileSync } from "child_process";
 import { relative } from "path";
 import { buildBacklogPage } from "./backlog/build";
 import { buildTracePage } from "./traceability/build";
+import { fetchWithRetry, findResumable, type ListedDeployment } from "./lib/release";
 
 const REPO = "mronan83/RetireWise";
 const TEAM_ID = "team_A8TfHlLyTc2toipq0WsMVKvK";
@@ -41,10 +47,21 @@ const args = process.argv.slice(2);
 const DRY_RUN = args.includes("--dry-run");
 const requested = args.find((a) => !a.startsWith("--"));
 
+/** The build this run started or is following, so a failure can say it may still finish. */
+let inFlight: string | null = null;
+
 function fail(message: string): never {
   console.error(`\n✗ ${message}`);
+  if (inFlight) {
+    console.error(
+      `  The build ${inFlight} may still finish. Run pnpm deploy:prod again: it follows that build rather than starting another.`
+    );
+  }
   process.exit(1);
 }
+
+const retryNote = (what: string) => (attempt: number, reason: string) =>
+  console.warn(`  … ${what}: ${reason}; retrying (${attempt})`);
 
 function git(...gitArgs: string[]): string {
   return execFileSync("git", gitArgs, { encoding: "utf8", stdio: ["ignore", "pipe", "pipe"] }).trim();
@@ -54,10 +71,19 @@ async function vercel<T>(path: string, init: RequestInit = {}): Promise<T> {
   const token = process.env.VERCEL_TOKEN;
   if (!token) fail("VERCEL_TOKEN is not set.");
   const sep = path.includes("?") ? "&" : "?";
-  const res = await fetch(`https://api.vercel.com${path}${sep}teamId=${TEAM_ID}`, {
-    ...init,
-    headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" },
-  });
+  const url = `https://api.vercel.com${path}${sep}teamId=${TEAM_ID}`;
+  const request = { ...init, headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" } };
+  // Reads are retried. Starting a build is not: a request that failed on the
+  // way back may still have started one, and the next run will find it.
+  let res: Response;
+  try {
+    res =
+      (init.method ?? "GET") === "GET"
+        ? await fetchWithRetry(url, request, { onRetry: retryNote(`Vercel ${path.split("?")[0]}`) })
+        : await fetch(url, request);
+  } catch (e) {
+    fail(`Could not reach Vercel for ${init.method ?? "GET"} ${path}: ${e instanceof Error ? e.message : String(e)}`);
+  }
   const body = await res.json().catch(() => ({}));
   if (!res.ok) {
     fail(`Vercel ${init.method ?? "GET"} ${path} → ${res.status}: ${body?.error?.message ?? "no detail"}`);
@@ -95,9 +121,11 @@ async function main() {
   // 2. CI on that exact commit: every check finished, none failed.
   const ghToken = process.env.GITHUB_TOKEN ?? process.env.GH_TOKEN;
   if (!ghToken) fail("GITHUB_TOKEN or GH_TOKEN is needed to read CI.");
-  const ciRes = await fetch(`https://api.github.com/repos/${REPO}/commits/${sha}/check-runs`, {
-    headers: { Authorization: `Bearer ${ghToken}`, Accept: "application/vnd.github+json" },
-  });
+  const ciRes = await fetchWithRetry(
+    `https://api.github.com/repos/${REPO}/commits/${sha}/check-runs`,
+    { headers: { Authorization: `Bearer ${ghToken}`, Accept: "application/vnd.github+json" } },
+    { onRetry: retryNote("GitHub check runs") }
+  );
   const ci = await ciRes.json().catch(() => ({}));
   // An unreadable CI result is not an empty one; treating it as such would
   // report "no CI ran" when the token was simply refused.
@@ -129,18 +157,31 @@ async function main() {
   }
 
   // 4. Build it from Git. Production is only switched once this succeeds.
-  const project = await vercel<{ name: string; link?: { repoId?: number } }>(`/v9/projects/${PROJECT_ID}`);
-  if (!project.link?.repoId) fail("The Vercel project is not linked to a GitHub repo.");
-  const created = await vercel<Deployment>("/v13/deployments", {
-    method: "POST",
-    body: JSON.stringify({
-      name: project.name,
-      project: PROJECT_ID,
-      target: "production",
-      gitSource: { type: "github", repoId: project.link.repoId, ref: "main", sha },
-    }),
-  });
-  console.log(`Building ${created.id}  https://${created.url}`);
+  //    A build of this commit already under way, from a run that stopped
+  //    early, is followed rather than duplicated.
+  const { deployments: recent } = await vercel<{ deployments: ListedDeployment[] }>(
+    `/v6/deployments?projectId=${PROJECT_ID}&target=production&limit=20`
+  );
+  const resumable = findResumable(recent, sha);
+  let created: Deployment;
+  if (resumable) {
+    created = await vercel<Deployment>(`/v13/deployments/${resumable.uid}`);
+    console.log(`Resuming ${created.id}, a build of this commit already under way  https://${created.url}`);
+  } else {
+    const project = await vercel<{ name: string; link?: { repoId?: number } }>(`/v9/projects/${PROJECT_ID}`);
+    if (!project.link?.repoId) fail("The Vercel project is not linked to a GitHub repo.");
+    created = await vercel<Deployment>("/v13/deployments", {
+      method: "POST",
+      body: JSON.stringify({
+        name: project.name,
+        project: PROJECT_ID,
+        target: "production",
+        gitSource: { type: "github", repoId: project.link.repoId, ref: "main", sha },
+      }),
+    });
+    console.log(`Building ${created.id}  https://${created.url}`);
+  }
+  inFlight = created.id;
 
   const deadline = Date.now() + BUILD_TIMEOUT_MS;
   let d = created;
@@ -158,7 +199,11 @@ async function main() {
   if (aliased.id !== created.id) {
     fail(`Built, but ${PRODUCTION_HOST} still points at ${aliased.id}. Promote ${created.id} in Vercel.`);
   }
-  const health = await fetch(`https://${PRODUCTION_HOST}/api/health`, { cache: "no-store" });
+  const health = await fetchWithRetry(
+    `https://${PRODUCTION_HOST}/api/health`,
+    { cache: "no-store" },
+    { onRetry: retryNote("health check") }
+  );
   const report = await health.json().catch(() => ({}));
   if (!health.ok || report.status !== "ok") {
     fail(
@@ -167,6 +212,7 @@ async function main() {
     );
   }
 
+  inFlight = null;
   console.log(`\n✓ ${sha.slice(0, 7)} is live on https://${PRODUCTION_HOST} and healthy.`);
   if (liveSha) console.log(`  Roll back with: pnpm deploy:prod ${liveSha.slice(0, 7)}`);
 

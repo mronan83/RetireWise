@@ -2,7 +2,7 @@
 
 Last reviewed: 2026-10-02
 
-Items from the [delivery review](https://claude.ai/artifact/Eo9g6bEnWFi9TBoSPwohPk) (G1–G7) the Plaid investigation of 29 Sep, and the requirements traceability review of 2 Oct (#28–#56, one per gap). The page is published from this file after each successful `pnpm deploy:prod`, so it always describes what is live.
+Items from the [delivery review](https://claude.ai/artifact/Eo9g6bEnWFi9TBoSPwohPk) (G1–G7), the Plaid investigation of 29 Sep, and the requirements traceability review of 2 Oct (#28–#56, one per gap). The page is published from this file after each successful `pnpm deploy:prod`, so it always describes what is live.
 
 <!--
 How to edit
@@ -266,7 +266,7 @@ Each appears twice among the 14 linked institutions, most likely from reconnecti
 - Blocker: None
 - Source: Requirements traceability, GAP-02
 
-Only `runDetailedProjection` is tested. The Projections page's Monte Carlo, the scenario Monte Carlo and the AI assistant each compute their own answer. On a sample household the page shows a 94% chance that savings last, where the tested rules give about 80% (claiming at 62: 89% against 72%). The page inflates spending from retirement rather than today, pays Social Security from the first day of retirement, and adds catch-up contributions on top of what was recorded. The assistant ignores the claiming age, always plans 30 years of retirement and uses 2024 brackets. The full comparison is in GAP-02.
+Only `runDetailedProjection` is tested. The Projections page's Monte Carlo, the scenario Monte Carlo and the AI assistant each compute their own answer. On a sample household the page shows a 94% chance that savings last, where the tested rules give about 80% (claiming at 62: 89% against 72%). The page inflates spending from retirement rather than today, pays Social Security from the first day of retirement, and adds catch-up contributions on top of what was recorded. The assistant ignores the claiming age, always plans 30 years of retirement and uses 2024 brackets. The full comparison is in GAP-02. The page's simulation also draws its random numbers while rendering, so the server and the browser compute different odds and React reports a hydration error (React error 418) on every load.
 
 You said yes to Q9 on 2 Oct. The work comes in this order:
 1. Fix the tested engine (#55, done 2 Oct).
@@ -487,17 +487,6 @@ Someone who forgets their password cannot get back in. The redirect to sign-in c
 
 A household with no investments gets no net-worth snapshot, because the loop continues before it. A second run on one day inserts duplicate rows, and every run is recorded as ok. Upsert by day and record real outcomes.
 
-### 50. A release stops on a passing Vercel error before confirming itself
-
-- Type: Ops
-- Priority: P3
-- Effort: S
-- Severity: Low
-- Blocker: None
-- Source: Requirements traceability, GAP-23
-
-On 2 Oct one 502 from Vercel's API stopped `pnpm deploy:prod` after a good build, so the alias, health and backlog page were checked by hand. Retry read-only Vercel calls a few times before giving up.
-
 ### 51. Some checks prove less than their names say
 
 - Type: Tech Debt
@@ -569,6 +558,14 @@ The standard deduction for married couples is $30,000 in `src/lib/tax/table.ts`.
 - #55 is done, so #29 (one engine everywhere) can start; #30 rides with it.
 
 ## Done
+
+### 50. A release stops on a passing Vercel error before confirming itself
+
+- Type: Ops
+- Closed: 2026-10-02
+- In: PR 5
+
+It stopped twice on 2 Oct: a 502 on the alias check in the morning, a dropped connection while polling the build in the evening. Every read from Vercel and GitHub, and the health check, is now retried four times over about half a minute on a dropped connection, a 429 or a 5xx; starting a build is not, because it may have started anyway. A second run follows a build of the same commit that is already under way instead of starting another, and a failure after the build starts says that running again is safe. Proved by `scripts/test-release.ts`; the first dry run afterwards met a dropped connection and recovered.
 
 ### 28. Erasing a household leaves its holding snapshots behind
 

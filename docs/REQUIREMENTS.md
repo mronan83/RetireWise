@@ -826,10 +826,9 @@ The stated targets are up to 24 hours of data lost (RPO) and four hours to resto
 ### NFR-DEL-01. Production changes only on the owner's command, from a commit on main with green CI, and can be rolled back in one step
 
 - Priority: Must
-- Status: Partial
+- Status: Implemented
 - Enforced by: `scripts/deploy-production.ts`, `vercel.json`
 - Source: `AGENTS.md`
-- Gap: GAP-23
 
 ### NFR-DEL-02. The backlog and this document are checked in CI and published only after a successful release
 
@@ -862,6 +861,16 @@ The stated targets are up to 24 hours of data lost (RPO) and four hours to resto
 - Enforced by: `eslint.config.mjs`
 - Source: `src/app/(dashboard)/projections/scenario-runner.tsx` (imported nowhere)
 - Gap: GAP-25
+
+### NFR-DEL-06. A release survives a passing failure of Vercel or GitHub, and running it again follows the build already under way
+
+- Priority: Should
+- Status: Verified
+- Enforced by: `scripts/lib/release.ts`, `scripts/deploy-production.ts`
+- Source: GAP-23 (two releases stopped on 2 Oct)
+- Verified by: `scripts/test-release.ts`
+
+A dropped connection, a 429 or a 5xx on a read is retried four times over about half a minute; a 4xx is not. Starting a build is never retried, because a request that failed on the way back may still have started one. A second run finds a queued, running or finished build of the same commit and follows it rather than starting another. A failure after a build has started says so, and says that running again is safe.
 
 ### NFR-UX-01. Every page fits a phone screen without sideways scrolling or inputs small enough to zoom
 
@@ -1332,11 +1341,10 @@ Both pages are marked as drafts that no lawyer has reviewed.
 ### F-48. Release on command
 
 - Group: Delivery
-- Status: Partial
-- Requirements: NFR-DEL-01
-- Code: `scripts/deploy-production.ts`, `vercel.json`
+- Status: Implemented
+- Requirements: NFR-DEL-01, NFR-DEL-06
+- Code: `scripts/deploy-production.ts`, `scripts/lib/release.ts`, `vercel.json`
 - Checks: none
-- Gap: GAP-23
 
 ### F-49. Backlog and traceability pages
 
@@ -1376,6 +1384,7 @@ A comparison on 2 Oct ran each one on the same household. The household: age 55,
 - **Catch-up contributions are added on top of what was recorded**, so contributions run past the IRS limit, adding about $117,000 by retirement in the sample.
 - **The assistant uses the Social Security amount at full retirement age from day one**, always plans 30 years of retirement (to 95 here) rather than the household's own horizon, never inflates spending in its Monte Carlo (97%), and uses 2024 tax brackets. Its other tool uses the 2025 tables and the tiered rule, so the assistant disagrees with itself.
 - The scenario Monte Carlo ignores required minimum distributions. That changed nothing for this household.
+- The page's Monte Carlo draws its random numbers while the page renders, so the server and the browser compute different odds and React reports a hydration error on every load (found 2 Oct, `src/app/(dashboard)/projections/interactive-controls.tsx:343`).
 
 The assistant's system prompt still asks it to "estimate dividend income".
 
@@ -1595,9 +1604,11 @@ The shortfalls:
 - Severity: Low
 - Evidence: `scripts/deploy-production.ts`
 - Backlog: #50
-- Status: Open
+- Status: Closed 2026-10-02
 
 On 2 Oct a single 502 from Vercel's API stopped the script after a successful release, so the backlog page had to be built by hand.
+
+It happened again on the 2 Oct evening release: a dropped connection while polling the build. Closed by #50: reads are retried, and a second run follows a build already under way (NFR-DEL-06). The first dry run after the change met a dropped connection and recovered from it.
 
 ### GAP-24. Some checks prove less than their labels say
 
@@ -1782,6 +1793,7 @@ Only the assistant's older engine compares withdrawal strategies, using 2024 bra
 - 2026-10-02 · Answers to Q4 and Q9 recorded. FR-PLAN-09 now says how a missing input is asked for, and FR-PLAN-04 makes the tested engine the only one. #42 and #29 unblocked; #29 now follows #55. · Claude
 - 2026-10-02 · #55 done: the tested engine pays federal tax on withdrawals and taxable Social Security, takes RMDs only from tax-deferred accounts, and reinvests the unspent part. FR-PLAN-10 Verified by the new `scripts/test-projection-tax.ts`; GAP-28 closed. · Claude
 - 2026-10-02 · #28 done: erasure deletes holding snapshots and the export includes them, goal links and join attempts. The account-data check now reads every household-keyed table from the database. FR-DATA-02, FR-DATA-03 and NFR-PRIV-01 Verified; GAP-01 closed. · Claude
+- 2026-10-02 · #50 done: releases retry passing Vercel and GitHub failures and a second run resumes the first run's build. Added NFR-DEL-06, Verified by the new `scripts/test-release.ts`; NFR-DEL-01 and F-48 now Implemented; GAP-23 closed. · Claude
 
 ## Sources
 

@@ -81,6 +81,10 @@ jobs:
       # from tax-deferred accounts, and reinvests an RMD nobody spends.
       - run: pnpm exec tsx scripts/test-projection-tax.ts
 
+      # A release survives a dropped connection or a 5xx from Vercel or
+      # GitHub, and a second run follows the first run's build.
+      - run: pnpm exec tsx scripts/test-release.ts
+
       # The tax reference table. Every assertion is a way a half-loaded year
       # could return a believable number instead of an error — which is the
       # only reason moving these figures out of source is an improvement.
