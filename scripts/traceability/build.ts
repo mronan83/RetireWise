@@ -50,7 +50,7 @@ export function diffTrace(before: Trace, after: Trace): string[] {
   return out;
 }
 
-export function buildTracePage(opts: { sha: string; previousSha?: string; out?: string; root?: string }): {
+export function buildTracePage(opts: { sha: string; previousSha?: string; out?: string; root?: string; preview?: boolean }): {
   out: string;
   problems: string[];
 } {
@@ -60,7 +60,13 @@ export function buildTracePage(opts: { sha: string; previousSha?: string; out?: 
   const trace = parseTrace(markdown);
   const report = validate(trace, opts.root ?? process.cwd());
 
-  const release: TraceRelease = { sha, date: new Date().toISOString().slice(0, 10), firstPublication: true, changes: [] };
+  const release: TraceRelease = {
+    sha,
+    date: new Date().toISOString().slice(0, 10),
+    firstPublication: true,
+    changes: [],
+    preview: opts.preview,
+  };
   if (opts.previousSha) {
     try {
       const previous = git("rev-parse", `${opts.previousSha}^{commit}`);

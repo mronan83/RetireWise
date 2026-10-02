@@ -25,6 +25,8 @@ export interface TraceRelease {
   previousSha?: string;
   date: string;
   firstPublication: boolean;
+  /** A build from a branch or for review, not a release: the page must not claim to be live. */
+  preview?: boolean;
   /** "FR-NW-01: Partial → Verified", new IDs, and the like. */
   changes: string[];
 }
@@ -195,7 +197,7 @@ export function renderTracePage(t: Trace, report: Report, r: TraceRelease): stri
 <header class="hero">
   <p class="eyebrow">RetireWise · Requirements</p>
   <h1>Requirements &amp; Feature Traceability</h1>
-  <p class="meta">As live in production at ${commit(r.sha)} · ${esc(r.date)} · last reviewed ${esc(t.lastReviewed)}</p>
+  <p class="meta">${r.preview ? `<b>Preview, not released.</b> Built from ${commit(r.sha)}` : `As live in production at ${commit(r.sha)}`} · ${esc(r.date)} · last reviewed ${esc(t.lastReviewed)}</p>
   ${blocks(t.intro, "lede")}
   <div class="stats">${stat(reqs.length, "requirements")}${stat(`${verifiedShare}<small>%</small>`, "verified in CI")}${stat(count(reqs, "Partial"), "partial")}${stat(count(reqs, "Planned") + count(reqs, "Deferred"), "planned or deferred")}${stat(t.features.length, "features")}${stat(openGaps.length, "open gaps")}${stat(openQs.length, "open questions")}</div>
   <div class="release" role="status"><p class="eyebrow">This release</p>${
@@ -293,7 +295,7 @@ ${report.featuresWithoutRequirement.length ? `<ul class="idlist">${report.featur
 </section>
 </main>
 </div>
-<p class="foot">Published after a successful <code>pnpm deploy:prod</code>, so this page describes what is live. Built by <code>scripts/build-traceability.ts</code>, which also checks every claim above against the repository: <code>pnpm trace:check</code>.</p>
+<p class="foot">${r.preview ? "A preview for review. The published page is built only after a successful <code>pnpm deploy:prod</code>, so it describes what is live." : "Published after a successful <code>pnpm deploy:prod</code>, so this page describes what is live."} Built by <code>scripts/build-traceability.ts</code>, which also checks every claim above against the repository: <code>pnpm trace:check</code>.</p>
 </div>
 <script>${JS}</script>
 `);
