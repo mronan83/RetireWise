@@ -44,6 +44,10 @@ jobs:
       # which makes it answer 500 to signed-out visitors rather than redirect.
       - run: pnpm exec tsx scripts/check-protected-routes.ts
 
+      # The backlog page is generated from docs/BACKLOG.md after each release.
+      # A malformed item should fail the PR that introduced it, not the release.
+      - run: pnpm exec tsx scripts/build-backlog.ts --check
+
       # Retry policy and key rotation. Pure logic, so it belongs here rather
       # than behind the database job.
       - run: pnpm exec tsx scripts/test-ops.ts
