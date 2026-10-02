@@ -387,7 +387,7 @@ A debt secured against an asset replaces the loan typed onto that asset; it is n
 - Verified by: `scripts/test-analytics.ts`
 - Gap: GAP-02
 
-Spending is inflated from today, not from the year retirement starts. Withdrawals never fall below the required minimum distribution.
+Spending is inflated from today, not from the year retirement starts. Withdrawals never fall below the required minimum distribution. Every screen and the assistant use this one tested engine, including for the odds that savings last (Q9).
 
 ### FR-PLAN-05. Monte Carlo simulation gives the odds that savings last
 
@@ -435,6 +435,8 @@ A half-loaded year is refused and the newest complete year is used; a table a ye
 - Source: `.github/workflows/ci.yml` (onboarding check: "stop a projection being believed before its inputs exist")
 - Features: F-34, F-37
 - Gap: GAP-15
+
+When current age or retirement spending is missing, a figure that depends on it is not shown. In its place, a short note says what is needed and why, with a link straight to the field in Settings; the figure appears as soon as the value is set. A fund whose fee is unknown is left out of the fee total, and the page says how many funds were left out (Q4).
 
 ### FR-PLAN-10. A projection pays income tax on what it withdraws, and takes each withdrawal from the right account
 
@@ -1502,7 +1504,7 @@ It counts contributions whose `is_active` is not null; the column is never null.
 - Backlog: #42
 - Status: Open
 
-The assumed values are age 42, $7,000 a month of spending, and a 0.15% fee on any fund whose fee is unknown. This is the guessed-figure pattern the dividend work removed. Q4 decides whether to refuse or show visible defaults.
+The assumed values are age 42, $7,000 a month of spending, and a 0.15% fee on any fund whose fee is unknown. This is the guessed-figure pattern the dividend work removed. Q4 decided: refuse, and ask gracefully.
 
 ### GAP-16. Plan limits are mostly unenforced
 
@@ -1688,7 +1690,7 @@ Accounts and contributions are owned by the household, not the person who typed 
 
 ### Q4. When an input is missing, refuse or show a visible default?
 
-- Status: Open
+- Status: Answered 2026-10-02
 - Decides: FR-PLAN-09
 
 Three inputs are filled in silently today (GAP-15):
@@ -1697,6 +1699,8 @@ Three inputs are filled in silently today (GAP-15):
 - **A fund's annual fee.** The app knows the fee for a few dozen common tickers; any other fund is assumed to cost 0.15%. It feeds the fee-drag figure.
 
 Claude's recommendation: refuse for age and spending, with a link to the field; for an unknown fund fee, leave it out of the fee total and say how many funds were left out.
+
+**Answer** (owner, 2 Oct): agreed, and "display the requirement to set values gracefully in the app". Applied as FR-PLAN-09: a missing age or spending figure is asked for in place of the result, politely and with a direct link, never an error or an empty chart.
 
 ### Q5. Should a holdings file import replace an account's holdings or merge into them?
 
@@ -1737,7 +1741,7 @@ Only phone layouts are checked today.
 
 ### Q9. Should every surface use one tested projection engine and the tiered Social Security rule?
 
-- Status: Open
+- Status: Answered 2026-10-02
 - Decides: FR-PLAN-04, FR-AI-04, FR-PLAN-07
 
 Answering yes closes GAP-02 and GAP-03, and the assistant's figures may change. It would also be the moment to model RMDs per person and from age 75 for people born in 1960 or later.
@@ -1753,6 +1757,13 @@ The owner asked for more context on 2 Oct. It is in GAP-02 and GAP-28, and in sh
 
 Claude's recommendation: yes, in that order.
 
+**Answer** (owner, 2 Oct): "Yes. Recommended approach to route everything through one tested projection engine." Applied as FR-PLAN-04. The order of work:
+1. Fix the tested engine (#55).
+2. Build the odds on it, and route the Projections page, scenarios and the assistant through it (#29).
+3. Adopt the tiered Social Security rule (#30).
+
+Q10 stays open: the withdrawal-strategy comparison is rebuilt on the engine, or the landing-page claim goes.
+
 ### Q10. Should the landing page's "optimize withdrawal strategies" claim stand?
 
 - Status: Open
@@ -1765,6 +1776,7 @@ Only the assistant's older engine compares withdrawal strategies, using 2024 bra
 - 2026-10-02 · First version, derived from the code at `c1b0b0a`, the user guide, help, legal pages, CI and the backlog. 25 gaps found and opened as backlog #28–#52. · Claude
 - 2026-10-02 · Answers to Q3, Q5 and Q6 recorded. Added FR-IMP-04 (imports are dated and reviewed) and NFR-SEC-08 (only people the owner lets in can sign up). FR-HH-02 now deletes a leaving member's additions. BO-7 restated, billing (FR-BIL-01, F-44) deferred, and GAP-16 closed. New gaps GAP-26 (open sign-up, no email confirmation) as #53 and GAP-27 (no record of who added what) as #54. GAP-21's evidence corrected: the email-link callback honours `next`, sign-in does not. Q4 spelled out. · Claude
 - 2026-10-02 · Q9 context from a side-by-side run of every projection path on one household. GAP-02 restated with the results. Added FR-PLAN-10 (projections pay tax and draw from the right accounts). New gaps GAP-28 (the tested engine charges no tax and draws RMDs from Roth) as #55, and GAP-29 (2025 tax figures predate the July 2025 law) as #56. · Claude
+- 2026-10-02 · Answers to Q4 and Q9 recorded. FR-PLAN-09 now says how a missing input is asked for, and FR-PLAN-04 makes the tested engine the only one. #42 and #29 unblocked; #29 now follows #55. · Claude
 
 ## Sources
 

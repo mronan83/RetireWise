@@ -274,12 +274,12 @@ Each appears twice among the 14 linked institutions, most likely from reconnecti
 - Priority: P1
 - Effort: L
 - Severity: High
-- Blocker: Your decision on Q9 in the requirements: one tested engine everywhere
+- Blocker: #55
 - Source: Requirements traceability, GAP-02
 
 Only `runDetailedProjection` is tested. The Projections page's Monte Carlo, the scenario Monte Carlo and the AI assistant each compute their own answer. On a sample household the page shows a 94% chance that savings last, where the tested rules give about 80% (claiming at 62: 89% against 72%). The page inflates spending from retirement rather than today, pays Social Security from the first day of retirement, and adds catch-up contributions on top of what was recorded. The assistant ignores the claiming age, always plans 30 years of retirement and uses 2024 brackets. The full comparison is in GAP-02.
 
-If you say yes to Q9, the work comes in this order:
+You said yes to Q9 on 2 Oct. The work comes in this order:
 1. Fix the tested engine (#55).
 2. Build the odds simulation on it.
 3. Route Projections, scenarios and the assistant through it.
@@ -425,10 +425,12 @@ Page through results and compute totals in the query.
 - Priority: P2
 - Effort: M
 - Severity: Medium
-- Blocker: Your decision on Q4 in the requirements: refuse, or show the default
+- Blocker: None
 - Source: Requirements traceability, GAP-15
 
-Missing inputs become age 42, $7,000 a month and a 0.15% fund fee, with nothing on screen to say so. It is the guessed-figure pattern the dividend work removed.
+Missing inputs become age 42, $7,000 a month and a 0.15% fund fee, with nothing on screen to say so. It is the guessed-figure pattern the dividend work removed. You decided (Q4):
+- **Age and spending:** where either is missing, show a short note in place of the figure saying what is needed and why, with a link to the field in Settings → Preferences. Never an error or an empty chart.
+- **Unknown fund fees:** leave them out of the fee total and say how many funds were left out.
 
 ### 44. The README, user guide, help and architecture docs contradict the app
 
@@ -585,7 +587,7 @@ The standard deduction for married couples is $30,000 in `src/lib/tax/table.ts`.
 - #32, #33, #34, #36 and #37 are small security fixes that can ship together; #34 needs a migration, so it rides with #6.
 - #53 is the quickest real risk reduction on the list: two settings, no code.
 - #54 before #35: the leave action cannot delete "what the member added" until that is recorded.
-- Two items still wait on a decision from you: Q4 (#42) and Q9 (#29). Q3, Q5 and Q6 were answered on 2 Oct.
+- Q3, Q4, Q5, Q6 and Q9 were answered on 2 Oct, so no traceability item waits on a decision from you; #53 waits on your go-ahead.
 - #55 before #29: the tested engine has to be right before everything is routed through it. #55 is worth doing whatever Q9's answer.
 
 ## Done
