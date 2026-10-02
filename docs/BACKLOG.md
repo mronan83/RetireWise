@@ -257,17 +257,6 @@ Plaid enables Chase in production only after the Security Questionnaire in the P
 
 Each appears twice among the 14 linked institutions, most likely from reconnecting (#13). On a paid Plaid plan each connection is billed.
 
-### 28. Erasing a household leaves its holding snapshots behind
-
-- Type: Security
-- Priority: P1
-- Effort: S
-- Severity: High
-- Blocker: None
-- Source: Requirements traceability, GAP-01
-
-`src/lib/account/delete.ts` never deletes `holding_snapshots`, and `src/lib/account/export.ts` exports neither them nor `goal_links`, while the privacy page promises both. The deletion check measures what is left through the export, so it cannot see the omission. Add both tables to erasure and export, and make the check count rows in the database directly.
-
 ### 29. Four calculations give different answers to "will the money last?"
 
 - Type: Defect
@@ -452,7 +441,7 @@ The README is the create-next-app template. The user guide promises Clerk and Go
 - Blocker: None
 - Source: Requirements traceability, GAP-18
 
-It does not name Yahoo Finance (tickers) or the NHTSA (vehicle VINs), and says there are no third-party scripts though Plaid Link loads from Plaid. Its claims of restricted access on every request and complete erasure are untrue until #33 and #28 land. Correct the page now and again when those ship.
+It does not name Yahoo Finance (tickers) or the NHTSA (vehicle VINs), and says there are no third-party scripts though Plaid Link loads from Plaid. Its claim of restricted access on every request is untrue until #33 lands; its claim of complete erasure became true with #28 on 2 Oct. Correct the page now and again when #33 ships.
 
 ### 46. The audit log misses actions it declares and loses who acted
 
@@ -571,7 +560,7 @@ The standard deduction for married couples is $30,000 in `src/lib/tax/table.ts`.
 - #6 waits on where the production database credential lives. #15 answers that, so decide it early even though building it can wait.
 - #3, #2 and #1 need you, not code. If #3 fails, send the error line under the button.
 - #11–#14 touch the same Plaid flow and can ship as one PR. None of them changes an existing connection.
-- #28 first among the traceability items: it is the one where the app breaks a promise to users today. Fix the privacy page (#45) in the same PR.
+- #28 is done (2 Oct), so erasure now does what the privacy page promises. #45 corrects the page's remaining claims.
 - #29 and #30 are one piece of work once you answer Q9. #31 touches the same engine, so it follows them.
 - #32, #33, #34, #36 and #37 are small security fixes that can ship together; #34 needs a migration, so it rides with #6.
 - #53 is the quickest real risk reduction on the list: two settings, no code.
@@ -580,6 +569,14 @@ The standard deduction for married couples is $30,000 in `src/lib/tax/table.ts`.
 - #55 is done, so #29 (one engine everywhere) can start; #30 rides with it.
 
 ## Done
+
+### 28. Erasing a household leaves its holding snapshots behind
+
+- Type: Security
+- Closed: 2026-10-02
+- In: PR 5
+
+Erasure now deletes `holding_snapshots` (it has no foreign key, so nothing removed it) and names `goal_links` rather than relying on a cascade. The export now includes holding snapshots, goal links and the person's own attempts to join a household. `scripts/test-account-data.ts` no longer measures what is left through the export: it reads every table the database says is keyed to a household, account or member (26 today) and requires zero rows after erasure, and requires each of them to have a place in the export. Against the old code it fails on all three omissions.
 
 ### 55. The tested projection engine charges no tax and draws required distributions from Roth accounts
 

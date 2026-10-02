@@ -10,7 +10,9 @@ import {
   cashReserves,
   contributions,
   debts,
+  goalLinks,
   goals,
+  holdingSnapshots,
   holdings,
   householdInvites,
   householdJoinAttempts,
@@ -73,6 +75,10 @@ export async function deleteHouseholdData(clerkId: string): Promise<DeletionResu
   for (const [name, table, column] of [
     ["accounts", accounts, accounts.clerkId],
     ["contributions", contributions, contributions.clerkId],
+    // Links before the goals they belong to. The foreign key would cascade,
+    // but erasure that depends on a cascade nobody can see is how a table
+    // gets missed; every table is named here.
+    ["goalLinks", goalLinks, goalLinks.clerkId],
     ["goals", goals, goals.clerkId],
     ["alerts", alerts, alerts.clerkId],
     ["aiAnalyses", aiAnalyses, aiAnalyses.clerkId],
@@ -82,6 +88,9 @@ export async function deleteHouseholdData(clerkId: string): Promise<DeletionResu
     ["vehicles", vehicles, vehicles.clerkId],
     ["socialSecurityBenefits", socialSecurityBenefits, socialSecurityBenefits.clerkId],
     ["portfolioSnapshots", portfolioSnapshots, portfolioSnapshots.clerkId],
+    // Daily per-holding history. It has no foreign key to accounts, so
+    // nothing removed it until it was named here.
+    ["holdingSnapshots", holdingSnapshots, holdingSnapshots.clerkId],
     ["netWorthSnapshots", netWorthSnapshots, netWorthSnapshots.clerkId],
     ["netWorthItemHistory", netWorthItemHistory, netWorthItemHistory.clerkId],
     ["plaidItems", plaidItems, plaidItems.clerkId],

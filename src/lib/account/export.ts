@@ -9,9 +9,12 @@ import {
   cashReserves,
   contributions,
   debts,
+  goalLinks,
   goals,
+  holdingSnapshots,
   holdings,
   householdInvites,
+  householdJoinAttempts,
   householdMembers,
   households,
   netWorthItemHistory,
@@ -93,6 +96,9 @@ export async function buildAccountExport(clerkId: string): Promise<AccountExport
     audit,
     membership,
     invites,
+    goalLinkRows,
+    holdingSnapshotRows,
+    joinAttempts,
   ] = await Promise.all([
     db.select().from(userPreferences).where(eq(userPreferences.clerkId, clerkId)),
     db.select().from(contributions).where(eq(contributions.clerkId, clerkId)),
@@ -117,6 +123,11 @@ export async function buildAccountExport(clerkId: string): Promise<AccountExport
     db.select().from(auditLog).where(eq(auditLog.clerkId, clerkId)).orderBy(auditLog.at),
     db.select().from(households).where(eq(households.primaryClerkId, clerkId)),
     db.select().from(householdInvites),
+    db.select().from(goalLinks).where(eq(goalLinks.clerkId, clerkId)),
+    db.select().from(holdingSnapshots).where(eq(holdingSnapshots.clerkId, clerkId)),
+    // Row level security shows a person only their own attempts to join a
+    // household, which is exactly the set that belongs in their export.
+    db.select().from(householdJoinAttempts),
   ]);
 
   const householdRow = membership[0] ?? null;
@@ -169,6 +180,7 @@ export async function buildAccountExport(clerkId: string): Promise<AccountExport
       transactions: transactionRows,
       contributions: contributionRows,
       goals: goalRows,
+      goalLinks: goalLinkRows,
       alerts: alertRows,
       aiAnalyses: analyses,
       cashReserves: cash,
@@ -178,11 +190,13 @@ export async function buildAccountExport(clerkId: string): Promise<AccountExport
       socialSecurityBenefits: socialSecurity,
       accountSnapshots: accountSnapshotRows,
       portfolioSnapshots: portfolioSnapshotRows,
+      holdingSnapshots: holdingSnapshotRows,
       netWorthSnapshots: netWorthSnapshotRows,
       netWorthItemHistory: netWorthHistoryRows,
       plaidItems: safeItems,
       subscription,
       auditLog: audit,
+      householdJoinAttempts: joinAttempts,
       // Only this household's invitations are visible under row level
       // security, and only their last four characters were ever stored.
       householdInvites: invites.map((i) => {

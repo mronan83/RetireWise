@@ -526,20 +526,18 @@ The provider is Claude, Gemini or OpenAI. A missing key is an error, never a sil
 ### FR-DATA-02. Download everything held about the household as one file, without secrets
 
 - Priority: Must
-- Status: Partial
+- Status: Verified
 - Source: `src/app/legal/privacy/page.tsx:118`
 - Features: F-42
 - Verified by: `scripts/test-account-data.ts`
-- Gap: GAP-01
 
 ### FR-DATA-03. The household owner can erase all of its data
 
 - Priority: Must
-- Status: Partial
+- Status: Verified
 - Source: `docs/data-retention.md`; `src/app/legal/privacy/page.tsx:107`
 - Features: F-42
 - Verified by: `scripts/test-account-data.ts`
-- Gap: GAP-01
 
 Erasure requires typing "DELETE MY DATA" and is refused in demo mode. It removes the household's data, not the sign-in itself.
 
@@ -718,11 +716,10 @@ Household work runs as a database role with no bypass, under row-level security 
 ### NFR-PRIV-01. Erasure removes every row about the household, and export includes every row
 
 - Priority: Must
-- Status: Partial
+- Status: Verified
 - Enforced by: `src/lib/account/delete.ts`, `src/lib/account/export.ts`
 - Source: `docs/data-retention.md`; `src/app/legal/privacy/page.tsx:107`
 - Verified by: `scripts/test-account-data.ts`
-- Gap: GAP-01
 
 ### NFR-PRIV-02. Exports never contain secrets
 
@@ -1282,7 +1279,7 @@ Merges by ticker, but with no date check or review: a position missing from the 
 - Requirements: FR-DATA-01, FR-DATA-02, FR-DATA-03, NFR-PRIV-01, NFR-PRIV-02
 - Code: `src/app/api/export/report/route.ts`, `src/app/api/export/holdings/route.ts`, `src/app/api/export/transactions/route.ts`, `src/app/api/account/export/route.ts`, `src/app/api/account/delete/route.ts`, `src/lib/account/export.ts`, `src/lib/account/delete.ts`, `src/app/(dashboard)/settings/your-data-section.tsx`
 - Checks: `scripts/test-account-data.ts`
-- Gap: GAP-01, GAP-20
+- Gap: GAP-20
 
 ### F-43. Household sharing
 
@@ -1357,9 +1354,11 @@ Both pages are marked as drafts that no lawyer has reviewed.
 - Severity: High
 - Evidence: `src/lib/account/delete.ts`, `src/lib/account/export.ts`, `src/app/legal/privacy/page.tsx:107`
 - Backlog: #28
-- Status: Open
+- Status: Closed 2026-10-02
 
 Neither file mentions `holding_snapshots`, and the export also omits `goal_links`. The privacy page promises that erasure removes the historical snapshots and that the export holds every row. The deletion check cannot see the omission, because it measures what is left through the export itself.
+
+Closed by #28: erasure deletes holding snapshots and names goal links, the export includes both, and the check now reads every household-keyed table in the database directly instead of through the export.
 
 ### GAP-02. Four retirement calculations disagree, and the shipped odds are too optimistic
 
@@ -1547,7 +1546,7 @@ None of this matters while every plan is free; all of it would on the day billin
 - Backlog: #45
 - Status: Open
 
-It does not name Yahoo Finance (tickers) or the NHTSA (vehicle VINs). It says there are no third-party scripts, yet Plaid's Link window loads from Plaid. It also claims restricted access on every request (GAP-06) and complete erasure (GAP-01).
+It does not name Yahoo Finance (tickers) or the NHTSA (vehicle VINs). It says there are no third-party scripts, yet Plaid's Link window loads from Plaid. It also claims restricted access on every request (GAP-06). Its claim of complete erasure became true on 2 Oct (GAP-01 closed).
 
 ### GAP-19. The audit log misses actions it declares, and loses who acted
 
@@ -1782,6 +1781,7 @@ Only the assistant's older engine compares withdrawal strategies, using 2024 bra
 - 2026-10-02 · Q9 context from a side-by-side run of every projection path on one household. GAP-02 restated with the results. Added FR-PLAN-10 (projections pay tax and draw from the right accounts). New gaps GAP-28 (the tested engine charges no tax and draws RMDs from Roth) as #55, and GAP-29 (2025 tax figures predate the July 2025 law) as #56. · Claude
 - 2026-10-02 · Answers to Q4 and Q9 recorded. FR-PLAN-09 now says how a missing input is asked for, and FR-PLAN-04 makes the tested engine the only one. #42 and #29 unblocked; #29 now follows #55. · Claude
 - 2026-10-02 · #55 done: the tested engine pays federal tax on withdrawals and taxable Social Security, takes RMDs only from tax-deferred accounts, and reinvests the unspent part. FR-PLAN-10 Verified by the new `scripts/test-projection-tax.ts`; GAP-28 closed. · Claude
+- 2026-10-02 · #28 done: erasure deletes holding snapshots and the export includes them, goal links and join attempts. The account-data check now reads every household-keyed table from the database. FR-DATA-02, FR-DATA-03 and NFR-PRIV-01 Verified; GAP-01 closed. · Claude
 
 ## Sources
 

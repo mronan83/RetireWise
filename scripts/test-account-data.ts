@@ -15,7 +15,11 @@ import {
   accounts,
   contributions,
   debts,
+  goalLinks,
+  goals,
+  holdingSnapshots,
   holdings,
+  householdJoinAttempts,
   householdMembers,
   households,
   plaidItems,
@@ -100,8 +104,69 @@ async function seed(clerkId: string, marker: string) {
     accessTokenEncrypted: encryptToken(PLAID_TOKEN),
     institutionName: `${marker} Bank`,
   });
-  return h.id;
+  // The two tables erasure and the export once missed, and one more the
+  // export did: each needs a row here or nothing proves it is handled.
+  await base.insert(holdingSnapshots).values({
+    clerkId,
+    accountId: acct.id,
+    snapshotDate: "2026-09-30",
+    ticker: marker,
+    shares: "10",
+    price: "12",
+    value: "120",
+  });
+  const [goal] = await base
+    .insert(goals)
+    .values({ clerkId, name: `${marker} Goal`, targetAmount: "1000" })
+    .returning({ id: goals.id });
+  await base.insert(goalLinks).values({
+    clerkId,
+    goalId: goal.id,
+    itemType: "account",
+    itemId: acct.id,
+    baselineAmount: "100",
+  });
+  await base.insert(householdJoinAttempts).values({ clerkId, succeeded: false });
+  return { householdId: h.id, accountId: acct.id };
 }
+
+/**
+ * Every table the database says is keyed to a household, an account or a
+ * member — read from the schema itself, so a table added later is covered
+ * without anyone remembering to add it here.
+ */
+async function keyedTables(): Promise<{ table: string; column: string }[]> {
+  const rows = await getBaseDb().execute(sql`
+    SELECT table_name AS table, column_name AS column
+    FROM information_schema.columns
+    WHERE table_schema = 'public'
+      AND column_name IN ('clerk_id', 'account_id', 'household_id', 'primary_clerk_id')
+    ORDER BY table_name, column_name`);
+  return rows as unknown as { table: string; column: string }[];
+}
+
+/** Rows still in the database for one household, per table, read directly rather than through the export. */
+async function rowsLeft(keys: { clerkId: string; householdId: string; accountId: string }) {
+  const base = getBaseDb();
+  const left: string[] = [];
+  for (const { table, column } of await keyedTables()) {
+    const value = column === "account_id" ? keys.accountId : column === "household_id" ? keys.householdId : keys.clerkId;
+    const [{ n }] = (await base.execute(
+      sql`SELECT count(*)::int AS n FROM ${sql.identifier(table)} WHERE ${sql.identifier(column)}::text = ${value}`
+    )) as unknown as { n: number }[];
+    if (n > 0) left.push(`${table}.${column}=${n}`);
+  }
+  return left;
+}
+
+/** Where each keyed table appears in the export. Tables not listed here are expected under data.<camelCase name>. */
+const EXPORTED_ELSEWHERE: Record<string, string> = {
+  households: "household",
+  household_members: "household.members",
+  user_preferences: "data.preferences",
+  subscriptions: "data.subscription",
+};
+const camel = (t: string) => t.replace(/_([a-z])/g, (_, c: string) => c.toUpperCase());
 
 async function cleanup() {
   const base = getBaseDb();
@@ -116,7 +181,7 @@ async function cleanup() {
 }
 
 async function main() {
-  await seed(A, "AAAA");
+  const seededA = await seed(A, "AAAA");
   await seed(B, "BBBB");
 
   // ---- export -----------------------------------------------------------
@@ -132,6 +197,23 @@ async function main() {
   check("debts are included", exported.data.debts.length === 1);
   check("contributions are included", exported.data.contributions.length === 1);
   check("linked institutions are included", exported.data.plaidItems.length === 1);
+  check("holding snapshots are included", exported.data.holdingSnapshots?.length === 1, String(exported.data.holdingSnapshots?.length));
+  check("goal links are included", exported.data.goalLinks?.length === 1, String(exported.data.goalLinks?.length));
+  check("the household's join attempts are included", exported.data.householdJoinAttempts?.length === 1, String(exported.data.householdJoinAttempts?.length));
+
+  const tables = [...new Set((await keyedTables()).map((k) => k.table))];
+  const notExported = tables.filter((t) => {
+    const where = EXPORTED_ELSEWHERE[t];
+    if (where === "household") return !exported.household;
+    if (where === "household.members") return !(exported.household as { members?: unknown[] })?.members;
+    if (where) return !(where.slice(5) in exported.data);
+    return !(camel(t) in exported.data);
+  });
+  check(
+    `every one of the ${tables.length} household-keyed tables has a place in the export`,
+    notExported.length === 0,
+    `missing: ${notExported.join(", ")}`
+  );
 
   check(
     "no other household's data leaks into the export",
@@ -170,6 +252,11 @@ async function main() {
     remaining.length === 0,
     remaining.map(([t, n]) => `${t}=${n}`).join(", ")
   );
+
+  // The check above reads through the export, so a table missing from both
+  // would pass it. This one asks the database.
+  const left = await rowsLeft({ clerkId: A, ...seededA });
+  check("no row keyed to the household remains in any table", left.length === 0, left.join(", "));
 
   const base = getBaseDb();
   const [{ leftover }] = await base
