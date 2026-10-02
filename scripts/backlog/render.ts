@@ -196,6 +196,24 @@ function blocks(bs: Block[], known: Set<number>, pClass = ""): string {
 }
 
 const isReady = (item: Item) => /^none\b/i.test(item.fields.Blocker ?? "");
+/** A blocker that starts with "Your" waits on the owner and nobody else. */
+const waitsOnYou = (item: Item) => /^your\b/i.test(item.fields.Blocker ?? "");
+const PRIORITY_ORDER: Record<string, number> = { P1: 0, P2: 1, P3: 2 };
+
+function waitingOnYou(open: Item[], known: Set<number>): string {
+  const mine = open
+    .filter(waitsOnYou)
+    .sort((a, b) => PRIORITY_ORDER[a.fields.Priority] - PRIORITY_ORDER[b.fields.Priority] || a.num - b.num);
+  if (mine.length === 0) {
+    return `<section class="yours" aria-labelledby="yours-h"><h2 id="yours-h">Waiting on you</h2><p class="note">Nothing. Every open item is either ready for Claude or waits on another item.</p></section>`;
+  }
+  const rows = mine
+    .map(
+      (i) => `<li><span class="pill bp-${i.fields.Priority.toLowerCase()}">${esc(i.fields.Priority)}</span><a class="ref" href="#item-${i.num}">#${i.num}</a><span class="yours-what"><b>${inline(i.fields.Blocker, known)}</b><span class="note">${inline(i.title, known)}</span></span></li>`
+    )
+    .join("");
+  return `<section class="yours" aria-labelledby="yours-h"><h2 id="yours-h">Waiting on you</h2><p class="note">Only you can do these. Everything else on this page is Claude's, or waits on one of these.</p><ol class="yours-list">${rows}</ol></section>`;
+}
 const short = (sha: string) => sha.slice(0, 7);
 const commitLink = (sha: string) =>
   `<a href="${REPO_URL}/commit/${esc(sha)}" target="_blank" rel="noopener"><code>${esc(short(sha))}</code></a>`;
@@ -253,6 +271,7 @@ function matrix(open: Item[]): string {
 export function renderBacklogPage(b: Backlog, r: Release): string {
   const known = new Set([...b.open, ...b.done].map((i) => i.num));
   const ready = b.open.filter(isReady);
+  const yours = b.open.filter(waitsOnYou);
   const p1 = b.open.filter((i) => i.fields.Priority === "P1");
   const stat = (n: number, label: string) => `<div class="stat"><span class="n">${n}</span><span class="l">${label}</span></div>`;
 
@@ -293,8 +312,9 @@ export function renderBacklogPage(b: Backlog, r: Release): string {
   <h1>Open backlog</h1>
   <p class="meta">As live in production at ${commitLink(r.sha)} · ${esc(r.date)} · last reviewed ${esc(b.lastReviewed)}</p>
   ${blocks(b.intro, known, "lede")}
-  <div class="stats">${stat(b.open.length, "open items")}${stat(p1.length, "P1, to do next")}${stat(ready.length, "ready now, no blocker")}${stat(b.open.length - ready.length, "blocked")}${stat(b.done.length, "done")}</div>
+  <div class="stats">${stat(b.open.length, "open items")}${stat(p1.length, "P1, to do next")}${stat(yours.length, "waiting on you")}${stat(ready.length, "ready for Claude")}${stat(b.open.length - ready.length - yours.length, "parked, or waiting on another item")}${stat(b.done.length, "done")}</div>
   ${releaseNote(r)}
+  ${waitingOnYou(b.open, known)}
   <p class="source">Generated from <a href="${REPO_URL}/blob/${esc(r.sha)}/docs/BACKLOG.md" target="_blank" rel="noopener"><code>docs/BACKLOG.md</code></a> as it was at the live commit, where the backlog is edited. Git keeps its history.</p>
 </header>
 <div class="layout">
@@ -382,6 +402,12 @@ p { margin: 0; max-width: 72ch; }
 .stat { background: var(--panel); border: 1px solid var(--line); border-radius: 8px; padding: 10px 16px; display: grid; min-width: 130px; }
 .stat .n { font: 750 1.6rem/1.1 var(--display); color: var(--brand); font-variant-numeric: tabular-nums; }
 .stat .l { font-size: 0.85rem; color: var(--muted); }
+.yours { background: var(--panel); border: 1px solid var(--line); border-left: 4px solid var(--warn); border-radius: 8px; padding: 14px 16px; gap: 10px; max-width: 80ch; }
+.yours h2 { font-size: 1.15rem; padding-top: 0; }
+.yours-list { list-style: none; margin: 0; padding: 0; display: grid; gap: 10px; }
+.yours-list li { display: grid; grid-template-columns: auto 2.8em minmax(0, 1fr); gap: 4px 10px; align-items: baseline; }
+.yours-what { display: grid; gap: 2px; min-width: 0; }
+.yours-what b { font-weight: 600; }
 .release { background: var(--panel); border: 1px solid var(--line); border-left: 4px solid var(--accent); border-radius: 8px; padding: 12px 16px; display: grid; gap: 6px; max-width: 80ch; }
 .release ul.commits { margin: 0; padding-left: 1.1em; display: grid; gap: 2px; font-size: 0.92rem; }
 .layout { display: grid; grid-template-columns: 210px minmax(0, 1fr); gap: 32px; align-items: start; }
