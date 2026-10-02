@@ -424,7 +424,7 @@ Headline figures read the first row aged 73 or over, not the retirement-age row.
 - Source: `docs/annual-tax-update.md`
 - Features: F-36, F-37
 - Verified by: `scripts/test-tax-reference.ts`
-- Gap: GAP-04
+- Gap: GAP-04, GAP-29
 
 A half-loaded year is refused and the newest complete year is used; a table a year or more behind says so. The projection engine does not read the limits table (GAP-04).
 
@@ -435,6 +435,16 @@ A half-loaded year is refused and the newest complete year is used; a table a ye
 - Source: `.github/workflows/ci.yml` (onboarding check: "stop a projection being believed before its inputs exist")
 - Features: F-34, F-37
 - Gap: GAP-15
+
+### FR-PLAN-10. A projection pays income tax on what it withdraws, and takes each withdrawal from the right account
+
+- Priority: Must
+- Status: Partial
+- Source: Q9 comparison, 2 Oct
+- Features: F-34
+- Gap: GAP-28
+
+Withdrawals from tax-deferred accounts are taxed, and the tax comes out of savings. A required minimum distribution comes only from the accounts that owe one. Any amount beyond what is spent is reinvested in a taxable account rather than disappearing.
 
 ### FR-ANA-01. Nine analyses: RMD, tax, Roth conversion ladder, Social Security break-even, catch-up, income replacement, fees, sequence risk, healthcare
 
@@ -1195,10 +1205,10 @@ Merges by ticker, but with no date check or review: a position missing from the 
 
 - Group: Planning
 - Status: Partial
-- Requirements: FR-PLAN-04, FR-PLAN-05, FR-PLAN-09
+- Requirements: FR-PLAN-04, FR-PLAN-05, FR-PLAN-09, FR-PLAN-10
 - Code: `src/app/(dashboard)/projections/page.tsx`, `src/app/(dashboard)/projections/interactive-controls.tsx`, `src/lib/utils/projection-scenarios.ts`, `src/lib/utils/glide-path.ts`, `src/lib/projections/build-accounts.ts`, `src/app/api/settings/projection-controls/route.ts`
 - Checks: `scripts/test-analytics.ts`
-- Gap: GAP-02, GAP-15
+- Gap: GAP-02, GAP-15, GAP-28
 
 ### F-35. What-if scenarios
 
@@ -1347,20 +1357,24 @@ Both pages are marked as drafts that no lawyer has reviewed.
 
 Neither file mentions `holding_snapshots`, and the export also omits `goal_links`. The privacy page promises that erasure removes the historical snapshots and that the export holds every row. The deletion check cannot see the omission, because it measures what is left through the export itself.
 
-### GAP-02. Three engines compute retirement figures, and they disagree
+### GAP-02. Four retirement calculations disagree, and the shipped odds are too optimistic
 
 - Affects: FR-PLAN-04, FR-PLAN-05, FR-PLAN-06, FR-AI-04, F-34, F-35, F-39
 - Severity: High
-- Evidence: `src/lib/utils/projections.ts:480`, `src/lib/tools/run-retirement-projection.ts:16`, `src/app/(dashboard)/projections/interactive-controls.tsx:354`, `src/app/api/chat/route.ts:27`
+- Evidence: `src/lib/utils/projections.ts:480`, `src/lib/tools/run-retirement-projection.ts:80`, `src/lib/tools/run-retirement-projection.ts:139`, `src/app/(dashboard)/projections/interactive-controls.tsx:303`, `src/app/(dashboard)/projections/interactive-controls.tsx:333`, `src/app/(dashboard)/projections/interactive-controls.tsx:354`, `src/app/(dashboard)/projections/interactive-controls.tsx:1581`, `src/app/api/chat/route.ts:27`
 - Backlog: #29
 - Status: Open
 
-Only `runDetailedProjection` is tested. The disagreements:
-- The AI assistant's projection tool uses an older engine with 2024 tax brackets.
-- The Projections page's Monte Carlo inflates spending from the year retirement starts, which is the error the tested engine was fixed for.
-- The scenario Monte Carlo ignores required minimum distributions.
+Only `runDetailedProjection` is tested, and it drives the Projections chart and verdict and the Analytics balances. The Projections page's Monte Carlo, the scenario Monte Carlo and the AI assistant's tool each compute their own answer.
 
-The assistant's system prompt still asks it to "estimate dividend income". A household can see three different answers to the same question.
+A comparison on 2 Oct ran each one on the same household. The household: age 55, retiring at 65, $1.2M saved, $7,000 a month of spending in today's dollars, and $3,000 a month of Social Security claimed at 67. The Projections page reported a 94% chance that savings last; the same simulation under the tested engine's rules gives about 80%. Claiming at 62, the figures are 89% and 72%. The causes:
+- **Spending is inflated from retirement, not from today**, in both Monte Carlos and the assistant's engine. First-year spending is $84,000 instead of $116,276, 28% low.
+- **Social Security is paid from the first day of retirement**, whatever the claiming age, in the page's Monte Carlo.
+- **Catch-up contributions are added on top of what was recorded**, so contributions run past the IRS limit, adding about $117,000 by retirement in the sample.
+- **The assistant uses the Social Security amount at full retirement age from day one**, always plans 30 years of retirement (to 95 here) rather than the household's own horizon, never inflates spending in its Monte Carlo (97%), and uses 2024 tax brackets. Its other tool uses the 2025 tables and the tiered rule, so the assistant disagrees with itself.
+- The scenario Monte Carlo ignores required minimum distributions. That changed nothing for this household.
+
+The assistant's system prompt still asks it to "estimate dividend income".
 
 ### GAP-03. The Social Security claiming rule differs between pages
 
@@ -1627,6 +1641,26 @@ Found while applying the answer to Q6. Households cannot see each other, so this
 
 Rows are keyed by household, not by the person who added them, and Plaid connections do not record who linked them. Until that is recorded, the answer to Q3 (a leaving member's additions are deleted) cannot be carried out. Rows added before then cannot be attributed.
 
+### GAP-28. The tested engine charges no tax, and takes required distributions from Roth accounts
+
+- Affects: FR-PLAN-10, FR-PLAN-04, F-34
+- Severity: High
+- Evidence: `src/lib/utils/projection-scenarios.ts:369`, `src/lib/utils/projection-scenarios.ts:378`
+- Backlog: #55
+- Status: Open
+
+Found in the Q9 comparison. `runDetailedProjection` withdraws exactly the spending, with no income tax on tax-deferred withdrawals. In the comparison household the first year would owe about $5,000. When a required minimum distribution is larger than spending, the engine takes it from every account in proportion, Roth included, and the excess is never reinvested. That removed $1.1M from the balance at 90 in the comparison. The assistant's engine works out tax but never subtracts it either. This has to be fixed before this engine becomes the only one.
+
+### GAP-29. The built-in 2025 tax figures predate the July 2025 tax law
+
+- Affects: FR-PLAN-08, F-36
+- Severity: Low
+- Evidence: `src/lib/tax/table.ts:132`
+- Backlog: #56
+- Status: Open
+
+The table's standard deduction for married couples is $30,000. The One Big Beautiful Bill Act raised it to $31,500 for 2025, and added a deduction of $6,000 for each person aged 65 or over, for 2025 to 2028, phasing out at higher incomes. Neither is modelled; for retirees the senior deduction is the larger change. These figures come from Claude's knowledge, not the repository, so check them against the IRS before changing the table. Married filing jointly is the only filing status the app models.
+
 ## Open questions
 
 ### Q1. What would show each objective is met?
@@ -1706,7 +1740,18 @@ Only phone layouts are checked today.
 - Status: Open
 - Decides: FR-PLAN-04, FR-AI-04, FR-PLAN-07
 
-Answering yes closes GAP-02 and GAP-03, and the assistant's figures may change. It would also be the moment to model RMDs per person and from age 75 for people born in 1960 or later. The owner asked for more context on 2 Oct.
+Answering yes closes GAP-02 and GAP-03, and the assistant's figures may change. It would also be the moment to model RMDs per person and from age 75 for people born in 1960 or later.
+
+The owner asked for more context on 2 Oct. It is in GAP-02 and GAP-28, and in short:
+- Four calculations answer "will the money last?", and only one is tested.
+- On a sample household, the Projections page shows a 94% chance where the tested rules give about 80%, before any tax.
+- The tested engine is not ready to be the only one: it charges no tax and draws required distributions from Roth accounts (GAP-28).
+- Yes would mean four steps: fix that engine, build the odds simulation on it, route the Projections page, scenarios and the assistant through it, then delete the rest.
+- The assistant's withdrawal-strategy comparison lives only in the old engine, so yes also means rebuilding it or dropping the landing-page claim (Q10).
+- Flat versus tiered Social Security matters only when claiming at 62 or 63: $100 a month at 62 on a $3,000 benefit.
+- The 2024 versus 2025 tax tables differ by about $109 a year.
+
+Claude's recommendation: yes, in that order.
 
 ### Q10. Should the landing page's "optimize withdrawal strategies" claim stand?
 
@@ -1719,6 +1764,7 @@ Only the assistant's older engine compares withdrawal strategies, using 2024 bra
 
 - 2026-10-02 · First version, derived from the code at `c1b0b0a`, the user guide, help, legal pages, CI and the backlog. 25 gaps found and opened as backlog #28–#52. · Claude
 - 2026-10-02 · Answers to Q3, Q5 and Q6 recorded. Added FR-IMP-04 (imports are dated and reviewed) and NFR-SEC-08 (only people the owner lets in can sign up). FR-HH-02 now deletes a leaving member's additions. BO-7 restated, billing (FR-BIL-01, F-44) deferred, and GAP-16 closed. New gaps GAP-26 (open sign-up, no email confirmation) as #53 and GAP-27 (no record of who added what) as #54. GAP-21's evidence corrected: the email-link callback honours `next`, sign-in does not. Q4 spelled out. · Claude
+- 2026-10-02 · Q9 context from a side-by-side run of every projection path on one household. GAP-02 restated with the results. Added FR-PLAN-10 (projections pay tax and draw from the right accounts). New gaps GAP-28 (the tested engine charges no tax and draws RMDs from Roth) as #55, and GAP-29 (2025 tax figures predate the July 2025 law) as #56. · Claude
 
 ## Sources
 
