@@ -274,13 +274,13 @@ Each appears twice among the 14 linked institutions, most likely from reconnecti
 - Priority: P1
 - Effort: L
 - Severity: High
-- Blocker: #55
+- Blocker: None
 - Source: Requirements traceability, GAP-02
 
 Only `runDetailedProjection` is tested. The Projections page's Monte Carlo, the scenario Monte Carlo and the AI assistant each compute their own answer. On a sample household the page shows a 94% chance that savings last, where the tested rules give about 80% (claiming at 62: 89% against 72%). The page inflates spending from retirement rather than today, pays Social Security from the first day of retirement, and adds catch-up contributions on top of what was recorded. The assistant ignores the claiming age, always plans 30 years of retirement and uses 2024 brackets. The full comparison is in GAP-02.
 
 You said yes to Q9 on 2 Oct. The work comes in this order:
-1. Fix the tested engine (#55).
+1. Fix the tested engine (#55, done 2 Oct).
 2. Build the odds simulation on it.
 3. Route Projections, scenarios and the assistant through it.
 4. Delete the rest, and drop "estimate dividend income" from the assistant's prompt.
@@ -553,17 +553,6 @@ Supabase allows new sign-ups and confirms every new account automatically. Anyon
 
 Your answer to Q3 deletes a leaving member's additions, but rows are keyed by household and nothing says who added them. Add the adding member's id to accounts, holdings, contributions, goals, the net-worth tables and Plaid connections, filled from the signed-in account on every insert. Rows from before then stay with the household. #35 depends on this.
 
-### 55. The tested projection engine charges no tax and draws required distributions from Roth accounts
-
-- Type: Defect
-- Priority: P1
-- Effort: M
-- Severity: High
-- Blocker: None
-- Source: Requirements traceability, GAP-28 (Q9 comparison)
-
-`runDetailedProjection` drives the Projections chart and verdict and the Analytics balances, and it withdraws exactly the spending, with no income tax on tax-deferred withdrawals. When a required minimum distribution exceeds spending, it takes the distribution from every account in proportion, Roth included, and the excess vanishes instead of being reinvested; that removed $1.1M from the balance at 90 in the comparison. Tax withdrawals with the existing tax table, take distributions only from the accounts that owe them, reinvest the excess in a taxable account, and add checks for all three. Worth doing whatever you answer on Q9.
-
 ### 56. The built-in 2025 tax figures predate the July 2025 tax law
 
 - Type: Data
@@ -588,9 +577,17 @@ The standard deduction for married couples is $30,000 in `src/lib/tax/table.ts`.
 - #53 is the quickest real risk reduction on the list: two settings, no code.
 - #54 before #35: the leave action cannot delete "what the member added" until that is recorded.
 - Q3, Q4, Q5, Q6 and Q9 were answered on 2 Oct, so no traceability item waits on a decision from you; #53 waits on your go-ahead.
-- #55 before #29: the tested engine has to be right before everything is routed through it. #55 is worth doing whatever Q9's answer.
+- #55 is done, so #29 (one engine everywhere) can start; #30 rides with it.
 
 ## Done
+
+### 55. The tested projection engine charges no tax and draws required distributions from Roth accounts
+
+- Type: Defect
+- Closed: 2026-10-02
+- In: PR 5
+
+`runDetailedProjection` now pays federal income tax on every withdrawal from tax-deferred money, and on the Social Security that income makes taxable, out of savings. Brackets rise with inflation. Required distributions come only from tax-deferred accounts, and any part nobody spends is reinvested after tax in a taxable account. The Projections table shows the tax and any reinvestment under each year's withdrawal. On the Q9 sample household: $273,000 of tax over retirement, the Roth at 90 $1.21M instead of $0.66M, and the balance at 90 $5.00M instead of $4.51M. Proved by `scripts/test-projection-tax.ts`.
 
 ### 43. Plan limits are mostly unenforced
 

@@ -1277,6 +1277,12 @@ export function InteractiveProjections({
                             {projection.rmdAmounts[i] > 0 && Math.abs(projection.withdrawals[i] - projection.rmdAmounts[i]) < 100 && (
                               <Badge variant="outline" className="ml-1 text-[8px] px-1 py-0 border-amber-500/50 text-amber-500">RMD</Badge>
                             )}
+                            {projection.taxes[i] > 0 && (
+                              <div className="text-[10px] text-muted-foreground">
+                                incl. {formatCurrency(projection.taxes[i])} tax
+                                {projection.reinvested[i] > 0 && `, ${formatCurrency(projection.reinvested[i])} reinvested`}
+                              </div>
+                            )}
                           </TableCell>
                           <TableCell className="text-right font-mono text-xs">
                             {projection.rmdAmounts[i] > 0 ? (
@@ -1341,6 +1347,12 @@ export function InteractiveProjections({
                                 <span>-{formatCurrency(projection.withdrawals[i])}</span>
                                 {projection.rmdAmounts[i] > 0 && Math.abs(projection.withdrawals[i] - projection.rmdAmounts[i]) < 100 && (
                                   <Badge variant="outline" className="ml-1 text-[8px] px-1 py-0 border-amber-500/50 text-amber-500">RMD</Badge>
+                                )}
+                                {projection.taxes[i] > 0 && (
+                                  <div className="text-[10px] text-muted-foreground">
+                                    incl. {formatCurrency(projection.taxes[i])} tax
+                                    {projection.reinvested[i] > 0 && `, ${formatCurrency(projection.reinvested[i])} reinvested`}
+                                  </div>
                                 )}
                               </div>
                             )}

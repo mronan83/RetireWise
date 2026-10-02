@@ -51,8 +51,10 @@ function main() {
   const near0 = runDetailedProjection({ ...base, yearsToRetirement: 1 });
   const far = runDetailedProjection({ ...base, yearsToRetirement: 18 });
 
-  const firstWithdrawalNear = near0.withdrawals[1];
-  const firstWithdrawalFar = far.withdrawals[18];
+  // Spending is what is left of the withdrawal once its tax is paid; the
+  // gross withdrawal also carries the tax (scripts/test-projection-tax.ts).
+  const firstWithdrawalNear = near0.withdrawals[1] - near0.taxes[1];
+  const firstWithdrawalFar = far.withdrawals[18] - far.taxes[18];
   check(
     "retiring later means a larger first-year withdrawal, because spending inflated meanwhile",
     firstWithdrawalFar > firstWithdrawalNear * 1.4,

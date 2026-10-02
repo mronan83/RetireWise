@@ -441,12 +441,14 @@ When current age or retirement spending is missing, a figure that depends on it 
 ### FR-PLAN-10. A projection pays income tax on what it withdraws, and takes each withdrawal from the right account
 
 - Priority: Must
-- Status: Partial
+- Status: Verified
 - Source: Q9 comparison, 2 Oct
 - Features: F-34
-- Gap: GAP-28
+- Verified by: `scripts/test-projection-tax.ts`
 
-Withdrawals from tax-deferred accounts are taxed, and the tax comes out of savings. A required minimum distribution comes only from the accounts that owe one. Any amount beyond what is spent is reinvested in a taxable account rather than disappearing.
+Withdrawals from tax-deferred accounts are taxed, with the Social Security they make taxable, and the tax comes out of savings. Brackets rise with inflation; the Social Security thresholds, fixed in law, do not. A required minimum distribution comes only from tax-deferred accounts. Any amount beyond what is spent is reinvested, after tax, in a taxable account rather than disappearing.
+
+Not modelled: state tax, capital gains on taxable-account withdrawals (treated as return of principal), and filing statuses other than married filing jointly. The 2025 figures predate the July 2025 law (GAP-29).
 
 ### FR-ANA-01. Nine analyses: RMD, tax, Roth conversion ladder, Social Security break-even, catch-up, income replacement, fees, sequence risk, healthcare
 
@@ -1209,8 +1211,8 @@ Merges by ticker, but with no date check or review: a position missing from the 
 - Status: Partial
 - Requirements: FR-PLAN-04, FR-PLAN-05, FR-PLAN-09, FR-PLAN-10
 - Code: `src/app/(dashboard)/projections/page.tsx`, `src/app/(dashboard)/projections/interactive-controls.tsx`, `src/lib/utils/projection-scenarios.ts`, `src/lib/utils/glide-path.ts`, `src/lib/projections/build-accounts.ts`, `src/app/api/settings/projection-controls/route.ts`
-- Checks: `scripts/test-analytics.ts`
-- Gap: GAP-02, GAP-15, GAP-28
+- Checks: `scripts/test-analytics.ts`, `scripts/test-projection-tax.ts`
+- Gap: GAP-02, GAP-15
 
 ### F-35. What-if scenarios
 
@@ -1649,9 +1651,11 @@ Rows are keyed by household, not by the person who added them, and Plaid connect
 - Severity: High
 - Evidence: `src/lib/utils/projection-scenarios.ts:369`, `src/lib/utils/projection-scenarios.ts:378`
 - Backlog: #55
-- Status: Open
+- Status: Closed 2026-10-02
 
 Found in the Q9 comparison. `runDetailedProjection` withdraws exactly the spending, with no income tax on tax-deferred withdrawals. In the comparison household the first year would owe about $5,000. When a required minimum distribution is larger than spending, the engine takes it from every account in proportion, Roth included, and the excess is never reinvested. That removed $1.1M from the balance at 90 in the comparison. The assistant's engine works out tax but never subtracts it either. This has to be fixed before this engine becomes the only one.
+
+Closed by #55: the engine now taxes withdrawals, takes RMDs only from tax-deferred accounts and reinvests the unspent part (FR-PLAN-10).
 
 ### GAP-29. The built-in 2025 tax figures predate the July 2025 tax law
 
@@ -1777,6 +1781,7 @@ Only the assistant's older engine compares withdrawal strategies, using 2024 bra
 - 2026-10-02 · Answers to Q3, Q5 and Q6 recorded. Added FR-IMP-04 (imports are dated and reviewed) and NFR-SEC-08 (only people the owner lets in can sign up). FR-HH-02 now deletes a leaving member's additions. BO-7 restated, billing (FR-BIL-01, F-44) deferred, and GAP-16 closed. New gaps GAP-26 (open sign-up, no email confirmation) as #53 and GAP-27 (no record of who added what) as #54. GAP-21's evidence corrected: the email-link callback honours `next`, sign-in does not. Q4 spelled out. · Claude
 - 2026-10-02 · Q9 context from a side-by-side run of every projection path on one household. GAP-02 restated with the results. Added FR-PLAN-10 (projections pay tax and draw from the right accounts). New gaps GAP-28 (the tested engine charges no tax and draws RMDs from Roth) as #55, and GAP-29 (2025 tax figures predate the July 2025 law) as #56. · Claude
 - 2026-10-02 · Answers to Q4 and Q9 recorded. FR-PLAN-09 now says how a missing input is asked for, and FR-PLAN-04 makes the tested engine the only one. #42 and #29 unblocked; #29 now follows #55. · Claude
+- 2026-10-02 · #55 done: the tested engine pays federal tax on withdrawals and taxable Social Security, takes RMDs only from tax-deferred accounts, and reinvests the unspent part. FR-PLAN-10 Verified by the new `scripts/test-projection-tax.ts`; GAP-28 closed. · Claude
 
 ## Sources
 
