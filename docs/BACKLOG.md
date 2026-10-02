@@ -2,7 +2,7 @@
 
 Last reviewed: 2026-10-02
 
-Items from the [delivery review](https://claude.ai/artifact/Eo9g6bEnWFi9TBoSPwohPk) (G1–G7) the Plaid investigation of 29 Sep, and the requirements traceability review of 2 Oct (#28–#54, one per gap). The page is published from this file after each successful `pnpm deploy:prod`, so it always describes what is live.
+Items from the [delivery review](https://claude.ai/artifact/Eo9g6bEnWFi9TBoSPwohPk) (G1–G7) the Plaid investigation of 29 Sep, and the requirements traceability review of 2 Oct (#28–#56, one per gap). The page is published from this file after each successful `pnpm deploy:prod`, so it always describes what is live.
 
 <!--
 How to edit
@@ -268,7 +268,7 @@ Each appears twice among the 14 linked institutions, most likely from reconnecti
 
 `src/lib/account/delete.ts` never deletes `holding_snapshots`, and `src/lib/account/export.ts` exports neither them nor `goal_links`, while the privacy page promises both. The deletion check measures what is left through the export, so it cannot see the omission. Add both tables to erasure and export, and make the check count rows in the database directly.
 
-### 29. Three engines give three answers to the same retirement question
+### 29. Four calculations give different answers to "will the money last?"
 
 - Type: Defect
 - Priority: P1
@@ -277,7 +277,15 @@ Each appears twice among the 14 linked institutions, most likely from reconnecti
 - Blocker: Your decision on Q9 in the requirements: one tested engine everywhere
 - Source: Requirements traceability, GAP-02
 
-The AI assistant's projection tool runs an older engine with 2024 tax brackets. The Projections page's Monte Carlo inflates spending from the year retirement starts, the error the tested engine was fixed for. The scenario Monte Carlo ignores required minimum distributions. Only `runDetailedProjection` is tested. Route every surface through it, and drop "estimate dividend income" from the assistant's prompt. The assistant's figures will change, which is why it needs your word.
+Only `runDetailedProjection` is tested. The Projections page's Monte Carlo, the scenario Monte Carlo and the AI assistant each compute their own answer. On a sample household the page shows a 94% chance that savings last, where the tested rules give about 80% (claiming at 62: 89% against 72%). The page inflates spending from retirement rather than today, pays Social Security from the first day of retirement, and adds catch-up contributions on top of what was recorded. The assistant ignores the claiming age, always plans 30 years of retirement and uses 2024 brackets. The full comparison is in GAP-02.
+
+If you say yes to Q9, the work comes in this order:
+1. Fix the tested engine (#55).
+2. Build the odds simulation on it.
+3. Route Projections, scenarios and the assistant through it.
+4. Delete the rest, and drop "estimate dividend income" from the assistant's prompt.
+
+The assistant's figures will change. Its withdrawal-strategy comparison has to be rebuilt or dropped (Q10).
 
 ### 30. Social Security is cut differently on Projections and Analytics
 
@@ -543,6 +551,28 @@ Supabase allows new sign-ups and confirms every new account automatically. Anyon
 
 Your answer to Q3 deletes a leaving member's additions, but rows are keyed by household and nothing says who added them. Add the adding member's id to accounts, holdings, contributions, goals, the net-worth tables and Plaid connections, filled from the signed-in account on every insert. Rows from before then stay with the household. #35 depends on this.
 
+### 55. The tested projection engine charges no tax and draws required distributions from Roth accounts
+
+- Type: Defect
+- Priority: P1
+- Effort: M
+- Severity: High
+- Blocker: None
+- Source: Requirements traceability, GAP-28 (Q9 comparison)
+
+`runDetailedProjection` drives the Projections chart and verdict and the Analytics balances, and it withdraws exactly the spending, with no income tax on tax-deferred withdrawals. When a required minimum distribution exceeds spending, it takes the distribution from every account in proportion, Roth included, and the excess vanishes instead of being reinvested; that removed $1.1M from the balance at 90 in the comparison. Tax withdrawals with the existing tax table, take distributions only from the accounts that owe them, reinvest the excess in a taxable account, and add checks for all three. Worth doing whatever you answer on Q9.
+
+### 56. The built-in 2025 tax figures predate the July 2025 tax law
+
+- Type: Data
+- Priority: P2
+- Effort: S
+- Severity: Low
+- Blocker: None
+- Source: Requirements traceability, GAP-29
+
+The standard deduction for married couples is $30,000 in `src/lib/tax/table.ts`. The One Big Beautiful Bill Act made it $31,500 for 2025, and added a $6,000 deduction for each person aged 65 or over, for 2025 to 2028. Verify against the IRS, then update the table and model the senior deduction, phase-out included.
+
 ## Notes on sequencing
 
 - Do #1 before #7: previews should lose production's data before they get data of their own.
@@ -556,6 +586,7 @@ Your answer to Q3 deletes a leaving member's additions, but rows are keyed by ho
 - #53 is the quickest real risk reduction on the list: two settings, no code.
 - #54 before #35: the leave action cannot delete "what the member added" until that is recorded.
 - Two items still wait on a decision from you: Q4 (#42) and Q9 (#29). Q3, Q5 and Q6 were answered on 2 Oct.
+- #55 before #29: the tested engine has to be right before everything is routed through it. #55 is worth doing whatever Q9's answer.
 
 ## Done
 
