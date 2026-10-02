@@ -12,7 +12,7 @@ import { dirname, resolve } from "path";
 import { parseBacklog, renderBacklogPage, validate, type Release } from "./render";
 
 const FILE = "docs/BACKLOG.md";
-export const DEFAULT_OUT = ".backlog/backlog.html";
+export const DEFAULT_OUT = ".pages/backlog.html";
 
 function git(...args: string[]): string {
   return execFileSync("git", args, { encoding: "utf8", stdio: ["ignore", "pipe", "pipe"] }).trim();

@@ -26,6 +26,9 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v5
+        with:
+          # Full history, so a pull request can be compared with its base.
+          fetch-depth: 0
       - uses: pnpm/action-setup@v4
       - uses: actions/setup-node@v5
         with:
@@ -47,6 +50,16 @@ jobs:
       # The backlog page is generated from docs/BACKLOG.md after each release.
       # A malformed item should fail the PR that introduced it, not the release.
       - run: pnpm exec tsx scripts/build-backlog.ts --check
+
+      # docs/REQUIREMENTS.md, checked against the repository: every file it
+      # names exists, "Verified" means a check this workflow runs, every page
+      # and API route belongs to a feature, and its gaps agree with the backlog.
+      - run: pnpm exec tsx scripts/build-traceability.ts --check
+
+      # A pull request that changes app code must update the traceability
+      # document too, or say in a commit message why behaviour is unchanged.
+      - if: github.event_name == 'pull_request'
+        run: pnpm exec tsx scripts/build-traceability.ts --require-update origin/${{ github.base_ref }}
 
       # Retry policy and key rotation. Pure logic, so it belongs here rather
       # than behind the database job.

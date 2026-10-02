@@ -6,7 +6,7 @@
  *       Runs in CI, so a broken backlog fails the PR rather than the release.
  *
  *   pnpm backlog:build [--sha <commit>] [--previous <commit>] [--out <path>]
- *       Write the page for a commit (default HEAD) to .backlog/backlog.html.
+ *       Write the page for a commit (default HEAD) to .pages/backlog.html.
  *       A local preview only: the published page is built by deploy:prod after
  *       a successful release, never after a merge.
  */

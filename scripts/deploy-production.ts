@@ -12,9 +12,10 @@
  * domain now serves the new deployment and reports healthy. A failure at any
  * step stops it, and nothing already live is touched until a build succeeds.
  *
- * Only after all of that does it build the backlog page (.backlog/backlog.html)
- * from docs/BACKLOG.md at the released commit, so the published page always
- * describes what is live. Nothing builds it on a merge, a dry run, or a
+ * Only after all of that does it build the backlog and traceability pages
+ * (.pages/backlog.html, .pages/traceability.html) from docs/BACKLOG.md and
+ * docs/REQUIREMENTS.md at the released commit, so the published pages always
+ * describe what is live. Nothing builds it on a merge, a dry run, or a
  * release that turns out to be a no-op.
  *
  *   pnpm deploy:prod             # the tip of origin/main
@@ -26,6 +27,7 @@
 import { execFileSync } from "child_process";
 import { relative } from "path";
 import { buildBacklogPage } from "./backlog/build";
+import { buildTracePage } from "./traceability/build";
 
 const REPO = "mronan83/RetireWise";
 const TEAM_ID = "team_A8TfHlLyTc2toipq0WsMVKvK";
@@ -168,13 +170,20 @@ async function main() {
   console.log(`\n✓ ${sha.slice(0, 7)} is live on https://${PRODUCTION_HOST} and healthy.`);
   if (liveSha) console.log(`  Roll back with: pnpm deploy:prod ${liveSha.slice(0, 7)}`);
 
-  // 6. The backlog page, now that there is a release for it to describe. The
+  // 6. The pages, now that there is a release for them to describe. The
   //    release has already succeeded, so a problem here is reported, not fatal.
   try {
     const page = buildBacklogPage({ sha, previousSha: liveSha });
     console.log(`  Backlog page: ${relative(process.cwd(), page)} (publish it to the RetireWise Backlog artifact)`);
   } catch (e) {
     console.warn(`  ⚠ Released, but the backlog page was not built: ${e instanceof Error ? e.message : String(e)}`);
+  }
+  try {
+    const { out, problems } = buildTracePage({ sha, previousSha: liveSha });
+    console.log(`  Traceability page: ${relative(process.cwd(), out)} (publish it to the RetireWise Requirements & Feature Traceability artifact)`);
+    if (problems.length) console.warn(`  ⚠ ${problems.length} trace problem(s) at this commit; run pnpm trace:check.`);
+  } catch (e) {
+    console.warn(`  ⚠ Released, but the traceability page was not built: ${e instanceof Error ? e.message : String(e)}`);
   }
 }
 

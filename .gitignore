@@ -50,5 +50,6 @@ next-env.d.ts
 /blob-report/
 /playwright/.cache/
 
-# backlog page, built by deploy:prod and published as an artifact
+# backlog and traceability pages, built by deploy:prod and published as artifacts
+/.pages/
 /.backlog/
