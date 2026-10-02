@@ -64,7 +64,13 @@ if (args.includes("--check")) {
   }
 } else {
   try {
-    const { out, problems } = buildTracePage({ sha: option("--sha") ?? "HEAD", previousSha: option("--previous"), out: option("--out") });
+    const { out, problems } = buildTracePage({
+      sha: option("--sha") ?? "HEAD",
+      previousSha: option("--previous"),
+      out: option("--out"),
+      // Only deploy:prod builds the page a release publishes; this one is for review.
+      preview: true,
+    });
     console.log(`✓ Wrote ${out}`);
     if (problems.length) console.warn(`  ⚠ ${problems.length} trace problem(s); run pnpm trace:check.`);
   } catch (e) {
