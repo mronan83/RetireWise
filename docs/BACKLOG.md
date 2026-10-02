@@ -16,7 +16,7 @@ Open item fields
 - Priority: P1 (next) | P2 (this month) | P3 (this quarter)
 - Effort: S (hours) | M (about a day) | L (days)
 - Severity: High | Medium | Low
-- Blocker: None, or what it waits on
+- Blocker: None (ready for Claude), "Your …" (only the owner can unblock it; listed under Waiting on you), or another item
 - Source: where it was found (optional)
 
 Done item fields
