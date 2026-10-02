@@ -12,6 +12,11 @@
  * domain now serves the new deployment and reports healthy. A failure at any
  * step stops it, and nothing already live is touched until a build succeeds.
  *
+ * Only after all of that does it build the backlog page (.backlog/backlog.html)
+ * from docs/BACKLOG.md at the released commit, so the published page always
+ * describes what is live. Nothing builds it on a merge, a dry run, or a
+ * release that turns out to be a no-op.
+ *
  *   pnpm deploy:prod             # the tip of origin/main
  *   pnpm deploy:prod <sha>       # a specific commit on main (also a rollback)
  *   pnpm deploy:prod --dry-run   # every check, no deploy
@@ -19,6 +24,8 @@
  * Needs VERCEL_TOKEN, and GITHUB_TOKEN or GH_TOKEN to read CI.
  */
 import { execFileSync } from "child_process";
+import { relative } from "path";
+import { buildBacklogPage } from "./backlog/build";
 
 const REPO = "mronan83/RetireWise";
 const TEAM_ID = "team_A8TfHlLyTc2toipq0WsMVKvK";
@@ -160,6 +167,15 @@ async function main() {
 
   console.log(`\n✓ ${sha.slice(0, 7)} is live on https://${PRODUCTION_HOST} and healthy.`);
   if (liveSha) console.log(`  Roll back with: pnpm deploy:prod ${liveSha.slice(0, 7)}`);
+
+  // 6. The backlog page, now that there is a release for it to describe. The
+  //    release has already succeeded, so a problem here is reported, not fatal.
+  try {
+    const page = buildBacklogPage({ sha, previousSha: liveSha });
+    console.log(`  Backlog page: ${relative(process.cwd(), page)} (publish it to the RetireWise Backlog artifact)`);
+  } catch (e) {
+    console.warn(`  ⚠ Released, but the backlog page was not built: ${e instanceof Error ? e.message : String(e)}`);
+  }
 }
 
 main().catch((e) => fail(e instanceof Error ? e.message : String(e)));
