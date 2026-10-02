@@ -39,7 +39,9 @@
     "test:ofx-import": "tsx scripts/test-ofx-import.ts",
     "deploy:prod": "NODE_USE_ENV_PROXY=1 NODE_NO_WARNINGS=1 tsx scripts/deploy-production.ts",
     "backlog:check": "tsx scripts/build-backlog.ts --check",
-    "backlog:build": "tsx scripts/build-backlog.ts"
+    "backlog:build": "tsx scripts/build-backlog.ts",
+    "trace:check": "tsx scripts/build-traceability.ts --check",
+    "trace:build": "tsx scripts/build-traceability.ts"
   },
   "dependencies": {
     "@ai-sdk/anthropic": "^3.0.71",

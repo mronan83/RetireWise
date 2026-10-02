@@ -2,7 +2,7 @@
 
 Last reviewed: 2026-10-02
 
-Items from the [delivery review](https://claude.ai/artifact/Eo9g6bEnWFi9TBoSPwohPk) (G1–G7) and the Plaid investigation of 29 Sep. The page is published from this file after each successful `pnpm deploy:prod`, so it always describes what is live.
+Items from the [delivery review](https://claude.ai/artifact/Eo9g6bEnWFi9TBoSPwohPk) (G1–G7) the Plaid investigation of 29 Sep, and the requirements traceability review of 2 Oct (#28–#52, one per gap). The page is published from this file after each successful `pnpm deploy:prod`, so it always describes what is live.
 
 <!--
 How to edit
@@ -257,6 +257,281 @@ Plaid enables Chase in production only after the Security Questionnaire in the P
 
 Each appears twice among the 14 linked institutions, most likely from reconnecting (#13). On a paid Plaid plan each connection is billed.
 
+### 28. Erasing a household leaves its holding snapshots behind
+
+- Type: Security
+- Priority: P1
+- Effort: S
+- Severity: High
+- Blocker: None
+- Source: Requirements traceability, GAP-01
+
+`src/lib/account/delete.ts` never deletes `holding_snapshots`, and `src/lib/account/export.ts` exports neither them nor `goal_links`, while the privacy page promises both. The deletion check measures what is left through the export, so it cannot see the omission. Add both tables to erasure and export, and make the check count rows in the database directly.
+
+### 29. Three engines give three answers to the same retirement question
+
+- Type: Defect
+- Priority: P1
+- Effort: L
+- Severity: High
+- Blocker: Your decision on Q9 in the requirements: one tested engine everywhere
+- Source: Requirements traceability, GAP-02
+
+The AI assistant's projection tool runs an older engine with 2024 tax brackets. The Projections page's Monte Carlo inflates spending from the year retirement starts, the error the tested engine was fixed for. The scenario Monte Carlo ignores required minimum distributions. Only `runDetailedProjection` is tested. Route every surface through it, and drop "estimate dividend income" from the assistant's prompt. The assistant's figures will change, which is why it needs your word.
+
+### 30. Social Security is cut differently on Projections and Analytics
+
+- Type: Defect
+- Priority: P2
+- Effort: S
+- Severity: Medium
+- Blocker: #29
+- Source: Requirements traceability, GAP-03
+
+Projections cuts the benefit a flat 6.67% per early year (66.65% at 62); Analytics uses the tiered SSA rule (70% at 62). Only the tiered rule is tested. Use it in both, as part of #29.
+
+### 31. Contribution limits are hard-coded for 2025 and ignore the IRS limits table
+
+- Type: Defect
+- Priority: P2
+- Effort: M
+- Severity: Medium
+- Blocker: None
+- Source: Requirements traceability, GAP-04
+
+Three copies of the 2025 limits cap projected contributions, while Settings shows and refreshes a table the engine never reads. The HSA catch-up applies from 50 instead of 55. The check meant to prove the cap uses a deferral under it, so it passes even if capping is broken. Read limits from the table by year, and test a deferral over the cap.
+
+### 32. "Sync now" writes the database's ID where Plaid's item ID belongs
+
+- Type: Defect
+- Priority: P2
+- Effort: S
+- Severity: Medium
+- Blocker: None
+- Source: Requirements traceability, GAP-05
+
+`src/app/api/plaid/sync/route.ts` passes `item.id` where the daily refresh passes Plaid's `item_id`, and stores it on the synced accounts. A disconnect before the next daily refresh would leave that connection's credentials in place. On 2 Oct no record carried a wrong ID (0 of 24), so this is a fix with no data repair.
+
+### 33. Chat, prices, billing status and household routes skip the restricted database role
+
+- Type: Security
+- Priority: P2
+- Effort: M
+- Severity: Medium
+- Blocker: None
+- Source: Requirements traceability, GAP-06
+
+These routes query as the table owner, so row-level security does not apply and only their own household filters isolate one household from another. The tenant-scope check cannot see them, and the privacy page says every request runs under the restricted role. Wrap them in `withTenant` and extend the check to catch the pattern.
+
+### 34. The membership policy lets an account insert itself into any household
+
+- Type: Security
+- Priority: P2
+- Effort: S
+- Severity: Medium
+- Blocker: None
+- Source: Requirements traceability, GAP-07
+
+The `WITH CHECK` on memberships does not tie the household to an accepted invite, and nothing makes an account's membership unique, so a second one would make which household loads unpredictable. No code path does either today. Needs a migration, so it ships with or after #6.
+
+### 35. A member cannot leave a household, and an owner cannot remove one
+
+- Type: Gap
+- Priority: P2
+- Effort: M
+- Severity: Medium
+- Blocker: Your decision on Q3 in the requirements: what happens to what a leaving member added
+- Source: Requirements traceability, GAP-08
+
+The erase-data screen tells a member they "can leave the household instead", and there is no such action. The only way to revoke a partner's access today is to erase everything.
+
+### 36. Demo visitors and any signed-in user can trigger shared writes
+
+- Type: Security
+- Priority: P3
+- Effort: S
+- Severity: Low
+- Blocker: None
+- Source: Requirements traceability, GAP-09
+
+The price refresh rewrites the demo household's prices and returns a stack trace on failure. The IRS limits refresh lets any signed-in user rewrite the shared tables, though only to values fixed in code. Refuse both in demo mode, restrict the limits refresh to the cron, and return a plain error.
+
+### 37. Cron routes would accept anyone if CRON_SECRET were unset
+
+- Type: Security
+- Priority: P3
+- Effort: S
+- Severity: Low
+- Blocker: None
+- Source: Requirements traceability, GAP-10
+
+The expected header becomes `Bearer undefined`, and the comparison is not constant-time. The secret is set in production. Fail closed when it is missing and compare with `timingSafeEqual`.
+
+### 38. A holdings file import wipes the account's holdings first
+
+- Type: Defect
+- Priority: P2
+- Effort: S
+- Severity: Medium
+- Blocker: Your decision on Q5 in the requirements: replace or merge
+- Source: Requirements traceability, GAP-11
+
+`src/lib/actions/import.ts` deletes every holding before inserting the file, so a cost basis entered by hand is lost on re-import. Fidelity quick import merges by ticker instead.
+
+### 39. Holdings cannot be edited or deleted
+
+- Type: Gap
+- Priority: P2
+- Effort: M
+- Severity: Medium
+- Blocker: None
+- Source: Requirements traceability, GAP-12
+
+The update and delete actions exist in `src/lib/actions/holdings.ts`, and no screen calls them. A wrong share count can only be fixed by re-importing.
+
+### 40. The transactions page stops at 500 and totals only those
+
+- Type: Defect
+- Priority: P3
+- Effort: S
+- Severity: Low
+- Blocker: None
+- Source: Requirements traceability, GAP-13
+
+Page through results and compute totals in the query.
+
+### 41. The setup checklist counts retired contributions as done
+
+- Type: Defect
+- Priority: P3
+- Effort: S
+- Severity: Low
+- Blocker: None
+- Source: Requirements traceability, GAP-14
+
+`src/lib/onboarding.ts` tests `is_active IS NOT NULL`, which is always true. It should test `is_active = true`.
+
+### 42. Analytics and projections fill in age, spending and fees silently
+
+- Type: Defect
+- Priority: P2
+- Effort: M
+- Severity: Medium
+- Blocker: Your decision on Q4 in the requirements: refuse, or show the default
+- Source: Requirements traceability, GAP-15
+
+Missing inputs become age 42, $7,000 a month and a 0.15% fund fee, with nothing on screen to say so. It is the guessed-figure pattern the dividend work removed.
+
+### 43. Plan limits are mostly unenforced
+
+- Type: Gap
+- Priority: P3
+- Effort: M
+- Severity: Low
+- Blocker: Your decision on Q6 in the requirements: who RetireWise is for
+- Source: Requirements traceability, GAP-16
+
+Three of eight plan features are checked, the daily AI message limit is never applied, the chat rate limit needs Redis, and only households made through "Create household" are comped. Harmless while every plan is free; not on the day billing goes on.
+
+### 44. The README, user guide, help and architecture docs contradict the app
+
+- Type: Tech Debt
+- Priority: P2
+- Effort: M
+- Severity: Medium
+- Blocker: None
+- Source: Requirements traceability, GAP-17
+
+The README is the create-next-app template. The user guide promises Clerk and Google sign-in, 11 analysis cards, 10 AI tools and dashboard alerts. Help gives the wrong price-update time and a reconnect button that does not exist. The architecture and data-flow docs describe Neon, Clerk and 14 tables.
+
+### 45. The privacy page leaves out two recipients and overstates two protections
+
+- Type: Gap
+- Priority: P2
+- Effort: S
+- Severity: Medium
+- Blocker: None
+- Source: Requirements traceability, GAP-18
+
+It does not name Yahoo Finance (tickers) or the NHTSA (vehicle VINs), and says there are no third-party scripts though Plaid Link loads from Plaid. Its claims of restricted access on every request and complete erasure are untrue until #33 and #28 land. Correct the page now and again when those ship.
+
+### 46. The audit log misses actions it declares and loses who acted
+
+- Type: Gap
+- Priority: P3
+- Effort: S
+- Severity: Low
+- Blocker: None
+- Source: Requirements traceability, GAP-19
+
+Account deletion and billing changes are declared but never recorded. Plaid and AI-key events carry no actor. Revoked invites are filed under the wrong key.
+
+### 47. The holdings CSV breaks on a name with a quote in it
+
+- Type: Defect
+- Priority: P3
+- Effort: S
+- Severity: Low
+- Blocker: None
+- Source: Requirements traceability, GAP-20
+
+Quote and escape every field.
+
+### 48. No password reset, and sign-in drops where you were going
+
+- Type: Gap
+- Priority: P2
+- Effort: M
+- Severity: Medium
+- Blocker: None
+- Source: Requirements traceability, GAP-21
+
+Someone who forgets their password cannot get back in. The auth callback also ignores `next`, so a deep link lands on the dashboard after sign-in. The reset email goes through Supabase Auth, which is already configured.
+
+### 49. The weekday snapshot skips households and can double-count a day
+
+- Type: Defect
+- Priority: P3
+- Effort: S
+- Severity: Low
+- Blocker: None
+- Source: Requirements traceability, GAP-22
+
+A household with no investments gets no net-worth snapshot, because the loop continues before it. A second run on one day inserts duplicate rows, and every run is recorded as ok. Upsert by day and record real outcomes.
+
+### 50. A release stops on a passing Vercel error before confirming itself
+
+- Type: Ops
+- Priority: P3
+- Effort: S
+- Severity: Low
+- Blocker: None
+- Source: Requirements traceability, GAP-23
+
+On 2 Oct one 502 from Vercel's API stopped `pnpm deploy:prod` after a good build, so the alias, health and backlog page were checked by hand. Retry read-only Vercel calls a few times before giving up.
+
+### 51. Some checks prove less than their names say
+
+- Type: Tech Debt
+- Priority: P2
+- Effort: M
+- Severity: Medium
+- Blocker: None
+- Source: Requirements traceability, GAP-24
+
+An IRS cap check that never reaches the cap, a coverage rule restated in the test instead of imported, and an "underwater" case that asserts positive equity. Several checks read source text instead of running code. Requirements that rely on them are marked Partial until they are fixed.
+
+### 52. Components and actions that nothing uses
+
+- Type: Tech Debt
+- Priority: P3
+- Effort: S
+- Severity: Low
+- Blocker: None
+- Source: Requirements traceability, GAP-25
+
+`scenario-runner.tsx`, `projection-charts.tsx` and `alerts-panel.tsx` are imported nowhere, and several server actions have no caller. Delete them, or wire them up where a gap needs them (#39 needs the holdings actions).
+
 ## Notes on sequencing
 
 - Do #1 before #7: previews should lose production's data before they get data of their own.
@@ -264,6 +539,10 @@ Each appears twice among the 14 linked institutions, most likely from reconnecti
 - #6 waits on where the production database credential lives. #15 answers that, so decide it early even though building it can wait.
 - #3, #2 and #1 need you, not code. If #3 fails, send the error line under the button.
 - #11–#14 touch the same Plaid flow and can ship as one PR. None of them changes an existing connection.
+- #28 first among the traceability items: it is the one where the app breaks a promise to users today. Fix the privacy page (#45) in the same PR.
+- #29 and #30 are one piece of work once you answer Q9. #31 touches the same engine, so it follows them.
+- #32, #33, #34, #36 and #37 are small security fixes that can ship together; #34 needs a migration, so it rides with #6.
+- Five items wait on a decision you can make in a sentence each: Q3 (#35), Q4 (#42), Q5 (#38), Q6 (#43) and Q9 (#29).
 
 ## Done
 

@@ -12,7 +12,18 @@ Merging to `main` does not deploy: `vercel.json` turns off Git auto-deploys for 
 
 `docs/BACKLOG.md` is the backlog. Change it in the same PR as the work that opens or closes an item; CI fails if it does not parse (`pnpm backlog:check`).
 
-The RetireWise Backlog page is generated from it and published **only after a successful `pnpm deploy:prod`**, never after a merge, a PR or a dry run, so it always describes what is live. When a release succeeds, `deploy:prod` writes `.backlog/backlog.html`; publish that file to the existing RetireWise Backlog artifact (find it by that title in the Artifact list; create it only on the first release) so the URL stays the same. Do not write the backlog out in chat; link the page.
+The RetireWise Backlog page is generated from it and published **only after a successful `pnpm deploy:prod`**, never after a merge, a PR or a dry run, so it always describes what is live. When a release succeeds, `deploy:prod` writes `.pages/backlog.html`; publish that file to the existing RetireWise Backlog artifact (find it by that title in the Artifact list; create it only on the first release) so the URL stays the same. Do not write the backlog out in chat; link the page.
+
+# Requirements and traceability
+
+`docs/REQUIREMENTS.md` states what RetireWise must do and traces each requirement to the features that deliver it, the code that builds them, the checks that prove them, and the backlog items that would close any gap. Claude is responsible for keeping it accurate and complete.
+
+- A PR that changes behaviour updates the affected requirements and features and adds a change-log line, in the same PR. CI fails a PR that changes `src/` without touching the file, unless a commit message says `Traceability: unchanged — <why>`. Use that line only when behaviour truly does not change.
+- `pnpm trace:check`, also in CI, fails when a named file does not exist, a Verified status names no check that CI runs, an Implemented status hides one, a page or API route belongs to no feature, a CI check traces to nothing, or a gap disagrees with the backlog. Fix the document or the code, never the check, to make it pass.
+- A new or changed requirement from the owner goes in as Planned. Propose the features, checks and backlog items it needs.
+- When the owner answers an open question, record the answer under it, change what it decides, open any gap it creates (every gap is also a backlog item), and add a change-log line.
+- A status moves only with evidence. Verified needs a check that runs in CI; Partial names the backlog item or gap that holds it back.
+- The page is published only after a successful `pnpm deploy:prod`, beside the backlog. `deploy:prod` writes `.pages/traceability.html`; publish it to the existing RetireWise Requirements & Feature Traceability artifact (create it only on the first release).
 
 # Replies to the owner
 
