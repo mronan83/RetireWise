@@ -500,7 +500,7 @@ The standard deduction for married couples is $30,000 in `src/lib/tax/table.ts`.
 - #53 is the quickest real risk reduction on the list: two settings, no code.
 - #54 before #35: the leave action cannot delete "what the member added" until that is recorded.
 - Q3, Q4, Q5, Q6 and Q9 were answered on 2 Oct, so no traceability item waits on a decision from you; #53 waits on your go-ahead.
-- #55, #29 and #30 are done (2–3 Oct): one tested engine answers everywhere. Q10 decides what happens to the withdrawal-order comparison.
+- #55, #29 and #30 are done (2–3 Oct): one tested engine answers everywhere. You answered Q10 on 3 Oct: the landing-page claim stays, and the withdrawal-order comparison stays as it is.
 
 ## Done
 

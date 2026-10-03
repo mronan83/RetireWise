@@ -1785,16 +1785,18 @@ Claude's recommendation: yes, in that order.
 2. Build the odds on it, and route the Projections page, scenarios and the assistant through it (#29).
 3. Adopt the tiered Social Security rule (#30).
 
-Q10 stays open: the withdrawal-strategy comparison is rebuilt on the engine, or the landing-page claim goes.
+Q10, answered 3 Oct: the landing-page claim stays, and the withdrawal-order comparison stays outside the engine.
 
 Done on 3 Oct: #29 and #30.
 
 ### Q10. Should the landing page's "optimize withdrawal strategies" claim stand?
 
-- Status: Open
+- Status: Answered 2026-10-03
 - Decides: FR-PLAN-04
 
 Only the assistant compares withdrawal orders. Since 3 Oct it does so with the current tax table, the IRS RMD table and today's dollars, but it is still a separate calculation from the engine, which draws from every account in proportion. Rebuilding it on the engine, or dropping the claim, is this decision.
+
+**Answer** (owner, 3 Oct): "Leave the claim." The landing page keeps it, and the assistant's comparison of four draw orders (`src/lib/utils/withdrawal-strategies.ts`) stays as what backs it, outside the engine. Claude had recommended dropping the word "optimize", since the comparison ranks four fixed orders rather than searching for the best plan; recorded here so the choice is visible if the claim is ever questioned.
 
 ## Change log
 
@@ -1807,6 +1809,7 @@ Only the assistant compares withdrawal orders. Since 3 Oct it does so with the c
 - 2026-10-03 · #42 done: a missing age, retirement age or spending figure is asked for, never assumed, on Projections, Analytics and by the assistant; unknown fund fees are left out and counted. FR-PLAN-09, F-34 and F-37 Verified by the new `scripts/test-missing-inputs.ts`; GAP-15 closed. · Claude
 - 2026-10-03 · Found while doing #42: the assistant's analytics tool still projected balances at retirement with a flat annuity the Analytics page had dropped. Both now call one function on the tested engine; part of #29, checked in `scripts/test-one-engine.ts`. · Claude
 - 2026-10-03 · #45 done: the privacy page names every recipient (adding Yahoo Finance, the NHTSA and Stripe), states the one third-party script, and limits the restricted-role claim to what is true. NFR-PRIV-03 Verified by the new `scripts/test-privacy-page.ts`; F-46 Implemented; GAP-18 closed. · Claude
+- 2026-10-03 · Answer to Q10 recorded: the landing page keeps its "optimize withdrawal strategies" claim, backed by the assistant's comparison of four draw orders. · Claude
 - 2026-10-02 · #28 done: erasure deletes holding snapshots and the export includes them, goal links and join attempts. The account-data check now reads every household-keyed table from the database. FR-DATA-02, FR-DATA-03 and NFR-PRIV-01 Verified; GAP-01 closed. · Claude
 - 2026-10-02 · #50 done: releases retry passing Vercel and GitHub failures and a second run resumes the first run's build. Added NFR-DEL-06, Verified by the new `scripts/test-release.ts`; NFR-DEL-01 and F-48 now Implemented; GAP-23 closed. · Claude
 
