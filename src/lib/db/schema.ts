@@ -941,7 +941,10 @@ export const debts = pgTable("debts", {
 
   createdAt: timestamp("created_at").defaultNow().notNull(),
   updatedAt: timestamp("updated_at").defaultNow().notNull(),
-});
+}, (table) => [
+  // Created by migration 0018; declared here so the schema and the database agree.
+  index("debts_secured_by_idx").on(table.securedByType, table.securedById),
+]);
 
 // Net Worth: Vehicles (cars, trucks, boats, RVs, motorcycles, etc.)
 export const vehicles = pgTable("vehicles", {
@@ -982,9 +985,10 @@ export const netWorthItemHistory = pgTable(
     itemId: text("item_id").notNull(),
     itemName: text("item_name").notNull(),
     recordedDate: date("recorded_date").notNull(),
-    // Primary value: estimatedValue (RE/vehicle), balance (cash), currentBalance (debt)
+    // Primary value: equity for a property or vehicle (its value less the loan
+    // typed onto it), the balance for cash and for a debt.
     value: decimal("value", { precision: 20, scale: 2 }).notNull(),
-    // Secondary value: mortgageBalance (RE), loanBalance (vehicle), null otherwise
+    // Secondary value: market value for a property or vehicle, null otherwise.
     secondaryValue: decimal("secondary_value", { precision: 20, scale: 2 }),
     createdAt: timestamp("created_at").defaultNow().notNull(),
   },

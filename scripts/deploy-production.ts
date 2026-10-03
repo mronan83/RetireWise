@@ -17,11 +17,12 @@
  * after it stopped is safe: it follows a build of the same commit that is
  * already under way instead of starting a second one.
  *
- * Only after all of that does it build the backlog and traceability pages
- * (.pages/backlog.html, .pages/traceability.html) from docs/BACKLOG.md and
- * docs/REQUIREMENTS.md at the released commit, so the published pages always
- * describe what is live. Nothing builds it on a merge, a dry run, or a
- * release that turns out to be a no-op.
+ * Only after all of that does it build the published pages from the
+ * released commit: the backlog, the requirements trace, the technical
+ * architecture and the data model (.pages/backlog.html, traceability.html,
+ * architecture.html, data-model.html), so they always describe what is live.
+ * Nothing builds them on a merge, a dry run, or a release that turns out to be
+ * a no-op.
  *
  *   pnpm deploy:prod             # the tip of origin/main
  *   pnpm deploy:prod <sha>       # a specific commit on main (also a rollback)
@@ -31,7 +32,10 @@
  */
 import { execFileSync } from "child_process";
 import { relative } from "path";
+import { buildArchPage } from "./architecture/build";
 import { buildBacklogPage } from "./backlog/build";
+import { buildModelPage } from "./data-model/build";
+import { withSnapshot } from "./pages/snapshot";
 import { buildTracePage } from "./traceability/build";
 import { fetchWithRetry, findResumable, waitUntil, type ListedDeployment } from "./lib/release";
 
@@ -243,6 +247,26 @@ async function main() {
     if (problems.length) console.warn(`  ⚠ ${problems.length} trace problem(s) at this commit; run pnpm trace:check.`);
   } catch (e) {
     console.warn(`  ⚠ Released, but the traceability page was not built: ${e instanceof Error ? e.message : String(e)}`);
+  }
+  // These two read the code itself, so they are built from a copy of the
+  // released commit rather than whatever happens to be checked out.
+  try {
+    await withSnapshot(sha, async (root) => {
+      for (const [name, artifact, build] of [
+        ["Architecture", "RetireWise Technical Architecture", buildArchPage],
+        ["Data model", "RetireWise Data Model", buildModelPage],
+      ] as const) {
+        try {
+          const { out, problems } = await build({ sha, previousSha: liveSha, root });
+          console.log(`  ${name} page: ${relative(process.cwd(), out)} (publish it to the ${artifact} artifact)`);
+          if (problems.length) console.warn(`  ⚠ ${problems.length} ${name.toLowerCase()} problem(s) at this commit.`);
+        } catch (e) {
+          console.warn(`  ⚠ Released, but the ${name.toLowerCase()} page was not built: ${e instanceof Error ? e.message : String(e)}`);
+        }
+      }
+    });
+  } catch (e) {
+    console.warn(`  ⚠ Released, but the architecture and data model pages were not built: ${e instanceof Error ? e.message : String(e)}`);
   }
 }
 

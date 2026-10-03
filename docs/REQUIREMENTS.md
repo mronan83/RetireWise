@@ -277,10 +277,11 @@ A file older than what is recorded is refused. A newer one is merged: positions 
 ### FR-INV-02. Cost basis can be entered, cleared, or derived from transactions only when that is provable
 
 - Priority: Must
-- Status: Verified
+- Status: Partial
 - Source: `.github/workflows/ci.yml` (cost-basis and investment-transaction checks)
 - Features: F-16
 - Verified by: `scripts/test-cost-basis.ts`, `scripts/test-investment-transactions.ts`
+- Gap: GAP-11
 
 A manually entered basis is never overwritten. Derivation is refused after any sell, transfer or split, or when acquired shares do not match shares held.
 
@@ -322,10 +323,11 @@ An account with no reported dividends shows no figure rather than $0, and the to
 ### FR-NW-01. Net worth is every asset minus every liability, each counted once
 
 - Priority: Must
-- Status: Verified
+- Status: Partial
 - Source: `docs/USER-GUIDE.md:76`
 - Features: F-23
 - Verified by: `scripts/test-net-worth.ts`
+- Gap: GAP-32
 
 A debt secured against an asset replaces the loan typed onto that asset; it is never added to it. Suspected duplicates are flagged, never merged automatically.
 
@@ -425,7 +427,7 @@ Headline figures read the first row aged 73 or over, not the retirement-age row.
 - Source: `docs/annual-tax-update.md`
 - Features: F-36, F-37
 - Verified by: `scripts/test-tax-reference.ts`
-- Gap: GAP-04, GAP-29
+- Gap: GAP-04, GAP-29, GAP-33
 
 A half-loaded year is refused and the newest complete year is used; a table a year or more behind says so. The projection engine does not read the limits table (GAP-04).
 
@@ -530,18 +532,20 @@ The assistant's projection is the Projections page's: it builds its inputs with 
 ### FR-DATA-02. Download everything held about the household as one file, without secrets
 
 - Priority: Must
-- Status: Verified
+- Status: Partial
 - Source: `src/app/legal/privacy/page.tsx:118`
 - Features: F-42
 - Verified by: `scripts/test-account-data.ts`
+- Gap: GAP-31
 
 ### FR-DATA-03. The household owner can erase all of its data
 
 - Priority: Must
-- Status: Verified
+- Status: Partial
 - Source: `docs/data-retention.md`; `src/app/legal/privacy/page.tsx:107`
 - Features: F-42
 - Verified by: `scripts/test-account-data.ts`
+- Gap: GAP-31, GAP-34
 
 Erasure requires typing "DELETE MY DATA" and is refused in demo mode. It removes the household's data, not the sign-in itself.
 
@@ -720,10 +724,11 @@ Household work runs as a database role with no bypass, under row-level security 
 ### NFR-PRIV-01. Erasure removes every row about the household, and export includes every row
 
 - Priority: Must
-- Status: Verified
+- Status: Partial
 - Enforced by: `src/lib/account/delete.ts`, `src/lib/account/export.ts`
 - Source: `docs/data-retention.md`; `src/app/legal/privacy/page.tsx:107`
 - Verified by: `scripts/test-account-data.ts`
+- Gap: GAP-31
 
 ### NFR-PRIV-02. Exports never contain secrets
 
@@ -800,7 +805,7 @@ A check that restates a rule locally, or never triggers the case it names, makes
 - Priority: Must
 - Status: Partial
 - Enforced by: `src/app/api/cron/refresh/route.ts`, `src/app/api/cron/snapshot/route.ts`, `src/app/api/health/freshness/route.ts`, `vercel.json`
-- Source: `docs/DATA-FLOW.md`
+- Source: `vercel.json`
 - Verified by: `scripts/test-ops.ts`
 - Gap: GAP-22
 
@@ -928,9 +933,21 @@ Prices are cached for 15 minutes, when Redis is configured.
 
 - Priority: Should
 - Status: Partial
-- Enforced by: `docs/USER-GUIDE.md`, `src/app/(dashboard)/help/help-content.tsx`, `docs/ARCHITECTURE.md`, `docs/DATA-FLOW.md`, `README.md`
+- Enforced by: `docs/USER-GUIDE.md`, `src/app/(dashboard)/help/help-content.tsx`, `README.md`
 - Source: `docs/USER-GUIDE.md`
 - Gap: GAP-17
+
+The technical architecture and data model are held to a stricter rule, NFR-DOC-02.
+
+### NFR-DOC-02. The technical architecture and data model match the code, and every change is assessed against them
+
+- Priority: Must
+- Status: Verified
+- Enforced by: `scripts/build-architecture.ts`, `scripts/build-data-model.ts`, `AGENTS.md`
+- Source: The owner, 3 Oct 2026
+- Verified by: `scripts/build-architecture.ts`, `scripts/build-data-model.ts`
+
+CI fails when `docs/ARCHITECTURE.md` stops naming a dependency, environment variable, scheduled job, CI job, API group or module the code has, or when `docs/DATA-MODEL.md` leaves a table, column note or enum unexplained, or a household table without row-level security. A pull request that reshapes the system or changes the schema must update the document, or say in a commit message why it does not. Both pages are published only after a successful release, and every reply that reports a change says what was revised in each document, or why nothing was.
 
 ## Features
 
@@ -1130,10 +1147,11 @@ Merges by ticker, but with no date check or review: a position missing from the 
 ### F-23. Net worth summary
 
 - Group: Net worth and debts
-- Status: Verified
+- Status: Partial
 - Requirements: FR-NW-01
 - Code: `src/app/(dashboard)/net-worth/page.tsx`, `src/lib/net-worth/compose.ts`, `src/lib/net-worth/load.ts`, `src/components/dashboard/net-worth-card.tsx`
 - Checks: `scripts/test-net-worth.ts`
+- Gap: GAP-32
 
 ### F-24. Manual assets and debts
 
@@ -1146,10 +1164,11 @@ Merges by ticker, but with no date check or review: a position missing from the 
 ### F-25. Secured debts and duplicate review
 
 - Group: Net worth and debts
-- Status: Verified
+- Status: Partial
 - Requirements: FR-NW-03
 - Code: `src/lib/actions/debt-security.ts`, `src/app/(dashboard)/net-worth/secured-debt-review.tsx`, `src/app/(dashboard)/net-worth/duplicate-cash-review.tsx`
 - Checks: `e2e/debt-security.spec.ts`, `scripts/test-net-worth.ts`
+- Gap: GAP-32
 
 ### F-26. Bank, card and loan linking
 
@@ -1221,10 +1240,11 @@ Merges by ticker, but with no date check or review: a position missing from the 
 ### F-34. Interactive retirement projection and Monte Carlo
 
 - Group: Planning
-- Status: Verified
+- Status: Partial
 - Requirements: FR-PLAN-04, FR-PLAN-05, FR-PLAN-09, FR-PLAN-10
 - Code: `src/app/(dashboard)/projections/page.tsx`, `src/app/(dashboard)/projections/interactive-controls.tsx`, `src/lib/utils/projection-scenarios.ts`, `src/lib/utils/glide-path.ts`, `src/lib/projections/build-accounts.ts`, `src/app/api/settings/projection-controls/route.ts`, `src/lib/projections/monte-carlo.ts`, `src/lib/projections/settings.ts`, `src/lib/projections/household.ts`, `src/lib/planning-inputs.ts`, `src/components/planning/missing-inputs.tsx`
 - Checks: `scripts/test-analytics.ts`, `scripts/test-projection-tax.ts`, `scripts/test-one-engine.ts`, `scripts/test-missing-inputs.ts`
+- Gap: GAP-33
 
 ### F-35. What-if scenarios
 
@@ -1292,7 +1312,7 @@ Merges by ticker, but with no date check or review: a position missing from the 
 - Requirements: FR-DATA-01, FR-DATA-02, FR-DATA-03, NFR-PRIV-01, NFR-PRIV-02
 - Code: `src/app/api/export/report/route.ts`, `src/app/api/export/holdings/route.ts`, `src/app/api/export/transactions/route.ts`, `src/app/api/account/export/route.ts`, `src/app/api/account/delete/route.ts`, `src/lib/account/export.ts`, `src/lib/account/delete.ts`, `src/app/(dashboard)/settings/your-data-section.tsx`
 - Checks: `scripts/test-account-data.ts`
-- Gap: GAP-20
+- Gap: GAP-20, GAP-31, GAP-34
 
 ### F-43. Household sharing
 
@@ -1301,7 +1321,7 @@ Merges by ticker, but with no date check or review: a position missing from the 
 - Requirements: FR-HH-01, NFR-SEC-06, NFR-TEN-03
 - Code: `src/lib/invites.ts`, `src/lib/household.ts`, `src/app/(dashboard)/settings/household-sharing.tsx`, `src/app/api/household/invites/route.ts`, `src/app/api/household/join/route.ts`, `src/app/api/household/create/route.ts`
 - Checks: `scripts/test-invites.ts`
-- Gap: GAP-07, GAP-08, GAP-27
+- Gap: GAP-07, GAP-08, GAP-27, GAP-35
 
 ### F-44. Plans and billing
 
@@ -1356,6 +1376,14 @@ Both pages are marked as drafts that no lawyer has reviewed.
 - Requirements: NFR-DEL-02
 - Code: `scripts/backlog/render.ts`, `scripts/traceability/model.ts`, `scripts/traceability/render.ts`, `docs/BACKLOG.md`, `docs/REQUIREMENTS.md`
 - Checks: `scripts/build-backlog.ts`, `scripts/build-traceability.ts`
+
+### F-50. Technical architecture and data model pages
+
+- Group: Delivery
+- Status: Verified
+- Requirements: NFR-DOC-02
+- Code: `docs/ARCHITECTURE.md`, `docs/DATA-MODEL.md`, `scripts/architecture/model.ts`, `scripts/architecture/render.ts`, `scripts/data-model/model.ts`, `scripts/data-model/render.ts`, `scripts/pages/snapshot.ts`
+- Checks: `scripts/build-architecture.ts`, `scripts/build-data-model.ts`
 
 ## Gaps
 
@@ -1477,13 +1505,13 @@ The expected header becomes `Bearer undefined`, and the comparison is not consta
 
 ### GAP-11. Holdings imports write without checking the file's date or showing a review
 
-- Affects: FR-IMP-01, FR-IMP-04, NFR-INT-04, F-20, F-21
+- Affects: FR-IMP-01, FR-IMP-04, NFR-INT-04, FR-INV-02, F-20, F-21
 - Severity: Medium
-- Evidence: `src/lib/actions/import.ts:56`, `src/lib/actions/import.ts:71`, `src/lib/actions/import-statement.ts:144`
+- Evidence: `src/lib/actions/import.ts:56`, `src/lib/actions/import.ts:71`, `src/lib/actions/import-statement.ts:144`, `src/lib/utils/csv-parser.ts:66`
 - Backlog: #38
 - Status: Open
 
-The file import deletes every holding in the account and inserts the file, so a cost basis entered by hand is lost. Fidelity quick import merges by ticker, but removes any position missing from the file and replaces a hand-entered cost basis. Neither looks at the file's date. The statement balance import already refuses a statement older than what is recorded; Q5 asks for the same rule here, plus a merge.
+The file import deletes every holding in the account and inserts the file, so a cost basis entered by hand is lost. Fidelity quick import merges by ticker, but removes any position missing from the file and replaces a hand-entered cost basis. A file with no cost-basis column records a basis of zero rather than none, which shows the whole value as gain; found while writing the data model on 3 Oct. Neither import looks at the file's date. The statement balance import already refuses a statement older than what is recorded; Q5 asks for the same rule here, plus a merge.
 
 ### GAP-12. Holdings cannot be edited or deleted in the app
 
@@ -1547,14 +1575,14 @@ None of this matters while every plan is free; all of it would on the day billin
 
 - Affects: NFR-DOC-01, FR-ONB-02, F-07
 - Severity: Medium
-- Evidence: `README.md`, `docs/USER-GUIDE.md:6`, `src/app/(dashboard)/help/help-content.tsx:143`, `docs/ARCHITECTURE.md`, `docs/DATA-FLOW.md`
+- Evidence: `README.md`, `docs/USER-GUIDE.md:6`, `src/app/(dashboard)/help/help-content.tsx:143`
 - Backlog: #44
 - Status: Open
 
 - **README:** still the create-next-app template.
 - **User guide:** promises Clerk and Google sign-in, 11 analysis cards and 10 AI tools, and alerts on the dashboard.
 - **Help:** gives the wrong price-update time and a reconnect button that does not exist.
-- **Architecture and data-flow docs:** describe Neon, Clerk and 14 tables.
+- **Architecture and data-flow docs:** replaced on 3 Oct by `docs/ARCHITECTURE.md` and `docs/DATA-MODEL.md`, which CI checks against the code (NFR-DOC-02). The README, user guide and help remain.
 
 ### GAP-18. The privacy page misses who receives data, and overstates two protections
 
@@ -1698,6 +1726,56 @@ The table's standard deduction for married couples is $30,000. The One Big Beaut
 
 Found in the 3 Oct release. The release checked the production address once, seconds after the build was READY and before Vercel had moved it, and reported a failure for a release that had gone live. Worse, it took "live" to be the latest finished production build, so a second run after a real failure would have said "Already live" while production still served the old build. Closed by #57 in the same pull request: live is read from the address itself, and the release waits up to 90 seconds for the address to move.
 
+### GAP-31. Erasure and export miss snapshots of accounts deleted earlier
+
+- Affects: NFR-PRIV-01, FR-DATA-02, FR-DATA-03, F-42
+- Severity: High
+- Evidence: `src/lib/account/delete.ts:54`, `src/lib/account/export.ts:116`, `src/lib/actions/accounts.ts:97`
+- Backlog: #58
+- Status: Open
+
+Found while writing the data model on 3 Oct. Erasure and export find account snapshots through the household's current accounts. Deleting or merging an account leaves its snapshots, still under the household's id, so they survive erasure and are left out of the export. The account-data check seeds no account snapshots, so it could not see this.
+
+### GAP-32. A debt secured against a deleted property or vehicle drops out of net worth
+
+- Affects: FR-NW-01, F-23, F-25
+- Severity: Medium
+- Evidence: `src/lib/net-worth/compose.ts:268`, `src/lib/actions/vehicles.ts:148`, `src/lib/actions/net-worth.ts:115`
+- Backlog: #59
+- Status: Open
+
+Found while writing the data model on 3 Oct. A secured debt is left out of the unsecured total and attached to its asset. When the asset has been deleted it is attached to nothing, so net worth leaves the debt out and reads too high. Deleting an asset does not clear the link.
+
+### GAP-33. Projections ignore the yearly tax table
+
+- Affects: FR-PLAN-08, F-34
+- Severity: Medium
+- Evidence: `src/lib/projections/settings.ts`, `src/lib/utils/projection-scenarios.ts:214`
+- Backlog: #61
+- Status: Open
+
+Found while writing the technical architecture on 3 Oct. The Projections page and the assistant's projection never pass the database's tax table to the engine, which then uses the figures built into the code. Analytics reads the table, so after a yearly update the two disagree.
+
+### GAP-34. Disconnecting or erasing leaves the connection open at Plaid
+
+- Affects: FR-ACC-06, FR-DATA-03, F-42
+- Severity: Medium
+- Evidence: `src/lib/actions/plaid.ts:141`, `src/lib/account/delete.ts:96`
+- Backlog: #62
+- Status: Open
+
+Found while writing the technical architecture on 3 Oct. No code calls Plaid's item removal. RetireWise deletes its copy of the access token, but Plaid keeps the person's consent and the connection, and bills for it.
+
+### GAP-35. Joining a household strands the joiner's own data
+
+- Affects: FR-HH-01, F-43
+- Severity: Low
+- Evidence: `src/lib/invites.ts:256`, `src/lib/auth-helpers.ts:27`
+- Backlog: #63
+- Status: Open
+
+Found while writing the technical architecture on 3 Oct. Redemption checks only for an existing membership. Anything the person entered before joining stays under their own id, which no request reaches once they belong to a household.
+
 ## Open questions
 
 ### Q1. What would show each objective is met?
@@ -1825,12 +1903,13 @@ Only the assistant compares withdrawal orders. Since 3 Oct it does so with the c
 - 2026-10-03 · GAP-30 found in the 3 Oct release and closed by #57: a release now reads what is live from the production address and waits for Vercel to move it, so it can no longer report success for a build production does not serve. NFR-DEL-06 says so; `scripts/test-release.ts` checks the wait. · Claude
 - 2026-10-02 · #28 done: erasure deletes holding snapshots and the export includes them, goal links and join attempts. The account-data check now reads every household-keyed table from the database. FR-DATA-02, FR-DATA-03 and NFR-PRIV-01 Verified; GAP-01 closed. · Claude
 - 2026-10-02 · #50 done: releases retry passing Vercel and GitHub failures and a second run resumes the first run's build. Added NFR-DEL-06, Verified by the new `scripts/test-release.ts`; NFR-DEL-01 and F-48 now Implemented; GAP-23 closed. · Claude
+- 2026-10-03 · The technical architecture and data model rewritten as living documents (NFR-DOC-02, F-50): half generated from the code, checked in CI, published after each release. `docs/DATA-FLOW.md` folded into the architecture's key flows; GAP-17 narrowed to the README, user guide and help. Writing them found GAP-31 to GAP-35 (#58, #59, #61–#63) and #60 and #64. NFR-PRIV-01, FR-DATA-02, FR-DATA-03, FR-NW-01, FR-INV-02, F-23, F-25 and F-34 moved from Verified to Partial on that evidence; GAP-11 now also covers the zero basis a file import invents. · Claude
 
 ## Sources
 
 - `.github/workflows/ci.yml` and every check it runs
 - `src/` at `c1b0b0a`: pages, API routes, server actions, library code and migrations
 - `docs/USER-GUIDE.md`, `src/app/(dashboard)/help/help-content.tsx`, `src/app/legal/privacy/page.tsx`, `src/app/legal/terms/page.tsx`
-- `docs/ARCHITECTURE.md`, `docs/DATA-FLOW.md`, `docs/data-retention.md`, `docs/disaster-recovery.md`, `docs/incident-response.md`, `docs/annual-tax-update.md`
+- `docs/ARCHITECTURE.md`, `docs/DATA-MODEL.md`, `docs/data-retention.md`, `docs/disaster-recovery.md`, `docs/incident-response.md`, `docs/annual-tax-update.md`
 - `docs/BACKLOG.md` and the [delivery review](https://claude.ai/artifact/Eo9g6bEnWFi9TBoSPwohPk)
 - The production database (read-only), 2 Oct 2026: migrations applied, linked-record identifiers

@@ -61,6 +61,26 @@ jobs:
       - if: github.event_name == 'pull_request'
         run: pnpm exec tsx scripts/build-traceability.ts --require-update origin/${{ github.base_ref }}
 
+      # docs/ARCHITECTURE.md, checked against the code: it names every runtime
+      # dependency, environment variable, scheduled job, CI job, API group and
+      # module the code has, every file it names exists, and every risk points
+      # at an open backlog item. The old architecture document described a
+      # database and a sign-in provider the app had left, and nothing noticed.
+      - run: pnpm exec tsx scripts/build-architecture.ts --check
+
+      # docs/DATA-MODEL.md, checked against the schema and migrations: every
+      # table and enum explained, notes only on columns that exist, the schema
+      # and migrations agreeing on indexes, and no household table without
+      # row-level security.
+      - run: pnpm exec tsx scripts/build-data-model.ts --check
+
+      # A pull request that reshapes the system or changes the schema must
+      # update those documents too, or say in a commit message why not.
+      - if: github.event_name == 'pull_request'
+        run: pnpm exec tsx scripts/build-architecture.ts --require-update origin/${{ github.base_ref }}
+      - if: github.event_name == 'pull_request'
+        run: pnpm exec tsx scripts/build-data-model.ts --require-update origin/${{ github.base_ref }}
+
       # Retry policy and key rotation. Pure logic, so it belongs here rather
       # than behind the database job.
       - run: pnpm exec tsx scripts/test-ops.ts
