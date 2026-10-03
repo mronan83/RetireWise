@@ -314,6 +314,30 @@ export type SSBreakEven = {
   breakEvenVs62: number | null; // age at which this beats claiming at 62
 };
 
+/**
+ * The monthly benefit when claiming at `claimAge`, from the benefit at full
+ * retirement age, by the SSA's rule.
+ *
+ * Early claiming is not cut at a flat rate per year. It is 5/9 of one percent
+ * per month for the first 36 months early, then 5/12 of one percent per month
+ * beyond that: 6.667% a year, then 5%. Claiming at 62 against a full
+ * retirement age of 67 is a 30% cut, not 33.35%. Delaying past full
+ * retirement age earns 8% a year, up to 70.
+ *
+ * The one rule for every screen and the assistant; the Projections page once
+ * used a flat 6.67% while Analytics used this.
+ */
+export function ssBenefitAtClaimingAge(benefitAtFRA: number, fra: number, claimAge: number): number {
+  if (claimAge < fra) {
+    const monthsEarly = (fra - claimAge) * 12;
+    const firstTier = Math.min(monthsEarly, 36);
+    const secondTier = Math.max(0, monthsEarly - 36);
+    return benefitAtFRA * (1 - firstTier * (5 / 9 / 100) - secondTier * (5 / 12 / 100));
+  }
+  const yearsDelayed = Math.min(claimAge - fra, Math.max(0, 70 - fra));
+  return benefitAtFRA * (1 + 0.08 * yearsDelayed);
+}
+
 export function calculateSSBreakEven(
   benefitAtFRA: number,
   fra: number
@@ -322,32 +346,7 @@ export function calculateSSBreakEven(
   const results: SSBreakEven[] = [];
 
   for (const claimAge of ages) {
-    let monthly: number;
-    if (claimAge < fra) {
-      /**
-       * The SSA reduction is not a flat rate per year.
-       *
-       * It is 5/9 of one percent per month for the first 36 months early,
-       * then 5/12 of one percent per month beyond that — 6.667%/yr, then
-       * 5%/yr. This applied 6.667% to every early year, so claiming at 62
-       * against a full retirement age of 67 came out as a 33.35% cut when
-       * the real figure is 30%.
-       *
-       * Over-penalising early claiming biases every break-even on this page
-       * toward delaying, which is the recommendation the page exists to
-       * test rather than assume.
-       */
-      const monthsEarly = (fra - claimAge) * 12;
-      const firstTier = Math.min(monthsEarly, 36);
-      const secondTier = Math.max(0, monthsEarly - 36);
-      const reduction = firstTier * (5 / 9 / 100) + secondTier * (5 / 12 / 100);
-      monthly = benefitAtFRA * (1 - reduction);
-    } else if (claimAge > fra) {
-      const yearsDelayed = claimAge - fra;
-      monthly = benefitAtFRA * (1 + 0.08 * yearsDelayed);
-    } else {
-      monthly = benefitAtFRA;
-    }
+    const monthly = ssBenefitAtClaimingAge(benefitAtFRA, fra, claimAge);
 
     const annual = monthly * 12;
     const cumulative: Record<number, number> = {};

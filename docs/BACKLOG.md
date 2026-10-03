@@ -1,6 +1,6 @@
 # RetireWise backlog
 
-Last reviewed: 2026-10-02
+Last reviewed: 2026-10-03
 
 Items from the [delivery review](https://claude.ai/artifact/Eo9g6bEnWFi9TBoSPwohPk) (G1–G7), the Plaid investigation of 29 Sep, and the requirements traceability review of 2 Oct (#28–#56, one per gap). The page is published from this file after each successful `pnpm deploy:prod`, so it always describes what is live.
 
@@ -257,36 +257,6 @@ Plaid enables Chase in production only after the Security Questionnaire in the P
 
 Each appears twice among the 14 linked institutions, most likely from reconnecting (#13). On a paid Plaid plan each connection is billed.
 
-### 29. Four calculations give different answers to "will the money last?"
-
-- Type: Defect
-- Priority: P1
-- Effort: L
-- Severity: High
-- Blocker: None
-- Source: Requirements traceability, GAP-02
-
-Only `runDetailedProjection` is tested. The Projections page's Monte Carlo, the scenario Monte Carlo and the AI assistant each compute their own answer. On a sample household the page shows a 94% chance that savings last, where the tested rules give about 80% (claiming at 62: 89% against 72%). The page inflates spending from retirement rather than today, pays Social Security from the first day of retirement, and adds catch-up contributions on top of what was recorded. The assistant ignores the claiming age, always plans 30 years of retirement and uses 2024 brackets. The full comparison is in GAP-02. The page's simulation also draws its random numbers while rendering, so the server and the browser compute different odds and React reports a hydration error (React error 418) on every load.
-
-You said yes to Q9 on 2 Oct. The work comes in this order:
-1. Fix the tested engine (#55, done 2 Oct).
-2. Build the odds simulation on it.
-3. Route Projections, scenarios and the assistant through it.
-4. Delete the rest, and drop "estimate dividend income" from the assistant's prompt.
-
-The assistant's figures will change. Its withdrawal-strategy comparison has to be rebuilt or dropped (Q10).
-
-### 30. Social Security is cut differently on Projections and Analytics
-
-- Type: Defect
-- Priority: P2
-- Effort: S
-- Severity: Medium
-- Blocker: #29
-- Source: Requirements traceability, GAP-03
-
-Projections cuts the benefit a flat 6.67% per early year (66.65% at 62); Analytics uses the tiered SSA rule (70% at 62). Only the tiered rule is tested. Use it in both, as part of #29.
-
 ### 31. Contribution limits are hard-coded for 2025 and ignore the IRS limits table
 
 - Type: Defect
@@ -507,8 +477,7 @@ An IRS cap check that never reaches the cap, a coverage rule restated in the tes
 - Blocker: None
 - Source: Requirements traceability, GAP-25
 
-`scenario-runner.tsx`, `projection-charts.tsx` and `alerts-panel.tsx` are imported nowhere, and several server actions have no caller. Delete them, or wire them up where a gap needs them (#39 needs the holdings actions).
-
+`alerts-panel.tsx` is imported nowhere, and several server actions have no caller. Delete them, or wire them up where a gap needs them (#39 needs the holdings actions). `scenario-runner.tsx` and `projection-charts.tsx` were deleted with the older engine in #29.
 ### 53. Anyone can create an account, and no email address is confirmed
 
 - Type: Security
@@ -555,9 +524,25 @@ The standard deduction for married couples is $30,000 in `src/lib/tax/table.ts`.
 - #53 is the quickest real risk reduction on the list: two settings, no code.
 - #54 before #35: the leave action cannot delete "what the member added" until that is recorded.
 - Q3, Q4, Q5, Q6 and Q9 were answered on 2 Oct, so no traceability item waits on a decision from you; #53 waits on your go-ahead.
-- #55 is done, so #29 (one engine everywhere) can start; #30 rides with it.
+- #55, #29 and #30 are done (2–3 Oct): one tested engine answers everywhere. Q10 decides what happens to the withdrawal-order comparison.
 
 ## Done
+
+### 29. Four calculations give different answers to "will the money last?"
+
+- Type: Defect
+- Closed: 2026-10-03
+- In: PR 6
+
+The Projections page's odds, its scenarios and the AI assistant now all run the tested engine. The odds are the engine run against 500 simulated markets from a fixed seed, so the server and the browser agree and the hydration error is gone. The page and the assistant build their inputs with the same functions from the same saved controls, so the assistant reports the page's figures. The older engine, with its 2024 brackets, and the two dead components that used it are deleted. The withdrawal-order comparison stays, on today's tax and RMD rules, pending Q10. The assistant's prompt no longer asks it to estimate dividend income. The demo household's odds went from 100% to 76%. Proved by `scripts/test-one-engine.ts`.
+
+### 30. Social Security is cut differently on Projections and Analytics
+
+- Type: Defect
+- Closed: 2026-10-03
+- In: PR 6
+
+Both pages now call one function with the SSA's tiered rule: 5/9 of 1% a month for the first 36 months early, 5/12 of 1% after, 8% a year delayed to 70. Claiming at 62 against 67 now gives 70% on Projections as on Analytics, not 66.65%. Proved by `scripts/test-one-engine.ts`, which compares the two at every claiming age.
 
 ### 50. A release stops on a passing Vercel error before confirming itself
 

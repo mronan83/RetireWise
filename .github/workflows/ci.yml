@@ -85,6 +85,11 @@ jobs:
       # GitHub, and a second run follows the first run's build.
       - run: pnpm exec tsx scripts/test-release.ts
 
+      # One tested engine answers "will the money last?" everywhere: the
+      # odds are that engine run against seeded markets, and the page and the
+      # assistant build its inputs with the same functions.
+      - run: pnpm exec tsx scripts/test-one-engine.ts
+
       # The tax reference table. Every assertion is a way a half-loaded year
       # could return a believable number instead of an error — which is the
       # only reason moving these figures out of source is an improvement.

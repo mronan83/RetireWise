@@ -3,7 +3,7 @@
  */
 
 import { getSalaryAtYear, type SalaryGrowthConfig } from "./salary-growth";
-import { calculateRMD, estimateTaxMFJ } from "./financial-analytics";
+import { calculateRMD, estimateTaxMFJ, ssBenefitAtClaimingAge } from "./financial-analytics";
 import { DEFAULT_TAX_TABLE, type TaxTable } from "../tax/table";
 import { type GlidePathConfig, getGlidePathParams } from "./glide-path";
 import { getIrsLimitForAge } from "../constants";
@@ -74,17 +74,9 @@ export function adjustSSBenefit(
   fra: number,
   claimingAge: number
 ): number {
-  if (claimingAge === fra) return benefitAtFRA;
-
-  if (claimingAge < fra) {
-    // Reduced: ~6.67% per year before FRA
-    const yearsEarly = fra - claimingAge;
-    return benefitAtFRA * (1 - 0.0667 * yearsEarly);
-  }
-
-  // Delayed: ~8% per year after FRA up to 70
-  const yearsDelayed = Math.min(claimingAge - fra, 70 - fra);
-  return benefitAtFRA * (1 + 0.08 * yearsDelayed);
+  // The SSA's tiered rule, shared with Analytics. This used a flat 6.67% per
+  // early year, which overstated the cut at 62 by more than three points.
+  return ssBenefitAtClaimingAge(benefitAtFRA, fra, claimingAge);
 }
 
 /**
@@ -155,6 +147,8 @@ export type DetailedProjection = {
   taxDeferredBalance: number[]; // total tax-deferred balance per year (for RMD context)
 };
 
+export type DetailedProjectionParams = Parameters<typeof runDetailedProjection>[0];
+
 export function runDetailedProjection(params: {
   accounts: {
     name: string; owner: string; type: string; taxTreatment: string;
@@ -194,6 +188,12 @@ export function runDetailedProjection(params: {
   glidePath?: GlidePathConfig; // optional glide path rebalancing
   catchUpEnabled?: boolean; // whether to apply 50+ and 60-63 catch-up IRS limits (default true)
   taxTable?: TaxTable; // federal brackets and standard deduction (default: the built-in year)
+  /**
+   * One market return per projected year, as a fraction (0.07 for 7%),
+   * replacing returnPct and the glide path. This is how the Monte Carlo runs
+   * this engine: same rules, a different market each time.
+   */
+  annualReturns?: number[];
 }): DetailedProjection {
   const {
     accounts,
@@ -212,6 +212,7 @@ export function runDetailedProjection(params: {
     glidePath,
     catchUpEnabled = true,
     taxTable = DEFAULT_TAX_TABLE,
+    annualReturns,
   } = params;
 
   const totalYears = yearsToRetirement + yearsInRetirement;
@@ -303,7 +304,7 @@ export function runDetailedProjection(params: {
 
     // Grow each account — rate varies by age when glide path is active
     const age = startAge + y + 1;
-    const rate = getRateForAge(age);
+    const rate = annualReturns?.[y] ?? getRateForAge(age);
     let yearTotalContributions = 0;
     for (const ap of accountProjs) {
       const prev =

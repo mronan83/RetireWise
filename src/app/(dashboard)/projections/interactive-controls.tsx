@@ -34,8 +34,15 @@ import {
   MARKET_SCENARIOS,
   adjustSSBenefit,
   runDetailedProjection,
-  type MarketScenario,
+  type DetailedProjectionParams,
 } from "@/lib/utils/projection-scenarios";
+import { runProjectionMonteCarlo } from "@/lib/projections/monte-carlo";
+import {
+  controlsFromSaved,
+  projectionInputs,
+  type ProjectionHousehold,
+  type SavedProjectionControls,
+} from "@/lib/projections/settings";
 import { Switch } from "@/components/ui/switch";
 import {
   Select,
@@ -45,7 +52,7 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { cn } from "@/lib/utils";
-import { getIrsLimitForAge, IRS_LIMITS } from "@/lib/constants";
+import { getIrsLimitForAge } from "@/lib/constants";
 import {
   RISK_PROFILES,
   RISK_PROFILE_ORDER,
@@ -53,7 +60,6 @@ import {
   type GlidePathConfig,
   type GlideCurve,
   getGlidePathParams,
-  getDefaultGlidePathConfig,
 } from "@/lib/utils/glide-path";
 
 type AccountInput = {
@@ -95,23 +101,7 @@ type Props = {
   monthlyExpenses: number;
   annualContributions: number;
   riskTolerance?: "conservative" | "moderate" | "aggressive";
-  savedControls?: {
-    ssClaimAgeSelf: number | null;
-    ssClaimAgeSpouse: number | null;
-    monthlySpending: number | null;
-    withdrawalRate: number | null;
-    maxWithdrawalAmount: number | null;
-    retirementYears: number | null;
-    marketScenario: string | null;
-    withdrawalMethod: string | null;
-    glidePathEnabled: boolean | null;
-    glidePathStartProfile: string | null;
-    glidePathEndProfile: string | null;
-    glidePathTransitionStartAge: number | null;
-    glidePathTransitionEndAge: number | null;
-    glidePathCurve: string | null;
-    catchUpEnabled: boolean | null;
-  };
+  savedControls?: SavedProjectionControls;
 };
 
 // Debounced save to avoid hammering the API on every slider tick
@@ -142,55 +132,37 @@ export function InteractiveProjections({
   riskTolerance,
   savedControls,
 }: Props) {
-  // Interactive state — initialize from saved values or defaults
-  const [selfSSAge, setSelfSSAge] = useState(savedControls?.ssClaimAgeSelf || selfFRA || 67);
-  const [spouseSSAge, setSpouseSSAge] = useState(savedControls?.ssClaimAgeSpouse || spouseFRA || 67);
-  const [monthlySpending, setMonthlySpending] = useState(savedControls?.monthlySpending || monthlyExpenses);
-  const [withdrawalRatePct, setWithdrawalRatePct] = useState(savedControls?.withdrawalRate || 4.0);
-  const [withdrawalMethod, setWithdrawalMethod] = useState<"expense" | "rate" | "higher">(
-    (savedControls?.withdrawalMethod as "expense" | "rate" | "higher") || "expense"
+  // Interactive state, initialised from the saved controls by the same rules
+  // the AI assistant reads them with (src/lib/projections/settings.ts).
+  const household: ProjectionHousehold = useMemo(
+    () => ({
+      accounts, currentAge, retirementAge, spouseAge, selfSSAtFRA, spouseSSAtFRA,
+      selfFRA, spouseFRA, monthlyExpenses, annualContributions, riskTolerance,
+    }),
+    [accounts, currentAge, retirementAge, spouseAge, selfSSAtFRA, spouseSSAtFRA, selfFRA, spouseFRA, monthlyExpenses, annualContributions, riskTolerance]
   );
-  const [maxWithdrawalAmount, setMaxWithdrawalAmount] = useState<number | null>(
-    savedControls?.maxWithdrawalAmount ?? null
-  );
-  const [retirementYears, setRetirementYears] = useState(savedControls?.retirementYears || 35);
-  const [selectedScenario, setSelectedScenario] = useState<string>(savedControls?.marketScenario || "moderate");
+  const [initial] = useState(() => controlsFromSaved(household, savedControls));
+  const [selfSSAge, setSelfSSAge] = useState(initial.selfSSAge);
+  const [spouseSSAge, setSpouseSSAge] = useState(initial.spouseSSAge);
+  const [monthlySpending, setMonthlySpending] = useState(initial.monthlySpending);
+  const [withdrawalRatePct, setWithdrawalRatePct] = useState(initial.withdrawalRatePct);
+  const [withdrawalMethod, setWithdrawalMethod] = useState<"expense" | "rate" | "higher">(initial.withdrawalMethod);
+  const [maxWithdrawalAmount, setMaxWithdrawalAmount] = useState<number | null>(initial.maxWithdrawalAmount);
+  const [retirementYears, setRetirementYears] = useState(initial.retirementYears);
+  const [selectedScenario, setSelectedScenario] = useState<string>(initial.scenarioId);
 
-  // Glide path state — defaults based on current age/retirement age/risk tolerance
-  const glideDefaults = getDefaultGlidePathConfig(currentAge, retirementAge, riskTolerance);
-  const [gpEnabled, setGpEnabled] = useState(savedControls?.glidePathEnabled ?? false);
-  const [gpStartProfile, setGpStartProfile] = useState<RiskProfileId>(
-    (savedControls?.glidePathStartProfile as RiskProfileId) || glideDefaults.startProfile
-  );
-  const [gpEndProfile, setGpEndProfile] = useState<RiskProfileId>(
-    (savedControls?.glidePathEndProfile as RiskProfileId) || glideDefaults.endProfile
-  );
-  const [gpTransitionStartAge, setGpTransitionStartAge] = useState(
-    savedControls?.glidePathTransitionStartAge ?? glideDefaults.transitionStartAge
-  );
-  const [gpTransitionEndAge, setGpTransitionEndAge] = useState(
-    savedControls?.glidePathTransitionEndAge ?? glideDefaults.transitionEndAge
-  );
-  const [gpCurve, setGpCurve] = useState<GlideCurve>(
-    (savedControls?.glidePathCurve as GlideCurve) || "linear"
-  );
+  // Glide path state
+  const [gpEnabled, setGpEnabled] = useState(initial.glidePathEnabled);
+  const [gpStartProfile, setGpStartProfile] = useState<RiskProfileId>(initial.glidePathStartProfile);
+  const [gpEndProfile, setGpEndProfile] = useState<RiskProfileId>(initial.glidePathEndProfile);
+  const [gpTransitionStartAge, setGpTransitionStartAge] = useState(initial.glidePathTransitionStartAge);
+  const [gpTransitionEndAge, setGpTransitionEndAge] = useState(initial.glidePathTransitionEndAge);
+  const [gpCurve, setGpCurve] = useState<GlideCurve>(initial.glidePathCurve);
 
   // Catch-up contributions toggle (defaults to on)
-  const [catchUpEnabled, setCatchUpEnabled] = useState(savedControls?.catchUpEnabled ?? true);
+  const [catchUpEnabled, setCatchUpEnabled] = useState(initial.catchUpEnabled);
   const updateCatchUpEnabled = (v: boolean) => { setCatchUpEnabled(v); saveControls({ catchUpEnabled: v }); };
 
-  const glidePathConfig: GlidePathConfig | undefined = gpEnabled
-    ? {
-        enabled: true,
-        startProfile: gpStartProfile,
-        endProfile: gpEndProfile,
-        transitionStartAge: gpTransitionStartAge,
-        transitionEndAge: gpTransitionEndAge,
-        curve: gpCurve,
-      }
-    : undefined;
-
-  const scenario = MARKET_SCENARIOS.find((s) => s.id === selectedScenario) || MARKET_SCENARIOS[1];
 
   // Wrapper functions that update state AND persist
   const updateSelfSSAge = (v: number) => { setSelfSSAge(v); saveControls({ ssClaimAgeSelf: v }); };
@@ -210,59 +182,23 @@ export function InteractiveProjections({
   const updateGpTransitionEndAge = (v: number) => { setGpTransitionEndAge(v); saveControls({ glidePathTransitionEndAge: v }); };
   const updateGpCurve = (v: GlideCurve) => { setGpCurve(v); saveControls({ glidePathCurve: v }); };
 
-  // Calculate adjusted SS benefits
-  const selfSSMonthly = adjustSSBenefit(selfSSAtFRA, selfFRA || 67, selfSSAge);
-  const spouseSSMonthly = adjustSSBenefit(spouseSSAtFRA, spouseFRA || 67, spouseSSAge);
-  const combinedSSAnnual = (selfSSMonthly + spouseSSMonthly) * 12;
-
-  // SS start year (when the first person starts claiming)
-  const selfSSStartYear = Math.max(0, selfSSAge - currentAge);
-  const spouseSSStartYear = spouseAge
-    ? Math.max(0, spouseSSAge - spouseAge)
-    : selfSSStartYear;
-  const ssStartYear = Math.min(selfSSStartYear, spouseSSStartYear);
-
-  const yearsToRetirement = Math.max(0, retirementAge - currentAge);
-
-  // Compute catch-up contribution amounts from account types
-  // Sum catch-up eligible amounts per owner across all their contributing accounts
-  const catchUpSchedule = useMemo(() => {
-    if (!catchUpEnabled) {
-      return {
-        selfAge: currentAge,
-        spouseAge: spouseAge ?? undefined,
-        selfCatchUp50: 0, selfCatchUp60: 0,
-        spouseCatchUp50: 0, spouseCatchUp60: 0,
-      };
-    }
-
-    let selfCatchUp50 = 0, selfCatchUp60 = 0;
-    let spouseCatchUp50 = 0, spouseCatchUp60 = 0;
-
-    for (const a of accounts) {
-      if (!a.isActivelyContributing) continue;
-      const limits = IRS_LIMITS[a.type];
-      if (!limits) continue;
-      const catchUp50 = limits.over50 - limits.under50;
-      const catchUp60 = limits.age60to63 - limits.under50;
-      if (a.owner === "self") {
-        selfCatchUp50 += catchUp50;
-        selfCatchUp60 += catchUp60;
-      } else {
-        spouseCatchUp50 += catchUp50;
-        spouseCatchUp60 += catchUp60;
-      }
-    }
-
-    return {
-      selfAge: currentAge,
-      spouseAge: spouseAge ?? undefined,
-      selfCatchUp50,
-      selfCatchUp60,
-      spouseCatchUp50,
-      spouseCatchUp60,
-    };
-  }, [accounts, currentAge, spouseAge, catchUpEnabled]);
+  // Everything the engine needs, from the household and the controls on
+  // screen. The assistant builds its inputs with the same function.
+  const inputs = useMemo(
+    () =>
+      projectionInputs(household, {
+        selfSSAge, spouseSSAge, monthlySpending, withdrawalRatePct, withdrawalMethod,
+        maxWithdrawalAmount, retirementYears, scenarioId: selectedScenario,
+        glidePathEnabled: gpEnabled, glidePathStartProfile: gpStartProfile, glidePathEndProfile: gpEndProfile,
+        glidePathTransitionStartAge: gpTransitionStartAge, glidePathTransitionEndAge: gpTransitionEndAge,
+        glidePathCurve: gpCurve, catchUpEnabled,
+      }),
+    [household, selfSSAge, spouseSSAge, monthlySpending, withdrawalRatePct, withdrawalMethod, maxWithdrawalAmount, retirementYears, selectedScenario, gpEnabled, gpStartProfile, gpEndProfile, gpTransitionStartAge, gpTransitionEndAge, gpCurve, catchUpEnabled]
+  );
+  const {
+    scenario, glidePath: glidePathConfig, selfSSMonthly, spouseSSMonthly,
+    combinedSSAnnual, yearsToRetirement,
+  } = inputs;
 
   // Spouse retires at a different age — calculate what your age is when they retire
   const spouseRetireAtYourAge = (spouseAge && spouseRetirementAge)
@@ -272,135 +208,14 @@ export function InteractiveProjections({
   const hasStaggeredRetirement = spouseRetireAtYourAge !== null && spouseRetireAtYourAge !== retirementAge;
 
   // Run deterministic projection
-  const projection = useMemo(
-    () =>
-      runDetailedProjection({
-        accounts,
-        totalAnnualContributions: annualContributions,
-        yearsToRetirement,
-        yearsInRetirement: retirementYears,
-        startAge: currentAge,
-        returnPct: scenario.returnPct,
-        inflationPct: scenario.inflationPct,
-        annualExpenses: monthlySpending * 12,
-        withdrawalRatePct,
-        withdrawalMethod,
-        maxAnnualWithdrawal: maxWithdrawalAmount || undefined,
-        annualSSIncome: combinedSSAnnual,
-        ssStartYear,
-        glidePath: glidePathConfig,
-        catchUpEnabled,
-      }),
-    [accounts, annualContributions, yearsToRetirement, retirementYears, currentAge, scenario, monthlySpending, withdrawalRatePct, withdrawalMethod, maxWithdrawalAmount, combinedSSAnnual, ssStartYear, gpEnabled, gpStartProfile, gpEndProfile, gpTransitionStartAge, gpTransitionEndAge, gpCurve, catchUpEnabled]
+  const projection = useMemo(() => runDetailedProjection(inputs.params), [inputs]);
+
+  // The odds, from the same engine run against 500 seeded markets. Seeded, so
+  // the server and the browser draw the same markets and agree on the result.
+  const monteCarloData = useMemo(
+    () => runProjectionMonteCarlo(inputs.params, { volatilityPct: inputs.volatilityPct, simulations: 500 }),
+    [inputs]
   );
-
-  // Run Monte Carlo (client-side, reactive to all controls)
-  const monteCarloData = useMemo(() => {
-    const totalYears = yearsToRetirement + retirementYears;
-    const baseMeanReturn = scenario.returnPct / 100;
-    const baseStdDev = scenario.volatility / 100;
-    const annualExpenses = monthlySpending * 12;
-    const expenseBasedWithdrawal = Math.max(0, annualExpenses - combinedSSAnnual);
-    const startValue = accounts.reduce((s, a) => s + a.value, 0);
-    const numSims = 500;
-
-    // Pre-compute per-year return, volatility, and contributions (with catch-up)
-    const yearMeanReturn: number[] = [];
-    const yearStdDev: number[] = [];
-    const yearContribs: number[] = [];
-    for (let y = 0; y < totalYears; y++) {
-      const age = currentAge + y + 1;
-      if (glidePathConfig) {
-        const params = getGlidePathParams(age, glidePathConfig);
-        yearMeanReturn.push(params.returnPct / 100);
-        yearStdDev.push(params.volatility / 100);
-      } else {
-        yearMeanReturn.push(baseMeanReturn);
-        yearStdDev.push(baseStdDev);
-      }
-      // Compute catch-up bonus for this year
-      let catchUpBonus = 0;
-      if (y < yearsToRetirement) {
-        const selfAge = catchUpSchedule.selfAge + y + 1;
-        if (selfAge >= 60 && selfAge <= 63) catchUpBonus += catchUpSchedule.selfCatchUp60;
-        else if (selfAge >= 50) catchUpBonus += catchUpSchedule.selfCatchUp50;
-        if (catchUpSchedule.spouseAge) {
-          const spAge = catchUpSchedule.spouseAge + y + 1;
-          if (spAge >= 60 && spAge <= 63) catchUpBonus += catchUpSchedule.spouseCatchUp60;
-          else if (spAge >= 50) catchUpBonus += catchUpSchedule.spouseCatchUp50;
-        }
-      }
-      yearContribs.push(y < yearsToRetirement ? annualContributions + catchUpBonus : 0);
-    }
-
-    const allPaths: number[][] = [];
-    let successes = 0;
-
-    for (let sim = 0; sim < numSims; sim++) {
-      const path: number[] = [];
-      let portfolio = startValue;
-      for (let y = 0; y < totalYears; y++) {
-        const u1 = Math.random();
-        const u2 = Math.random();
-        const z = Math.sqrt(-2 * Math.log(u1)) * Math.cos(2 * Math.PI * u2);
-        const yearReturn = yearMeanReturn[y] + yearStdDev[y] * z;
-        const growth = portfolio * yearReturn;
-        if (y < yearsToRetirement) {
-          portfolio += growth + yearContribs[y];
-        } else {
-          const retYear = y - yearsToRetirement;
-          const age = currentAge + y + 1;
-          const rateBased = portfolio * (withdrawalRatePct / 100);
-          const inflatedExpense = expenseBasedWithdrawal * Math.pow(1 + scenario.inflationPct / 100, retYear);
-          // Approximate RMD (assume ~60% of portfolio is tax-deferred)
-          const approxTaxDeferred = portfolio * 0.6;
-          const rmd = age >= 73 ? approxTaxDeferred / Math.max(5, 95 - age + 8.9) : 0;
-
-          let withdrawal: number;
-          if (withdrawalMethod === "expense") withdrawal = inflatedExpense;
-          else if (withdrawalMethod === "rate") withdrawal = rateBased;
-          else withdrawal = Math.max(inflatedExpense, rateBased);
-
-          // RMDs are mandatory
-          if (rmd > withdrawal) withdrawal = rmd;
-          // Apply cap (but not below RMD)
-          if (maxWithdrawalAmount && maxWithdrawalAmount > 0) {
-            withdrawal = Math.max(rmd, Math.min(withdrawal, maxWithdrawalAmount));
-          }
-          portfolio = portfolio + growth - Math.min(withdrawal, portfolio + growth);
-        }
-        portfolio = Math.max(0, portfolio);
-        path.push(Math.round(portfolio));
-      }
-      allPaths.push(path);
-      if (path[path.length - 1] > 0) successes++;
-    }
-
-    const percentiles = { p10: [] as number[], p25: [] as number[], p50: [] as number[], p75: [] as number[], p90: [] as number[] };
-    const ages: number[] = [];
-    for (let y = 0; y < totalYears; y++) {
-      const values = allPaths.map((p) => p[y]).sort((a, b) => a - b);
-      percentiles.p10.push(values[Math.floor(numSims * 0.1)]);
-      percentiles.p25.push(values[Math.floor(numSims * 0.25)]);
-      percentiles.p50.push(values[Math.floor(numSims * 0.5)]);
-      percentiles.p75.push(values[Math.floor(numSims * 0.75)]);
-      percentiles.p90.push(values[Math.floor(numSims * 0.9)]);
-      ages.push(currentAge + y + 1);
-    }
-
-    return {
-      chartData: ages.map((age, i) => ({
-        age,
-        p10: percentiles.p10[i], p25: percentiles.p25[i],
-        p50: percentiles.p50[i], p75: percentiles.p75[i],
-        p90: percentiles.p90[i],
-      })),
-      successRate: Math.round((successes / numSims) * 100),
-      medianAtRetirement: percentiles.p50[yearsToRetirement - 1] || 0,
-      worstCase: percentiles.p10[yearsToRetirement - 1] || 0,
-      bestCase: percentiles.p90[yearsToRetirement - 1] || 0,
-    };
-  }, [accounts, annualContributions, yearsToRetirement, retirementYears, currentAge, scenario, monthlySpending, withdrawalRatePct, withdrawalMethod, maxWithdrawalAmount, combinedSSAnnual, gpEnabled, gpStartProfile, gpEndProfile, gpTransitionStartAge, gpTransitionEndAge, gpCurve, catchUpSchedule]);
 
   // Chart data
   const chartData = projection.ages.map((age, i) => ({
@@ -1391,22 +1206,11 @@ export function InteractiveProjections({
       </Card>
       {/* Scenario Analysis — uses the same engine and settings as above */}
       <ScenarioAnalysis
-        accounts={accounts}
-        annualContributions={annualContributions}
-        yearsToRetirement={yearsToRetirement}
-        retirementYears={retirementYears}
-        currentAge={currentAge}
-        scenario={scenario}
-        monthlySpending={monthlySpending}
-        withdrawalRatePct={withdrawalRatePct}
-        withdrawalMethod={withdrawalMethod}
-        maxWithdrawalAmount={maxWithdrawalAmount}
-        combinedSSAnnual={combinedSSAnnual}
-        ssStartYear={ssStartYear}
+        baseParams={inputs.params}
+        volatilityPct={inputs.volatilityPct}
+        scenarioName={scenario.name}
         basePortfolioAtRetirement={portfolioAtRetirement}
         baseSuccessRate={monteCarloData.successRate}
-        glidePath={glidePathConfig}
-        catchUpSchedule={catchUpSchedule}
       />
     </div>
   );
@@ -1415,29 +1219,12 @@ export function InteractiveProjections({
 // ─── Scenario Analysis ──────────────────────────────────────────
 
 type ScenarioAnalysisProps = {
-  accounts: AccountInput[];
-  annualContributions: number;
-  yearsToRetirement: number;
-  retirementYears: number;
-  currentAge: number;
-  scenario: MarketScenario;
-  monthlySpending: number;
-  withdrawalRatePct: number;
-  withdrawalMethod: "expense" | "rate" | "higher";
-  maxWithdrawalAmount: number | null;
-  combinedSSAnnual: number;
-  ssStartYear: number;
+  /** The page's own engine inputs; each scenario changes one thing. */
+  baseParams: DetailedProjectionParams;
+  volatilityPct: number;
+  scenarioName: string;
   basePortfolioAtRetirement: number;
   baseSuccessRate: number;
-  glidePath?: GlidePathConfig;
-  catchUpSchedule?: {
-    selfAge: number;
-    spouseAge?: number;
-    selfCatchUp50: number;
-    selfCatchUp60: number;
-    spouseCatchUp50: number;
-    spouseCatchUp60: number;
-  };
 };
 
 type ScenarioResult = {
@@ -1504,7 +1291,7 @@ function ScenarioAnalysis(props: ScenarioAnalysisProps) {
   );
 
   function runProjection(overrides: {
-    accountsOverride?: AccountInput[];
+    accountsOverride?: DetailedProjectionParams["accounts"];
     yearsToRetirementOverride?: number;
     retirementYearsOverride?: number;
     returnPctOverride?: number;
@@ -1512,100 +1299,30 @@ function ScenarioAnalysis(props: ScenarioAnalysisProps) {
     ssIncomeOverride?: number;
     contributionsMultiplier?: number;
   }) {
-    const accts = overrides.accountsOverride || props.accounts;
+    const base = props.baseParams;
     const contribMult = overrides.contributionsMultiplier || 1;
-
-    const proj = runDetailedProjection({
-      accounts: accts.map((a) => ({
+    const params: DetailedProjectionParams = {
+      ...base,
+      accounts: (overrides.accountsOverride || base.accounts).map((a) => ({
         ...a,
         annualContribution: Math.round(a.annualContribution * contribMult),
       })),
-      totalAnnualContributions: props.annualContributions * contribMult,
-      yearsToRetirement: overrides.yearsToRetirementOverride ?? props.yearsToRetirement,
-      yearsInRetirement: overrides.retirementYearsOverride ?? props.retirementYears,
-      startAge: props.currentAge,
-      returnPct: overrides.returnPctOverride ?? props.scenario.returnPct,
-      inflationPct: overrides.inflationPctOverride ?? props.scenario.inflationPct,
-      annualExpenses: props.monthlySpending * 12,
-      withdrawalRatePct: props.withdrawalRatePct,
-      withdrawalMethod: props.withdrawalMethod,
-      maxAnnualWithdrawal: props.maxWithdrawalAmount || undefined,
-      annualSSIncome: overrides.ssIncomeOverride ?? props.combinedSSAnnual,
-      ssStartYear: props.ssStartYear,
-      glidePath: props.glidePath,
-    });
+      totalAnnualContributions: base.totalAnnualContributions * contribMult,
+      yearsToRetirement: overrides.yearsToRetirementOverride ?? base.yearsToRetirement,
+      yearsInRetirement: overrides.retirementYearsOverride ?? base.yearsInRetirement,
+      returnPct: overrides.returnPctOverride ?? base.returnPct,
+      inflationPct: overrides.inflationPctOverride ?? base.inflationPct,
+      annualSSIncome: overrides.ssIncomeOverride ?? base.annualSSIncome,
+    };
 
-    // Quick Monte Carlo for success rate
-    const ytr = overrides.yearsToRetirementOverride ?? props.yearsToRetirement;
-    const yir = overrides.retirementYearsOverride ?? props.retirementYears;
-    const totalYears = ytr + yir;
-    const baseMeanReturn = (overrides.returnPctOverride ?? props.scenario.returnPct) / 100;
-    const baseStdDev = props.scenario.volatility / 100;
-    const inflPct = overrides.inflationPctOverride ?? props.scenario.inflationPct;
-    const ssIncome = overrides.ssIncomeOverride ?? props.combinedSSAnnual;
-    const expenses = props.monthlySpending * 12;
-    const annContrib = props.annualContributions * contribMult;
+    const proj = runDetailedProjection(params);
+    // Same engine, same seeded markets as the page's own odds, so a scenario
+    // differs from the base case only by what the scenario changes.
+    const odds = runProjectionMonteCarlo(params, { volatilityPct: props.volatilityPct, simulations: 500 });
 
-    // Pre-compute per-year return/volatility and contributions (with catch-up)
-    const ymr: number[] = [];
-    const ysd: number[] = [];
-    const ycon: number[] = [];
-    for (let y = 0; y < totalYears; y++) {
-      const age = props.currentAge + y + 1;
-      if (props.glidePath) {
-        const gp = getGlidePathParams(age, props.glidePath);
-        ymr.push(gp.returnPct / 100);
-        ysd.push(gp.volatility / 100);
-      } else {
-        ymr.push(baseMeanReturn);
-        ysd.push(baseStdDev);
-      }
-      // Catch-up for scenario Monte Carlo
-      let cb = 0;
-      if (y < ytr && props.catchUpSchedule) {
-        const sa = props.catchUpSchedule.selfAge + y + 1;
-        if (sa >= 60 && sa <= 63) cb += props.catchUpSchedule.selfCatchUp60;
-        else if (sa >= 50) cb += props.catchUpSchedule.selfCatchUp50;
-        if (props.catchUpSchedule.spouseAge) {
-          const spa = props.catchUpSchedule.spouseAge + y + 1;
-          if (spa >= 60 && spa <= 63) cb += props.catchUpSchedule.spouseCatchUp60;
-          else if (spa >= 50) cb += props.catchUpSchedule.spouseCatchUp50;
-        }
-      }
-      ycon.push(y < ytr ? annContrib + cb : 0);
-    }
-
-    let successes = 0;
-    const numSims = 300;
-    for (let sim = 0; sim < numSims; sim++) {
-      let portfolio = overrides.accountsOverride
-        ? overrides.accountsOverride.reduce((s, a) => s + a.value, 0)
-        : accts.reduce((s, a) => s + a.value, 0);
-      for (let y = 0; y < totalYears; y++) {
-        const u1 = Math.random(), u2 = Math.random();
-        const z = Math.sqrt(-2 * Math.log(u1)) * Math.cos(2 * Math.PI * u2);
-        const yearReturn = ymr[y] + ysd[y] * z;
-        const growth = portfolio * yearReturn;
-        if (y < ytr) {
-          portfolio += growth + ycon[y];
-        } else {
-          const retYear = y - ytr;
-          const inflatedExp = expenses * Math.pow(1 + inflPct / 100, retYear);
-          const inflatedSS = (y >= props.ssStartYear ? ssIncome : 0) * Math.pow(1 + inflPct / 100, retYear);
-          const need = Math.max(0, inflatedExp - inflatedSS);
-          const withdrawal = props.maxWithdrawalAmount && props.maxWithdrawalAmount > 0
-            ? Math.min(need, props.maxWithdrawalAmount) : need;
-          portfolio = portfolio + growth - Math.min(withdrawal, portfolio + growth);
-        }
-        portfolio = Math.max(0, portfolio);
-      }
-      if (portfolio > 0) successes++;
-    }
-
-    const ytrIdx = (overrides.yearsToRetirementOverride ?? props.yearsToRetirement) - 1;
     return {
-      portfolioAtRetirement: proj.totalValues[ytrIdx] || 0,
-      successRate: Math.round((successes / numSims) * 100),
+      portfolioAtRetirement: proj.totalValues[params.yearsToRetirement - 1] || 0,
+      successRate: odds.successRate,
     };
   }
 
@@ -1616,13 +1333,13 @@ function ScenarioAnalysis(props: ScenarioAnalysisProps) {
     switch (scenarioId) {
       case "market_crash":
         result = runProjection({
-          accountsOverride: props.accounts.map((a) => ({ ...a, value: a.value * (1 - value / 100) })),
+          accountsOverride: props.baseParams.accounts.map((a) => ({ ...a, value: a.value * (1 - value / 100) })),
         });
         break;
       case "early_retire":
         result = runProjection({
-          yearsToRetirementOverride: Math.max(0, props.yearsToRetirement - value),
-          retirementYearsOverride: props.retirementYears + value,
+          yearsToRetirementOverride: Math.max(0, props.baseParams.yearsToRetirement - value),
+          retirementYearsOverride: props.baseParams.yearsInRetirement + value,
         });
         break;
       case "boost_savings":
@@ -1635,7 +1352,7 @@ function ScenarioAnalysis(props: ScenarioAnalysisProps) {
         result = runProjection({ inflationPctOverride: value });
         break;
       case "reduced_ss":
-        result = runProjection({ ssIncomeOverride: props.combinedSSAnnual * (1 - value / 100) });
+        result = runProjection({ ssIncomeOverride: props.baseParams.annualSSIncome * (1 - value / 100) });
         break;
       default:
         return;
@@ -1659,7 +1376,7 @@ function ScenarioAnalysis(props: ScenarioAnalysisProps) {
           <div>
             <CardTitle>Scenario Analysis</CardTitle>
             <p className="text-sm text-muted-foreground mt-1">
-              Uses your current settings ({props.scenario.name}, {props.withdrawalMethod} withdrawal, {props.retirementYears}yr retirement)
+              Uses your current settings ({props.scenarioName}, {props.baseParams.withdrawalMethod} withdrawal, {props.baseParams.yearsInRetirement}yr retirement)
             </p>
           </div>
           <div className="flex gap-2 shrink-0">
@@ -1677,7 +1394,7 @@ function ScenarioAnalysis(props: ScenarioAnalysisProps) {
       <CardContent>
         {/* Base case from interactive controls */}
         <div className="mb-4 rounded-lg border bg-muted/30 border-primary/30 p-3 flex flex-col gap-1 sm:flex-row sm:items-center sm:justify-between">
-          <span className="font-medium text-sm">Base Case ({props.scenario.name})</span>
+          <span className="font-medium text-sm">Base Case ({props.scenarioName})</span>
           <div className="flex items-center gap-6 text-sm">
             <div className="text-right">
               <p className="text-xs text-muted-foreground">At Retirement</p>
