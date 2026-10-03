@@ -736,10 +736,12 @@ Household work runs as a database role with no bypass, under row-level security 
 ### NFR-PRIV-03. The privacy page names every party that receives data and claims only what the code does
 
 - Priority: Must
-- Status: Partial
+- Status: Verified
 - Enforced by: `src/app/legal/privacy/page.tsx`
 - Source: `src/app/legal/privacy/page.tsx`
-- Gap: GAP-18
+- Verified by: `scripts/test-privacy-page.ts`
+
+The check reads the dependencies and every request the code makes to another host, and fails when a recipient has no name on the page or a new network library is not classified; it also holds the third-party-script claim to the code. The sentence on which requests run under the restricted database role is kept true by hand, and changes when #33 lands.
 
 ### NFR-PRIV-04. Actions that change access or remove data are recorded in an append-only audit log, with who acted
 
@@ -1322,11 +1324,10 @@ Built and switched off. Deferred by Q6.
 ### F-46. Legal pages
 
 - Group: Platform
-- Status: Partial
+- Status: Implemented
 - Requirements: NFR-PRIV-03
 - Code: `src/app/legal/privacy/page.tsx`, `src/app/legal/terms/page.tsx`, `src/app/legal/layout.tsx`
 - Checks: none
-- Gap: GAP-18
 
 Both pages are marked as drafts that no lawyer has reviewed.
 
@@ -1557,11 +1558,13 @@ None of this matters while every plan is free; all of it would on the day billin
 
 - Affects: NFR-PRIV-03, F-46
 - Severity: Medium
-- Evidence: `src/app/legal/privacy/page.tsx:62`, `src/app/legal/privacy/page.tsx:89`, `src/lib/actions/vehicles.ts:172`, `src/lib/utils/price-feed.ts:4`
+- Evidence: `src/app/legal/privacy/page.tsx`, `src/lib/actions/vehicles.ts`, `src/lib/utils/price-feed.ts`
 - Backlog: #45
-- Status: Open
+- Status: Closed 2026-10-03
 
 It does not name Yahoo Finance (tickers) or the NHTSA (vehicle VINs). It says there are no third-party scripts, yet Plaid's Link window loads from Plaid. It also claims restricted access on every request (GAP-06). Its claim of complete erasure became true on 2 Oct (GAP-01 closed).
+
+Closed by #45 on 3 Oct. The page names Yahoo Finance, the NHTSA and Stripe (dormant), says Plaid's is the one third-party script and why, and says which parts do not yet run under the restricted role. A check now fails when the code sends data somewhere the page does not name.
 
 ### GAP-19. The audit log misses actions it declares, and loses who acted
 
@@ -1803,6 +1806,7 @@ Only the assistant compares withdrawal orders. Since 3 Oct it does so with the c
 - 2026-10-03 · #29 and #30 done: one tested engine everywhere. The page's odds, its scenarios and the assistant run `runDetailedProjection`, the odds against 500 seeded markets, with inputs built by shared functions; one Social Security rule. The older engine and two dead components deleted. FR-PLAN-04, FR-PLAN-05 and FR-AI-04 Verified by the new `scripts/test-one-engine.ts`; FR-PLAN-03, FR-PLAN-06, F-33 and F-35 Implemented; GAP-02 and GAP-03 closed; GAP-25 narrowed. · Claude
 - 2026-10-03 · #42 done: a missing age, retirement age or spending figure is asked for, never assumed, on Projections, Analytics and by the assistant; unknown fund fees are left out and counted. FR-PLAN-09, F-34 and F-37 Verified by the new `scripts/test-missing-inputs.ts`; GAP-15 closed. · Claude
 - 2026-10-03 · Found while doing #42: the assistant's analytics tool still projected balances at retirement with a flat annuity the Analytics page had dropped. Both now call one function on the tested engine; part of #29, checked in `scripts/test-one-engine.ts`. · Claude
+- 2026-10-03 · #45 done: the privacy page names every recipient (adding Yahoo Finance, the NHTSA and Stripe), states the one third-party script, and limits the restricted-role claim to what is true. NFR-PRIV-03 Verified by the new `scripts/test-privacy-page.ts`; F-46 Implemented; GAP-18 closed. · Claude
 - 2026-10-02 · #28 done: erasure deletes holding snapshots and the export includes them, goal links and join attempts. The account-data check now reads every household-keyed table from the database. FR-DATA-02, FR-DATA-03 and NFR-PRIV-01 Verified; GAP-01 closed. · Claude
 - 2026-10-02 · #50 done: releases retry passing Vercel and GitHub failures and a second run resumes the first run's build. Added NFR-DEL-06, Verified by the new `scripts/test-release.ts`; NFR-DEL-01 and F-48 now Implemented; GAP-23 closed. · Claude
 

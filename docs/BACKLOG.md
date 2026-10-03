@@ -288,7 +288,7 @@ Three copies of the 2025 limits cap projected contributions, while Settings show
 - Blocker: None
 - Source: Requirements traceability, GAP-06
 
-These routes query as the table owner, so row-level security does not apply and only their own household filters isolate one household from another. The tenant-scope check cannot see them, and the privacy page says every request runs under the restricted role. Wrap them in `withTenant` and extend the check to catch the pattern.
+These routes query as the table owner, so row-level security does not apply and only their own household filters isolate one household from another. The tenant-scope check cannot see them, and the privacy page says every request runs under the restricted role. Wrap them in `withTenant` and extend the check to catch the pattern. Then update the privacy page, which names these routes as the ones not yet under the restricted role.
 
 ### 34. The membership policy lets an account insert itself into any household
 
@@ -388,17 +388,6 @@ Page through results and compute totals in the query.
 - Source: Requirements traceability, GAP-17
 
 The README is the create-next-app template. The user guide promises Clerk and Google sign-in, 11 analysis cards, 10 AI tools and dashboard alerts. Help gives the wrong price-update time and a reconnect button that does not exist. The architecture and data-flow docs describe Neon, Clerk and 14 tables.
-
-### 45. The privacy page leaves out two recipients and overstates two protections
-
-- Type: Gap
-- Priority: P2
-- Effort: S
-- Severity: Medium
-- Blocker: None
-- Source: Requirements traceability, GAP-18
-
-It does not name Yahoo Finance (tickers) or the NHTSA (vehicle VINs), and says there are no third-party scripts though Plaid Link loads from Plaid. Its claim of restricted access on every request is untrue until #33 lands; its claim of complete erasure became true with #28 on 2 Oct. Correct the page now and again when #33 ships.
 
 ### 46. The audit log misses actions it declares and loses who acted
 
@@ -505,7 +494,7 @@ The standard deduction for married couples is $30,000 in `src/lib/tax/table.ts`.
 - #6 waits on where the production database credential lives. #15 answers that, so decide it early even though building it can wait.
 - #3, #2 and #1 need you, not code. If #3 fails, send the error line under the button.
 - #11–#14 touch the same Plaid flow and can ship as one PR. None of them changes an existing connection.
-- #28 is done (2 Oct), so erasure now does what the privacy page promises. #45 corrects the page's remaining claims.
+- #28 and #45 are done (2–3 Oct): erasure does what the privacy page says, and the page names every recipient. When #33 lands, the page's restricted-role sentence changes with it.
 - #29 and #30 are one piece of work once you answer Q9. #31 touches the same engine, so it follows them.
 - #32, #33, #34, #36 and #37 are small security fixes that can ship together; #34 needs a migration, so it rides with #6.
 - #53 is the quickest real risk reduction on the list: two settings, no code.
@@ -514,6 +503,14 @@ The standard deduction for married couples is $30,000 in `src/lib/tax/table.ts`.
 - #55, #29 and #30 are done (2–3 Oct): one tested engine answers everywhere. Q10 decides what happens to the withdrawal-order comparison.
 
 ## Done
+
+### 45. The privacy page leaves out two recipients and overstates two protections
+
+- Type: Gap
+- Closed: 2026-10-03
+- In: PR 6
+
+The privacy page now names Yahoo Finance (ticker symbols, for prices), the NHTSA (a VIN, when you look one up) and Stripe (dormant), says Plaid's is the one third-party script and why, and says which parts do not yet run under the restricted database role (#33). Its erasure claim became true with #28. `scripts/test-privacy-page.ts` fails whenever the code starts sending data somewhere the page does not name.
 
 ### 42. Analytics and projections fill in age, spending and fees silently
 

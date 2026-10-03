@@ -5,7 +5,7 @@ export const metadata: Metadata = {
   description: "What RetireWise stores, why, and how to get it back or erase it.",
 };
 
-const UPDATED = "20 September 2026";
+const UPDATED = "3 October 2026";
 
 export default function PrivacyPage() {
   return (
@@ -83,10 +83,26 @@ export default function PrivacyPage() {
           <strong>Upstash</strong> — caches market prices and rate-limits the AI chat, if
           configured. It holds no financial data.
         </li>
+        <li>
+          <strong>Yahoo Finance</strong> — the ticker symbols you hold are sent, from
+          RetireWise&apos;s server, to fetch their prices. No amounts, names or account
+          details go with them.
+        </li>
+        <li>
+          <strong>The US National Highway Traffic Safety Administration</strong> — a
+          vehicle&apos;s VIN, if you ask RetireWise to look it up, to fill in its make, model
+          and year.
+        </li>
+        <li>
+          <strong>Stripe</strong> — would take payments if paid plans were ever switched on.
+          They are not, and no payment details are collected.
+        </li>
       </ul>
       <p>
         Nothing is sold. Nothing is shared with advertisers. There is no analytics or
-        tracking of any kind, and no third-party scripts in the application.
+        tracking of any kind. The only third-party script is Plaid&apos;s, which loads
+        from Plaid when you choose to connect an institution, so that your bank sign-in
+        goes to Plaid and never through RetireWise.
       </p>
 
       <h2 className="font-heading text-xl font-semibold">Who can see it</h2>
@@ -96,10 +112,13 @@ export default function PrivacyPage() {
         administrative access to the database as a technical necessity of running it.
       </p>
       <p>
-        Between households, separation is enforced by the database itself: each request
-        runs under a restricted role with row-level security policies keyed to your
-        household, so a query that failed to filter correctly would return nothing rather
-        than someone else&apos;s data.
+        Between households, separation is enforced by the database itself for almost every
+        request: it runs under a restricted role with row-level security policies keyed to
+        your household, so a query that failed to filter correctly would return nothing
+        rather than someone else&apos;s data. A few parts do not run that way yet: the AI
+        assistant and its tools, the price refresh, billing status and household sharing.
+        They rely on filtering in the application&apos;s own code until they are moved under
+        the restricted role, which is planned.
       </p>
 
       <h2 className="font-heading text-xl font-semibold">How long it is kept</h2>
@@ -132,7 +151,8 @@ export default function PrivacyPage() {
       <h2 className="font-heading text-xl font-semibold">Security, honestly stated</h2>
       <p>
         Credentials are encrypted at rest, traffic is encrypted in transit, household
-        separation is enforced at the database level, and invitation codes are generated
+        separation is enforced at the database level for almost every request (see above),
+        and invitation codes are generated
         with a cryptographic random source, expire, and can only be used once.
       </p>
       <p>
