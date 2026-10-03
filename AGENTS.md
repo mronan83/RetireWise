@@ -25,6 +25,18 @@ The RetireWise Backlog page is generated from it and published **only after a su
 - A status moves only with evidence. Verified needs a check that runs in CI; Partial names the backlog item or gap that holds it back.
 - The page is published only after a successful `pnpm deploy:prod`, beside the backlog. `deploy:prod` writes `.pages/traceability.html`; publish it to the existing RetireWise Requirements & Feature Traceability artifact (create it only on the first release).
 
+# Architecture and data model
+
+`docs/ARCHITECTURE.md` and `docs/DATA-MODEL.md` describe how RetireWise is built and what its data means. Each is half written, half generated from the code, and Claude keeps both accurate.
+
+- Assess both against every change, fix or enhancement, before the PR is opened. Update what the change affects: a principle, flow, risk or decision record (add an ADR when a choice is made; supersede, never delete); a table's purpose, writers, column notes, rules or derived data.
+- `pnpm arch:check` and `pnpm datamodel:check` run in CI. Fix the document or the code, never the check.
+- A PR that reshapes the system (a dependency, configuration, CI, the proxy, tenancy or auth code, a page, route or module added or removed) must change `docs/ARCHITECTURE.md`, and one that changes the schema or a migration must change `docs/DATA-MODEL.md`, unless a commit message says `Architecture: unchanged — <why>` or `Data model: unchanged — <why>`. Use those lines only when the meaning truly does not change.
+- A defect found while assessing becomes a gap and a backlog item in the same PR, as the traceability rules require.
+- The pages are published only after a successful `pnpm deploy:prod`, beside the backlog and traceability pages. `deploy:prod` writes `.pages/architecture.html` and `.pages/data-model.html`; publish them to the existing RetireWise Technical Architecture and RetireWise Data Model artifacts (create each only on its first release).
+
 # Replies to the owner
+
+Every reply that reports a change, fix or enhancement includes a **Living documents** section, placed just before **Your move**, with one line for each of Requirements, Backlog, Architecture and Data model. Each line says what was revised, or "assessed, unchanged" and why. Say also whether the published pages are current or wait on the next release.
 
 End every reply with a section headed **Your move** that lists only what the owner alone has to do: decisions, approvals ("merge", "deploy", a go-ahead), and actions in accounts Claude cannot reach. For each, say exactly what to do, where, and roughly how long it takes, most urgent first. If there is nothing, write "Nothing needed from you." Keep everything else above that section.

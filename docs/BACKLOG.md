@@ -2,7 +2,7 @@
 
 Last reviewed: 2026-10-03
 
-Items from the [delivery review](https://claude.ai/artifact/Eo9g6bEnWFi9TBoSPwohPk) (G1–G7), the Plaid investigation of 29 Sep, and the requirements traceability review of 2 Oct (#28–#56, one per gap). The page is published from this file after each successful `pnpm deploy:prod`, so it always describes what is live.
+Items from the [delivery review](https://claude.ai/artifact/Eo9g6bEnWFi9TBoSPwohPk) (G1–G7), the Plaid investigation of 29 Sep, the requirements traceability review of 2 Oct (#28–#56, one per gap), and the architecture and data model review of 3 Oct (#58–#64). The page is published from this file after each successful `pnpm deploy:prod`, so it always describes what is live.
 
 <!--
 How to edit
@@ -387,7 +387,7 @@ Page through results and compute totals in the query.
 - Blocker: None
 - Source: Requirements traceability, GAP-17
 
-The README is the create-next-app template. The user guide promises Clerk and Google sign-in, 11 analysis cards, 10 AI tools and dashboard alerts. Help gives the wrong price-update time and a reconnect button that does not exist. The architecture and data-flow docs describe Neon, Clerk and 14 tables.
+The README is the create-next-app template. The user guide promises Clerk and Google sign-in, 11 analysis cards, 10 AI tools and dashboard alerts. Help gives the wrong price-update time and a reconnect button that does not exist. The architecture and data-flow docs were replaced on 3 Oct by `docs/ARCHITECTURE.md` and `docs/DATA-MODEL.md`, which CI now checks against the code; the README, user guide and help remain.
 
 ### 46. The audit log misses actions it declares and loses who acted
 
@@ -453,7 +453,7 @@ An IRS cap check that never reaches the cap, a coverage rule restated in the tes
 - Blocker: None
 - Source: Requirements traceability, GAP-25
 
-`alerts-panel.tsx` is imported nowhere, and several server actions have no caller. Delete them, or wire them up where a gap needs them (#39 needs the holdings actions). `scenario-runner.tsx` and `projection-charts.tsx` were deleted with the older engine in #29.
+`alerts-panel.tsx` is imported nowhere, and several server actions have no caller. Delete them, or wire them up where a gap needs them (#39 needs the holdings actions). `scenario-runner.tsx` and `projection-charts.tsx` were deleted with the older engine in #29. Four dependencies are unused too: `nuqs`, `react-rnd` and `re-resizable` are imported nowhere, and `cmdk` only by `src/components/ui/command.tsx`, which nothing imports. The `ai_analyses` table has no writer.
 ### 53. Anyone can create an account, and no email address is confirmed
 
 - Type: Security
@@ -487,6 +487,83 @@ Your answer to Q3 deletes a leaving member's additions, but rows are keyed by ho
 
 The standard deduction for married couples is $30,000 in `src/lib/tax/table.ts`. The One Big Beautiful Bill Act made it $31,500 for 2025, and added a $6,000 deduction for each person aged 65 or over, for 2025 to 2028. Verify against the IRS, then update the table and model the senior deduction, phase-out included.
 
+### 58. Erasure and export miss snapshots of accounts deleted earlier
+
+- Type: Defect
+- Priority: P1
+- Effort: S
+- Severity: High
+- Blocker: None
+- Source: Data model review, GAP-31
+
+`src/lib/account/delete.ts` and `src/lib/account/export.ts` find `account_snapshots` through the household's current accounts. Deleting or merging an account leaves its snapshots behind with the household's id, so they survive "delete my data" and are missing from the export. Match on the household key as well, and have `scripts/test-account-data.ts` seed a snapshot of a deleted account. While there, the audit-log and join-attempt deletes run on their own connection and commit even if the rest of erasure fails; say so in the code or order them last on purpose.
+
+### 59. A debt secured against a deleted property or vehicle drops out of net worth
+
+- Type: Defect
+- Priority: P2
+- Effort: S
+- Severity: Medium
+- Blocker: None
+- Source: Data model review, GAP-32
+
+`composeNetWorth()` in `src/lib/net-worth/compose.ts` leaves a secured debt out of the unsecured total and attaches it to its asset. When the asset has been deleted the debt is counted nowhere, and deleting an asset never clears `debts.secured_by_*`. Clear the link when the asset is deleted, and count a debt whose asset is missing as unsecured, with a test.
+
+### 60. Generating the next migration would repeat three that already ran
+
+- Type: Tech Debt
+- Priority: P2
+- Effort: S
+- Severity: Medium
+- Blocker: None
+- Source: Data model review
+
+Drizzle keeps a snapshot of the schema after each migration it generates. Migrations 0017 to 0019 were written by hand, so the latest snapshot is 0016's, and `pnpm db:generate` today writes a migration that recreates `goal_links`, three enums and five columns that already exist; applying it would fail. Regenerate the snapshot from the current schema without keeping the SQL, and check the next generated migration contains only the intended change.
+
+### 61. Projections ignore the yearly tax table
+
+- Type: Defect
+- Priority: P2
+- Effort: S
+- Severity: Medium
+- Blocker: None
+- Source: Architecture review, GAP-33
+
+The Projections page and the assistant's projection never pass a tax table to the engine, so it always uses the figures built into `src/lib/tax/table.ts`. Analytics reads `tax_reference`. Updating the table for a new year changes Analytics but not the projection. Load the table once and pass it through `projectionInputs()` in `src/lib/projections/settings.ts`, with a check that both paths use the same year.
+
+### 62. Disconnecting or erasing leaves the connection open at Plaid
+
+- Type: Gap
+- Priority: P2
+- Effort: S
+- Severity: Medium
+- Blocker: None
+- Source: Architecture review, GAP-34
+
+Disconnecting the last account on a connection, and erasing a household, delete the stored access token but never call Plaid's `/item/remove`. Plaid keeps the person's consent and the connection, and bills for it. Call it before the token is deleted, and record the outcome in the audit log.
+
+### 63. Joining a household strands the joiner's own data
+
+- Type: Defect
+- Priority: P3
+- Effort: M
+- Severity: Low
+- Blocker: #54
+- Source: Architecture review, GAP-35
+
+Rows a person entered before redeeming an invite stay under their own id; once they join, every request resolves to the household's id and those rows can no longer be seen or erased by them. Refuse to join while holding data, or offer to move it into the household, which needs #54 to record who added it.
+
+### 64. No security headers or Content-Security-Policy
+
+- Type: Security
+- Priority: P3
+- Effort: S
+- Severity: Low
+- Blocker: None
+- Source: Architecture review
+
+`next.config.ts` and `vercel.json` set no headers, so pages can be framed and nothing limits where scripts load from. Add a Content-Security-Policy that allows Plaid Link, and the standard framing, referrer and content-type headers, checked in the browser tests.
+
 ## Notes on sequencing
 
 - Do #1 before #7: previews should lose production's data before they get data of their own.
@@ -499,6 +576,8 @@ The standard deduction for married couples is $30,000 in `src/lib/tax/table.ts`.
 - #32, #33, #34, #36 and #37 are small security fixes that can ship together; #34 needs a migration, so it rides with #6.
 - #53 is the quickest real risk reduction on the list: two settings, no code.
 - #54 before #35: the leave action cannot delete "what the member added" until that is recorded.
+- #58 is the next privacy fix: small, and it makes the erasure promise true again. #59, #61 and #62 are small and independent.
+- #60 before the next schema change, or that change's migration will fail.
 - Q3, Q4, Q5, Q6 and Q9 were answered on 2 Oct, so no traceability item waits on a decision from you; #53 waits on your go-ahead.
 - #55, #29 and #30 are done (2–3 Oct): one tested engine answers everywhere. You answered Q10 on 3 Oct: the landing-page claim stays, and the withdrawal-order comparison stays as it is.
 

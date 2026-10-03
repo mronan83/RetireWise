@@ -41,7 +41,11 @@
     "backlog:check": "tsx scripts/build-backlog.ts --check",
     "backlog:build": "tsx scripts/build-backlog.ts",
     "trace:check": "tsx scripts/build-traceability.ts --check",
-    "trace:build": "tsx scripts/build-traceability.ts"
+    "trace:build": "tsx scripts/build-traceability.ts",
+    "arch:check": "tsx scripts/build-architecture.ts --check",
+    "arch:build": "tsx scripts/build-architecture.ts",
+    "datamodel:check": "tsx scripts/build-data-model.ts --check",
+    "datamodel:build": "tsx scripts/build-data-model.ts"
   },
   "dependencies": {
     "@ai-sdk/anthropic": "^3.0.71",
