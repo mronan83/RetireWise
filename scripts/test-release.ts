@@ -5,7 +5,7 @@
  * No network: the fetch below replays a scripted sequence of responses and
  * failures, and the sleep records the waits instead of taking them.
  */
-import { fetchWithRetry, findResumable, RETRY_DELAYS_MS, type ListedDeployment } from "./lib/release";
+import { fetchWithRetry, findResumable, waitUntil, RETRY_DELAYS_MS, type ListedDeployment } from "./lib/release";
 
 let failures = 0;
 function check(label: string, ok: boolean, detail = "") {
@@ -92,6 +92,39 @@ async function main() {
     "and of two live builds, the newer",
     findResumable([...list, { uid: "dpl_newer", state: "QUEUED", createdAt: 400, meta: { githubCommitSha: sha } }], sha)?.uid === "dpl_newer"
   );
+
+  // ---- waiting for the address to move -------------------------------------
+  // A fake clock: each sleep advances it, nothing really waits.
+  const clock = () => {
+    let t = 0;
+    const slept: number[] = [];
+    return { now: () => t, sleep: async (ms: number) => { slept.push(ms); t += ms; }, slept };
+  };
+  {
+    const c = clock();
+    let looks = 0;
+    const moved = await waitUntil(async () => ++looks >= 3, { timeoutMs: 90_000, intervalMs: 3_000, ...c });
+    check(
+      "an address that moves on the third look counts as moved",
+      moved && looks === 3 && c.slept.join(",") === "3000,3000",
+      `${moved} after ${looks} looks, slept ${c.slept.join(",")}`
+    );
+  }
+  {
+    const c = clock();
+    let looks = 0;
+    const moved = await waitUntil(async () => { looks++; return false; }, { timeoutMs: 90_000, intervalMs: 3_000, ...c });
+    check(
+      "one that never moves is reported after the time limit, not before",
+      !moved && c.now() === 90_000 && looks === 31, // a look every 3 s from 0 to 90 s inclusive
+      `${moved}, ${c.now()} ms, ${looks} looks`
+    );
+  }
+  {
+    const c = clock();
+    const moved = await waitUntil(async () => true, { timeoutMs: 90_000, intervalMs: 3_000, ...c });
+    check("one that has already moved costs no wait", moved && c.slept.length === 0);
+  }
 
   console.log(failures === 0 ? "\nALL PASS" : `\n${failures} FAILED`);
   return failures;

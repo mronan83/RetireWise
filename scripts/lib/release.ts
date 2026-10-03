@@ -73,3 +73,29 @@ export function findResumable(deployments: ListedDeployment[], sha: string): Lis
     .filter((d) => d.meta?.githubCommitSha === sha && alive.includes(d.state ?? d.readyState ?? ""))
     .sort((a, b) => (b.createdAt ?? 0) - (a.createdAt ?? 0))[0];
 }
+
+/**
+ * Check `condition` until it holds or `timeoutMs` passes; true if it held.
+ *
+ * Vercel moves the production address to a new build a few seconds after the
+ * build reports READY. On 3 Oct 2026 the release checked once, in that gap,
+ * and reported a failure for a release that had in fact gone live.
+ */
+export async function waitUntil(
+  condition: () => Promise<boolean>,
+  opts: {
+    timeoutMs: number;
+    intervalMs: number;
+    sleep?: (ms: number) => Promise<void>;
+    now?: () => number;
+  }
+): Promise<boolean> {
+  const sleep = opts.sleep ?? ((ms: number) => new Promise<void>((r) => setTimeout(r, ms)));
+  const now = opts.now ?? Date.now;
+  const deadline = now() + opts.timeoutMs;
+  for (;;) {
+    if (await condition()) return true;
+    if (now() + opts.intervalMs > deadline) return false;
+    await sleep(opts.intervalMs);
+  }
+}

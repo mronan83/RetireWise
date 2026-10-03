@@ -878,6 +878,8 @@ The stated targets are up to 24 hours of data lost (RPO) and four hours to resto
 
 A dropped connection, a 429 or a 5xx on a read is retried four times over about half a minute; a 4xx is not. Starting a build is never retried, because a request that failed on the way back may still have started one. A second run finds a queued, running or finished build of the same commit and follows it rather than starting another. A failure after a build has started says so, and says that running again is safe.
 
+What counts as live is the build the production address actually serves, not the latest finished one. After a build is READY the release waits up to 90 seconds for Vercel to move the address before reporting a failure, so a second run after a real failure cannot report "Already live".
+
 ### NFR-UX-01. Every page fits a phone screen without sideways scrolling or inputs small enough to zoom
 
 - Priority: Must
@@ -1686,6 +1688,16 @@ Closed by #55: the engine now taxes withdrawals, takes RMDs only from tax-deferr
 
 The table's standard deduction for married couples is $30,000. The One Big Beautiful Bill Act raised it to $31,500 for 2025, and added a deduction of $6,000 for each person aged 65 or over, for 2025 to 2028, phasing out at higher incomes. Neither is modelled; for retirees the senior deduction is the larger change. These figures come from Claude's knowledge, not the repository, so check them against the IRS before changing the table. Married filing jointly is the only filing status the app models.
 
+### GAP-30. A release could report success for a build production never served
+
+- Affects: NFR-DEL-06, F-48
+- Severity: Medium
+- Evidence: `scripts/deploy-production.ts`
+- Backlog: #57
+- Status: Closed 2026-10-03
+
+Found in the 3 Oct release. The release checked the production address once, seconds after the build was READY and before Vercel had moved it, and reported a failure for a release that had gone live. Worse, it took "live" to be the latest finished production build, so a second run after a real failure would have said "Already live" while production still served the old build. Closed by #57 in the same pull request: live is read from the address itself, and the release waits up to 90 seconds for the address to move.
+
 ## Open questions
 
 ### Q1. What would show each objective is met?
@@ -1810,6 +1822,7 @@ Only the assistant compares withdrawal orders. Since 3 Oct it does so with the c
 - 2026-10-03 · Found while doing #42: the assistant's analytics tool still projected balances at retirement with a flat annuity the Analytics page had dropped. Both now call one function on the tested engine; part of #29, checked in `scripts/test-one-engine.ts`. · Claude
 - 2026-10-03 · #45 done: the privacy page names every recipient (adding Yahoo Finance, the NHTSA and Stripe), states the one third-party script, and limits the restricted-role claim to what is true. NFR-PRIV-03 Verified by the new `scripts/test-privacy-page.ts`; F-46 Implemented; GAP-18 closed. · Claude
 - 2026-10-03 · Answer to Q10 recorded: the landing page keeps its "optimize withdrawal strategies" claim, backed by the assistant's comparison of four draw orders. · Claude
+- 2026-10-03 · GAP-30 found in the 3 Oct release and closed by #57: a release now reads what is live from the production address and waits for Vercel to move it, so it can no longer report success for a build production does not serve. NFR-DEL-06 says so; `scripts/test-release.ts` checks the wait. · Claude
 - 2026-10-02 · #28 done: erasure deletes holding snapshots and the export includes them, goal links and join attempts. The account-data check now reads every household-keyed table from the database. FR-DATA-02, FR-DATA-03 and NFR-PRIV-01 Verified; GAP-01 closed. · Claude
 - 2026-10-02 · #50 done: releases retry passing Vercel and GitHub failures and a second run resumes the first run's build. Added NFR-DEL-06, Verified by the new `scripts/test-release.ts`; NFR-DEL-01 and F-48 now Implemented; GAP-23 closed. · Claude
 

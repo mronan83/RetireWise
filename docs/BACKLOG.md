@@ -504,6 +504,14 @@ The standard deduction for married couples is $30,000 in `src/lib/tax/table.ts`.
 
 ## Done
 
+### 57. A release could report success for a build production never served
+
+- Type: Ops
+- Closed: 2026-10-03
+- In: PR 7
+
+Found in the 3 Oct release, and opened and closed in the same pull request. The release checked the production address once, seconds before Vercel moved it, and reported a failure for a release that had gone live. Worse, it took "live" to be the latest finished build, so a second run after a real failure would have said "Already live" while production still served the old build. Live is now read from the production address itself, and the release waits up to 90 seconds for the address to move. Proved by `scripts/test-release.ts`; a dry run afterwards read the live build from the address.
+
 ### 45. The privacy page leaves out two recipients and overstates two protections
 
 - Type: Gap

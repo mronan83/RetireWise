@@ -33,7 +33,7 @@ import { execFileSync } from "child_process";
 import { relative } from "path";
 import { buildBacklogPage } from "./backlog/build";
 import { buildTracePage } from "./traceability/build";
-import { fetchWithRetry, findResumable, type ListedDeployment } from "./lib/release";
+import { fetchWithRetry, findResumable, waitUntil, type ListedDeployment } from "./lib/release";
 
 const REPO = "mronan83/RetireWise";
 const TEAM_ID = "team_A8TfHlLyTc2toipq0WsMVKvK";
@@ -41,6 +41,7 @@ const PROJECT_ID = "prj_LVgkoqvGmYZCbsX10P9nmgBTdure";
 const PRODUCTION_HOST = "retirewise-iota.vercel.app";
 
 const BUILD_TIMEOUT_MS = 15 * 60 * 1000;
+const ALIAS_TIMEOUT_MS = 90 * 1000;
 const POLL_MS = 5000;
 
 const args = process.argv.slice(2);
@@ -140,13 +141,13 @@ async function main() {
   }
   console.log(`CI       ${[...new Set(runs.map((r) => r.name))].join(", ")} — all passed`);
 
-  // 3. What is live now, which is also what a rollback returns to.
-  const { deployments } = await vercel<{ deployments: Deployment[] }>(
-    `/v6/deployments?projectId=${PROJECT_ID}&target=production&state=READY&limit=1`
-  );
-  const live = deployments[0];
-  const liveSha = live?.meta?.githubCommitSha;
-  console.log(`Live     ${liveSha?.slice(0, 7) ?? "unknown"}  (${live?.uid ?? "none"})`);
+  // 3. What is live now, which is also what a rollback returns to: the build
+  //    the production address actually serves. This used to read the latest
+  //    finished production build instead, so a build the address never moved
+  //    to counted as live, and a second run would report "Already live".
+  const live = await vercel<Deployment>(`/v13/deployments/${PRODUCTION_HOST}`);
+  const liveSha = live.meta?.githubCommitSha;
+  console.log(`Live     ${liveSha?.slice(0, 7) ?? "unknown"}  (${live.id})`);
   if (liveSha === sha) {
     console.log("\n✓ Already live. Nothing to do.");
     return;
@@ -195,9 +196,21 @@ async function main() {
   }
 
   // 5. The production domain serves the new build, and the app is healthy.
-  const aliased = await vercel<Deployment>(`/v13/deployments/${PRODUCTION_HOST}`);
-  if (aliased.id !== created.id) {
-    fail(`Built, but ${PRODUCTION_HOST} still points at ${aliased.id}. Promote ${created.id} in Vercel.`);
+  //    Vercel moves the address a few seconds after the build is READY, so
+  //    keep looking for a while before calling it a failure.
+  let servedBy = live.id;
+  const moved = await waitUntil(
+    async () => {
+      servedBy = (await vercel<Deployment>(`/v13/deployments/${PRODUCTION_HOST}`)).id;
+      return servedBy === created.id;
+    },
+    { timeoutMs: ALIAS_TIMEOUT_MS, intervalMs: 3000 }
+  );
+  if (!moved) {
+    fail(
+      `Built, but ${PRODUCTION_HOST} still serves ${servedBy} after ${ALIAS_TIMEOUT_MS / 1000} seconds. ` +
+        `Promote ${created.id} in Vercel, then run pnpm deploy:prod again to confirm it.`
+    );
   }
   const health = await fetchWithRetry(
     `https://${PRODUCTION_HOST}/api/health`,
