@@ -1,6 +1,6 @@
 # RetireWise requirements and feature traceability
 
-Last reviewed: 2026-10-02
+Last reviewed: 2026-10-03
 
 RetireWise has no written requirements specification. Everything here was derived on 2 Oct 2026 from the code at `c1b0b0a`, the user guide, the in-app help, the legal pages, the CI suite and the backlog, and then checked line by line. Treat every requirement as a proposal for you to confirm, reword or reject; the open questions at the end are the decisions only you can make.
 
@@ -373,39 +373,40 @@ A debt secured against an asset replaces the loan typed onto that asset; it is n
 ### FR-PLAN-03. Record Social Security for both partners, with claiming age and cost-of-living adjustment
 
 - Priority: Must
-- Status: Partial
+- Status: Implemented
 - Source: `src/app/(dashboard)/settings/social-security-form.tsx`
 - Features: F-33
-- Gap: GAP-03
 
 ### FR-PLAN-04. A year-by-year retirement projection with controls that persist
 
 - Priority: Must
-- Status: Partial
+- Status: Verified
 - Source: `docs/USER-GUIDE.md:66`
 - Features: F-34
-- Verified by: `scripts/test-analytics.ts`
-- Gap: GAP-02
+- Verified by: `scripts/test-analytics.ts`, `scripts/test-projection-tax.ts`, `scripts/test-one-engine.ts`
 
 Spending is inflated from today, not from the year retirement starts. Withdrawals never fall below the required minimum distribution. Every screen and the assistant use this one tested engine, including for the odds that savings last (Q9).
 
 ### FR-PLAN-05. Monte Carlo simulation gives the odds that savings last
 
 - Priority: Should
-- Status: Partial
+- Status: Verified
 - Source: `docs/USER-GUIDE.md:70` ("500 simulated scenarios")
 - Features: F-34
-- Gap: GAP-02
+- Verified by: `scripts/test-one-engine.ts`
+
+The odds are the tested engine itself run against 500 simulated markets: one return a year around the market scenario's (or the glide path's) expected return and volatility. The markets come from a fixed seed, so the server and the browser, and the page and the assistant, give the same figure for the same inputs.
 
 ### FR-PLAN-06. Compare what-if scenarios side by side
 
 - Priority: Should
-- Status: Partial
+- Status: Implemented
 - Source: `docs/USER-GUIDE.md:73`
 - Features: F-35
-- Gap: GAP-02
 
 The six scenarios are a 30% crash, retiring five years earlier, saving 50% more, a 4% return, 5% inflation, and Social Security cut by 25%.
+
+Each scenario is the page's own engine inputs with one thing changed, run against the same 500 markets, so it differs from the base case only by what it changes. The overrides themselves have no check of their own.
 
 ### FR-PLAN-07. Required minimum distributions are computed correctly, starting at 73
 
@@ -509,11 +510,12 @@ The provider is Claude, Gemini or OpenAI. A missing key is an error, never a sil
 ### FR-AI-04. The assistant never states a figure the data does not support, and agrees with the screens
 
 - Priority: Must
-- Status: Partial
+- Status: Verified
 - Source: `.github/workflows/ci.yml` (dividend check)
 - Features: F-39, F-19
-- Verified by: `scripts/test-dividends.ts`
-- Gap: GAP-02
+- Verified by: `scripts/test-dividends.ts`, `scripts/test-one-engine.ts`
+
+The assistant's projection is the Projections page's: it builds its inputs with the same functions from the controls last saved there (`src/lib/projections/household.ts`, `src/lib/projections/settings.ts`), and runs the same engine against the same markets. Its withdrawal-order comparison is the one calculation outside the engine (Q10).
 
 ### FR-DATA-01. Export a portfolio report and holdings and transactions as CSV
 
@@ -859,7 +861,7 @@ The stated targets are up to 24 hours of data lost (RPO) and four hours to resto
 - Priority: Could
 - Status: Partial
 - Enforced by: `eslint.config.mjs`
-- Source: `src/app/(dashboard)/projections/scenario-runner.tsx` (imported nowhere)
+- Source: `src/components/dashboard/alerts-panel.tsx` (imported nowhere)
 - Gap: GAP-25
 
 ### NFR-DEL-06. A release survives a passing failure of Vercel or GitHub, and running it again follows the build already under way
@@ -1205,29 +1207,27 @@ Merges by ticker, but with no date check or review: a position missing from the 
 ### F-33. Social Security estimates
 
 - Group: Planning
-- Status: Partial
+- Status: Implemented
 - Requirements: FR-PLAN-03
 - Code: `src/app/(dashboard)/settings/social-security-form.tsx`, `src/lib/actions/social-security.ts`
 - Checks: none
-- Gap: GAP-03
 
 ### F-34. Interactive retirement projection and Monte Carlo
 
 - Group: Planning
 - Status: Partial
 - Requirements: FR-PLAN-04, FR-PLAN-05, FR-PLAN-09, FR-PLAN-10
-- Code: `src/app/(dashboard)/projections/page.tsx`, `src/app/(dashboard)/projections/interactive-controls.tsx`, `src/lib/utils/projection-scenarios.ts`, `src/lib/utils/glide-path.ts`, `src/lib/projections/build-accounts.ts`, `src/app/api/settings/projection-controls/route.ts`
-- Checks: `scripts/test-analytics.ts`, `scripts/test-projection-tax.ts`
-- Gap: GAP-02, GAP-15
+- Code: `src/app/(dashboard)/projections/page.tsx`, `src/app/(dashboard)/projections/interactive-controls.tsx`, `src/lib/utils/projection-scenarios.ts`, `src/lib/utils/glide-path.ts`, `src/lib/projections/build-accounts.ts`, `src/app/api/settings/projection-controls/route.ts`, `src/lib/projections/monte-carlo.ts`, `src/lib/projections/settings.ts`, `src/lib/projections/household.ts`
+- Checks: `scripts/test-analytics.ts`, `scripts/test-projection-tax.ts`, `scripts/test-one-engine.ts`
+- Gap: GAP-15
 
 ### F-35. What-if scenarios
 
 - Group: Planning
-- Status: Partial
+- Status: Implemented
 - Requirements: FR-PLAN-06
-- Code: `src/app/(dashboard)/projections/interactive-controls.tsx`, `src/lib/utils/projection-scenarios.ts`
+- Code: `src/app/(dashboard)/projections/interactive-controls.tsx`, `src/lib/utils/projection-scenarios.ts`, `src/lib/projections/monte-carlo.ts`
 - Checks: none
-- Gap: GAP-02
 
 ### F-36. IRS limits and tax reference
 
@@ -1260,9 +1260,9 @@ Merges by ticker, but with no date check or review: a position missing from the 
 - Group: AI assistant
 - Status: Partial
 - Requirements: FR-AI-01, FR-AI-04, NFR-TEN-02
-- Code: `src/app/api/chat/route.ts`, `src/components/ai/chat-panel.tsx`, `src/lib/ai/user-model.ts`, `src/lib/tools/get-net-worth.ts`, `src/lib/tools/run-financial-analytics.ts`, `src/lib/tools/run-retirement-projection.ts`
+- Code: `src/app/api/chat/route.ts`, `src/components/ai/chat-panel.tsx`, `src/lib/ai/user-model.ts`, `src/lib/tools/get-net-worth.ts`, `src/lib/tools/run-financial-analytics.ts`, `src/lib/tools/run-retirement-projection.ts`, `src/lib/utils/withdrawal-strategies.ts`
 - Checks: `scripts/test-dividends.ts`, `scripts/test-net-worth.ts`
-- Gap: GAP-02, GAP-06
+- Gap: GAP-06
 
 ### F-40. AI provider and model settings
 
@@ -1372,9 +1372,9 @@ Closed by #28: erasure deletes holding snapshots and names goal links, the expor
 
 - Affects: FR-PLAN-04, FR-PLAN-05, FR-PLAN-06, FR-AI-04, F-34, F-35, F-39
 - Severity: High
-- Evidence: `src/lib/utils/projections.ts:480`, `src/lib/tools/run-retirement-projection.ts:80`, `src/lib/tools/run-retirement-projection.ts:139`, `src/app/(dashboard)/projections/interactive-controls.tsx:303`, `src/app/(dashboard)/projections/interactive-controls.tsx:333`, `src/app/(dashboard)/projections/interactive-controls.tsx:354`, `src/app/(dashboard)/projections/interactive-controls.tsx:1581`, `src/app/api/chat/route.ts:27`
+- Evidence: `src/app/(dashboard)/projections/interactive-controls.tsx`, `src/lib/tools/run-retirement-projection.ts`, `src/app/api/chat/route.ts` (the older engine, lib/utils/projections.ts, was deleted when this closed)
 - Backlog: #29
-- Status: Open
+- Status: Closed 2026-10-03
 
 Only `runDetailedProjection` is tested, and it drives the Projections chart and verdict and the Analytics balances. The Projections page's Monte Carlo, the scenario Monte Carlo and the AI assistant's tool each compute their own answer.
 
@@ -1388,15 +1388,19 @@ A comparison on 2 Oct ran each one on the same household. The household: age 55,
 
 The assistant's system prompt still asks it to "estimate dividend income".
 
+Closed by #29 on 3 Oct. The Projections page's odds, its scenarios and the AI assistant now all run `runDetailedProjection`. The odds come from 500 seeded markets; the page and the assistant build their inputs with shared functions from the same saved controls. The older engine and the two dead components that used it are deleted. The demo household's odds went from 100% to 76% under the tested rules, and the hydration error is gone.
+
 ### GAP-03. The Social Security claiming rule differs between pages
 
 - Affects: FR-PLAN-03, F-33
 - Severity: Medium
-- Evidence: `src/lib/utils/projection-scenarios.ts:81`, `src/lib/utils/financial-analytics.ts:340`
+- Evidence: `src/lib/utils/projection-scenarios.ts`, `src/lib/utils/financial-analytics.ts`
 - Backlog: #30
-- Status: Open
+- Status: Closed 2026-10-03
 
 Projections cut the benefit a flat 6.67% per early year, so claiming at 62 gives 66.65%. Analytics uses the tiered SSA rule, which gives 70%. Only the tiered rule is tested.
+
+Closed by #30 on 3 Oct: both pages call one function, `ssBenefitAtClaimingAge`, with the tiered rule, and a check proves they agree at every claiming age.
 
 ### GAP-04. Contribution limits are hard-coded, out of date, and disagree with each other
 
@@ -1629,11 +1633,11 @@ Several checks read source text rather than running code. The requirements that 
 
 - Affects: NFR-DEL-05
 - Severity: Low
-- Evidence: `src/app/(dashboard)/projections/scenario-runner.tsx`, `src/app/(dashboard)/projections/projection-charts.tsx`, `src/components/dashboard/alerts-panel.tsx`
+- Evidence: `src/components/dashboard/alerts-panel.tsx`
 - Backlog: #52
 - Status: Open
 
-The scenario runner, projection charts and alerts panel are imported nowhere, and several actions have no caller.
+The alerts panel is imported nowhere, and several actions have no caller. The scenario runner and projection charts went with the older engine on 3 Oct (#29).
 
 ### GAP-26. Anyone can create an account, and no email address is ever confirmed
 
@@ -1778,12 +1782,14 @@ Claude's recommendation: yes, in that order.
 
 Q10 stays open: the withdrawal-strategy comparison is rebuilt on the engine, or the landing-page claim goes.
 
+Done on 3 Oct: #29 and #30.
+
 ### Q10. Should the landing page's "optimize withdrawal strategies" claim stand?
 
 - Status: Open
 - Decides: FR-PLAN-04
 
-Only the assistant's older engine compares withdrawal strategies, using 2024 brackets.
+Only the assistant compares withdrawal orders. Since 3 Oct it does so with the current tax table, the IRS RMD table and today's dollars, but it is still a separate calculation from the engine, which draws from every account in proportion. Rebuilding it on the engine, or dropping the claim, is this decision.
 
 ## Change log
 
@@ -1792,6 +1798,7 @@ Only the assistant's older engine compares withdrawal strategies, using 2024 bra
 - 2026-10-02 · Q9 context from a side-by-side run of every projection path on one household. GAP-02 restated with the results. Added FR-PLAN-10 (projections pay tax and draw from the right accounts). New gaps GAP-28 (the tested engine charges no tax and draws RMDs from Roth) as #55, and GAP-29 (2025 tax figures predate the July 2025 law) as #56. · Claude
 - 2026-10-02 · Answers to Q4 and Q9 recorded. FR-PLAN-09 now says how a missing input is asked for, and FR-PLAN-04 makes the tested engine the only one. #42 and #29 unblocked; #29 now follows #55. · Claude
 - 2026-10-02 · #55 done: the tested engine pays federal tax on withdrawals and taxable Social Security, takes RMDs only from tax-deferred accounts, and reinvests the unspent part. FR-PLAN-10 Verified by the new `scripts/test-projection-tax.ts`; GAP-28 closed. · Claude
+- 2026-10-03 · #29 and #30 done: one tested engine everywhere. The page's odds, its scenarios and the assistant run `runDetailedProjection`, the odds against 500 seeded markets, with inputs built by shared functions; one Social Security rule. The older engine and two dead components deleted. FR-PLAN-04, FR-PLAN-05 and FR-AI-04 Verified by the new `scripts/test-one-engine.ts`; FR-PLAN-03, FR-PLAN-06, F-33 and F-35 Implemented; GAP-02 and GAP-03 closed; GAP-25 narrowed. · Claude
 - 2026-10-02 · #28 done: erasure deletes holding snapshots and the export includes them, goal links and join attempts. The account-data check now reads every household-keyed table from the database. FR-DATA-02, FR-DATA-03 and NFR-PRIV-01 Verified; GAP-01 closed. · Claude
 - 2026-10-02 · #50 done: releases retry passing Vercel and GitHub failures and a second run resumes the first run's build. Added NFR-DEL-06, Verified by the new `scripts/test-release.ts`; NFR-DEL-01 and F-48 now Implemented; GAP-23 closed. · Claude
 
