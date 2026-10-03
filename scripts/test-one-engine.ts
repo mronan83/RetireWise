@@ -15,6 +15,8 @@ import { calculateSSBreakEven, calculateRMD, estimateTaxMFJ } from "../src/lib/u
 import { runProjectionMonteCarlo, seededRandom } from "../src/lib/projections/monte-carlo";
 import { controlsFromSaved, projectionInputs, type ProjectionHousehold } from "../src/lib/projections/settings";
 import { calculateWithdrawalStrategies } from "../src/lib/utils/withdrawal-strategies";
+import { balancesAtRetirement } from "../src/lib/projections/at-retirement";
+import { buildProjectionAccounts } from "../src/lib/projections/build-accounts";
 
 let failures = 0;
 function check(label: string, ok: boolean, detail = "") {
@@ -142,6 +144,55 @@ function main() {
   check(
     "each strategy funds the spending after its tax",
     [conventional, rothFirst].every((s) => s.yearByYear[0].totalWithdrawal - s.yearByYear[0].taxEstimate >= 60_000 - 1)
+  );
+
+  // ---- the assistant's analytics read the Analytics page's balances ----------
+  // The analytics tool used a flat annuity: no IRS cap, no employer money.
+  const acctRow = {
+    id: "a1", clerkId: "u", name: "401k", owner: "self", accountType: "401k", taxTreatment: "tax_deferred",
+    institution: "Test", isActive: true, isActivelyContributing: true, plaidItemId: null, plaidAccountId: null,
+    dataSource: "manual", createdAt: new Date(), updatedAt: new Date(),
+  };
+  const contribRow = {
+    id: "c1", clerkId: "u", owner: "self", accountId: "a1", label: "401k", accountType: "401k",
+    contributionMethod: "percent_of_salary", contributionPercent: "20", contributionAmount: null,
+    frequency: "monthly", isActive: true, hasEmployerMatch: true, employerMatchRate: "1", employerMatchMaxPercent: "5",
+    hasEmployerNonElective: false, employerNonElectivePercent: null, employerNonElectiveAmount: null,
+    hasAnnualEscalation: false, annualEscalationAmount: null, maxAnnualContribution: null,
+    vestingSchedule: "immediate", vestingYears: null, serviceStartDate: null, endedOn: null,
+    pausedFrom: null, resumesOn: null, notes: null, createdAt: new Date(), updatedAt: new Date(),
+  };
+  const pref = {
+    currentAge: 45, retirementAge: 65, annualSalary: "250000", spouseAnnualSalary: null,
+    salaryGrowth: null, spouseSalaryGrowth: null, spouseCurrentAge: null, spouseRetirementAge: null,
+    riskTolerance: "moderate",
+  };
+  const rowsIn = {
+    accounts: [acctRow as never],
+    holdings: [{ accountId: "a1", currentValue: "400000", accountType: "401k" }],
+    contribs: [contribRow as never],
+  };
+  const shared = balancesAtRetirement({ pref: pref as never, ...rowsIn });
+  const direct = runDetailedProjection({
+    accounts: buildProjectionAccounts({
+      ...rowsIn, selfSalary: 250_000, spouseSalary: 0, selfSalaryGrowth: null, spouseSalaryGrowth: null,
+      selfCurrentAge: 45, spouseCurrentAge: null, selfYearsToRetirement: 20, spouseYearsToRetirement: 20,
+    }),
+    totalAnnualContributions: shared.totalAnnualContributions, yearsToRetirement: 20, yearsInRetirement: 1,
+    startAge: 45, returnPct: shared.returnPct, inflationPct: 3, annualExpenses: 0, annualSSIncome: 0, ssStartYear: 999,
+  });
+  check(
+    "the analytics balances at retirement are the engine's",
+    near(shared.atRetirement.total, direct.totalValues[19], 0),
+    `${shared.atRetirement.total} vs ${direct.totalValues[19]}`
+  );
+  const rate = shared.returnPct / 100;
+  const growth = Math.pow(1 + rate, 20);
+  const annuity = 400_000 * growth + shared.totalAnnualContributions * ((growth - 1) / rate);
+  check(
+    "not the flat annuity the assistant used, which ignored the IRS cap on a 20% deferral",
+    shared.atRetirement.total < annuity * 0.97,
+    `${Math.round(shared.atRetirement.total)} vs annuity ${Math.round(annuity)}`
   );
 
   console.log(failures === 0 ? "\nALL PASS" : `\n${failures} FAILED`);
