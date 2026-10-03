@@ -517,27 +517,40 @@ const KNOWN_EXPENSE_RATIOS: Record<string, number> = {
 };
 
 export type FeeImpact = {
+  /** Known fees first, largest first; a fund whose fee is unknown has nulls. */
   holdings: {
     ticker: string;
     value: number;
-    expenseRatio: number;
-    annualFee: number;
-    tenYearDrag: number;
-    thirtyYearDrag: number;
+    expenseRatio: number | null;
+    annualFee: number | null;
+    tenYearDrag: number | null;
+    thirtyYearDrag: number | null;
   }[];
   totalAnnualFees: number;
+  /** Weighted over the holdings whose fee is known. */
   weightedExpenseRatio: number;
   tenYearCumulativeDrag: number;
   thirtyYearCumulativeDrag: number;
+  /** Holdings whose fee is not known, left out of every figure above. */
+  unknownFeeCount: number;
+  unknownFeeValue: number;
 };
 
 export function calculateFeeImpact(
   holdings: { ticker: string; currentValue: number }[],
   returnPct: number
 ): FeeImpact {
-  const totalValue = holdings.reduce((s, h) => s + h.currentValue, 0);
-  const holdingFees = holdings.map((h) => {
-    const er = KNOWN_EXPENSE_RATIOS[h.ticker] ?? 0.15; // default 0.15% if unknown
+  /**
+   * A fund whose fee is not known is left out and counted, never given one.
+   * It used to be assumed to cost 0.15%, which put a guessed number into
+   * every total on the page without saying so (Q4 in docs/REQUIREMENTS.md).
+   */
+  const known = holdings.filter((h) => KNOWN_EXPENSE_RATIOS[h.ticker] !== undefined);
+  const unknown = holdings.filter((h) => KNOWN_EXPENSE_RATIOS[h.ticker] === undefined);
+  const knownValue = known.reduce((s, h) => s + h.currentValue, 0);
+
+  const holdingFees = known.map((h) => {
+    const er = KNOWN_EXPENSE_RATIOS[h.ticker];
     const annualFee = h.currentValue * (er / 100);
     // Fee drag: difference between growth with and without fees
     const withFees10 = h.currentValue * Math.pow(1 + (returnPct - er) / 100, 10);
@@ -555,17 +568,28 @@ export function calculateFeeImpact(
     };
   });
 
-  const totalAnnualFees = holdingFees.reduce((s, h) => s + h.annualFee, 0);
-  const weightedER = totalValue > 0
-    ? holdingFees.reduce((s, h) => s + h.expenseRatio * (h.value / totalValue), 0)
+  const weightedER = knownValue > 0
+    ? holdingFees.reduce((s, h) => s + h.expenseRatio * (h.value / knownValue), 0)
     : 0;
 
   return {
-    holdings: holdingFees.sort((a, b) => b.annualFee - a.annualFee),
-    totalAnnualFees: Math.round(totalAnnualFees),
+    holdings: [
+      ...holdingFees.sort((a, b) => b.annualFee - a.annualFee),
+      ...unknown.map((h) => ({
+        ticker: h.ticker,
+        value: h.currentValue,
+        expenseRatio: null,
+        annualFee: null,
+        tenYearDrag: null,
+        thirtyYearDrag: null,
+      })),
+    ],
+    totalAnnualFees: Math.round(holdingFees.reduce((s, h) => s + h.annualFee, 0)),
     weightedExpenseRatio: Math.round(weightedER * 1000) / 1000,
     tenYearCumulativeDrag: holdingFees.reduce((s, h) => s + h.tenYearDrag, 0),
     thirtyYearCumulativeDrag: holdingFees.reduce((s, h) => s + h.thirtyYearDrag, 0),
+    unknownFeeCount: unknown.length,
+    unknownFeeValue: Math.round(unknown.reduce((s, h) => s + h.currentValue, 0)),
   };
 }
 

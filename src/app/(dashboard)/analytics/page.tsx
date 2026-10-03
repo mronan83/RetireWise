@@ -1,4 +1,6 @@
 import { getAuthContext, withHousehold } from "@/lib/auth-helpers";
+import { MissingInputs } from "@/components/planning/missing-inputs";
+import { givenMonthlySpending, missingPlanningInputs } from "@/lib/planning-inputs";
 import { eq, and } from "drizzle-orm";
 import { getDb } from "@/lib/db";
 import { userPreferences, socialSecurityBenefits, contributions } from "@/lib/db/schema";
@@ -84,8 +86,30 @@ async function AnalyticsPageContent() {
    * scenario, so the two still differ when that is changed. That is a
    * difference the reader chose rather than one the code invented.
    */
-  const currentAge = pref?.currentAge || 42;
-  const retirementAge = pref?.retirementAge || 65;
+  // Every analysis here depends on age and when work stops. Without them the
+  // page asks, rather than show a plan for an assumed 42-year-old retiring at
+  // 65 (Q4 in docs/REQUIREMENTS.md).
+  const missing = missingPlanningInputs(pref, ["currentAge", "retirementAge"]);
+  if (missing.length > 0 || !pref?.currentAge || !pref?.retirementAge) {
+    return (
+      <div className="space-y-6">
+        <div>
+          <h1 className="text-2xl font-bold tracking-tight">Financial Analytics</h1>
+          <p className="text-muted-foreground">
+            Advanced retirement planning tools driven by your real accounts, contributions, and settings
+          </p>
+        </div>
+        <MissingInputs
+          fields={missing}
+          intro="Every analysis on this page depends on your age and when you plan to retire."
+        />
+      </div>
+    );
+  }
+  const currentAge = pref.currentAge;
+  const retirementAge = pref.retirementAge;
+  // Spending as the household gave it, or null: only the sequence analysis needs it.
+  const monthlyExpenses = givenMonthlySpending(pref);
   const selfYearsToRetirement = Math.max(0, retirementAge - currentAge);
   const spouseYearsToRetirement =
     pref?.spouseCurrentAge && pref?.spouseRetirementAge
@@ -120,7 +144,9 @@ async function AnalyticsPageContent() {
     startAge: currentAge,
     returnPct,
     inflationPct: 3,
-    annualExpenses: (pref?.monthlyExpensesRetirement ? Number(pref.monthlyExpensesRetirement) : 7000) * 12,
+    // Only the balances before retirement are read below, which spending
+    // does not touch; zero rather than a guess when it is not given.
+    annualExpenses: (monthlyExpenses ?? 0) * 12,
     annualSSIncome: 0,
     ssStartYear: 999,
   });
@@ -174,7 +200,7 @@ async function AnalyticsPageContent() {
           currentValue: Number(h.currentValue),
         }))}
         riskTolerance={pref?.riskTolerance || "moderate"}
-        monthlyExpenses={pref?.monthlyExpensesRetirement ? Number(pref.monthlyExpensesRetirement) : 7000}
+        monthlyExpenses={monthlyExpenses}
         taxTable={taxTable}
       />
     </div>

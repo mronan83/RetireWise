@@ -1,6 +1,7 @@
 "use client";
 
 import { useCallback, useMemo } from "react";
+import { MissingInputs } from "@/components/planning/missing-inputs";
 import {
   BarChart, Bar, AreaChart, Area, LineChart, Line,
   XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer,
@@ -46,7 +47,8 @@ type Props = {
   taxableBalance: number;
   holdings: { ticker: string; currentValue: number }[];
   riskTolerance: string;
-  monthlyExpenses: number;
+  /** Null until the household gives it: the sequence analysis asks instead of assuming. */
+  monthlyExpenses: number | null;
   /**
    * Balances at retirement, from the projection engine on the server.
    *
@@ -170,7 +172,7 @@ export function AnalyticsDashboard(props: Props) {
   })), returnPct), [holdings, returnPct]);
 
   // 7. Sequence of Returns
-  const sequenceRisk = useMemo(() => calculateSequenceRisk({
+  const sequenceRisk = useMemo(() => monthlyExpenses === null ? [] : calculateSequenceRisk({
     portfolioAtRetirement: projectedPortfolio,
     // Floored at zero: Social Security larger than spending is a surplus,
     // not a negative withdrawal that quietly grows the portfolio.
@@ -534,6 +536,13 @@ export function AnalyticsDashboard(props: Props) {
                 <p className="text-[10px] text-muted-foreground">lost to fees vs 0% cost</p>
               </div>
             </div>
+            {feeImpact.unknownFeeCount > 0 && (
+              <p className="text-sm text-muted-foreground">
+                {feeImpact.unknownFeeCount === 1 ? "1 holding" : `${feeImpact.unknownFeeCount} holdings`} worth{" "}
+                {formatCurrency(feeImpact.unknownFeeValue)} {feeImpact.unknownFeeCount === 1 ? "is" : "are"} left out of these
+                figures because {feeImpact.unknownFeeCount === 1 ? "its fund fee isn't" : "their fund fees aren't"} known.
+              </p>
+            )}
             <div className="rounded-lg border overflow-x-auto max-h-[300px] overflow-y-auto">
               <Table>
                 <TableHeader className="sticky top-0 bg-card">
@@ -550,9 +559,9 @@ export function AnalyticsDashboard(props: Props) {
                     <TableRow key={h.ticker}>
                       <TableCell className="font-mono font-medium">{h.ticker}</TableCell>
                       <TableCell className="text-right font-mono text-sm">{formatCurrency(h.value)}</TableCell>
-                      <TableCell className="text-right font-mono text-sm">{h.expenseRatio}%</TableCell>
-                      <TableCell className="text-right font-mono text-sm text-red-500">{formatCurrency(h.annualFee)}</TableCell>
-                      <TableCell className="text-right font-mono text-sm text-red-500">{formatCurrency(h.thirtyYearDrag)}</TableCell>
+                      <TableCell className="text-right font-mono text-sm">{h.expenseRatio === null ? "Unknown" : `${h.expenseRatio}%`}</TableCell>
+                      <TableCell className="text-right font-mono text-sm text-red-500">{h.annualFee === null ? "—" : formatCurrency(h.annualFee)}</TableCell>
+                      <TableCell className="text-right font-mono text-sm text-red-500">{h.thirtyYearDrag === null ? "—" : formatCurrency(h.thirtyYearDrag)}</TableCell>
                     </TableRow>
                   ))}
                 </TableBody>
@@ -575,6 +584,13 @@ export function AnalyticsDashboard(props: Props) {
             </p>
           </CardHeader>
           <CardContent className="space-y-4">
+            {monthlyExpenses === null ? (
+              <MissingInputs
+                fields={["monthlyExpensesRetirement"]}
+                intro="This analysis tests your spending against bad markets, so it needs to know what you plan to spend."
+              />
+            ) : (
+            <>
             <div className="h-[280px] -ml-2">
               <ResponsiveContainer width="100%" height="100%">
                 <LineChart margin={{ top: 5, right: 5, left: 0, bottom: 0 }}>
@@ -612,6 +628,8 @@ export function AnalyticsDashboard(props: Props) {
             <p className="text-xs text-muted-foreground">
               Tip: Having 2-3 years of expenses in cash/bonds protects against sequence risk. You won&apos;t need to sell stocks in a downturn.
             </p>
+            </>
+            )}
           </CardContent>
         </Card>
       </TabsContent>

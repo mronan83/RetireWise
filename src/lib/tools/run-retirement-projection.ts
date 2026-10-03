@@ -12,6 +12,7 @@ import { runProjectionMonteCarlo } from "../projections/monte-carlo";
 import { projectionSetupFromRows } from "../projections/household";
 import { controlsFromSaved, projectionInputs } from "../projections/settings";
 import { RISK_PROFILES } from "../utils/glide-path";
+import { describeMissing } from "../planning-inputs";
 
 /**
  * The assistant's retirement projection: the same engine, the same inputs
@@ -65,9 +66,8 @@ export const runRetirementProjectionTool = tool({
       selfSS: selfSS[0],
       spouseSS: spouseSS[0],
     });
-    if (!setup) {
-      return { error: "Please set your age and retirement age in Settings first." };
-    }
+    // The page asks for missing inputs rather than assume them, and so does the assistant.
+    if (!setup.ok) return { error: describeMissing(setup.missing), missingInputs: setup.missing };
 
     const controls = controlsFromSaved(setup.household, setup.saved);
     const inputs = projectionInputs(setup.household, controls);

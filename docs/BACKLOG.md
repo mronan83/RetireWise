@@ -378,19 +378,6 @@ Page through results and compute totals in the query.
 
 `src/lib/onboarding.ts` tests `is_active IS NOT NULL`, which is always true. It should test `is_active = true`.
 
-### 42. Analytics and projections fill in age, spending and fees silently
-
-- Type: Defect
-- Priority: P2
-- Effort: M
-- Severity: Medium
-- Blocker: None
-- Source: Requirements traceability, GAP-15
-
-Missing inputs become age 42, $7,000 a month and a 0.15% fund fee, with nothing on screen to say so. It is the guessed-figure pattern the dividend work removed. You decided (Q4):
-- **Age and spending:** where either is missing, show a short note in place of the figure saying what is needed and why, with a link to the field in Settings → Preferences. Never an error or an empty chart.
-- **Unknown fund fees:** leave them out of the fee total and say how many funds were left out.
-
 ### 44. The README, user guide, help and architecture docs contradict the app
 
 - Type: Tech Debt
@@ -527,6 +514,14 @@ The standard deduction for married couples is $30,000 in `src/lib/tax/table.ts`.
 - #55, #29 and #30 are done (2–3 Oct): one tested engine answers everywhere. Q10 decides what happens to the withdrawal-order comparison.
 
 ## Done
+
+### 42. Analytics and projections fill in age, spending and fees silently
+
+- Type: Defect
+- Closed: 2026-10-03
+- In: PR 6
+
+A missing age, retirement age or retirement-spending figure is now asked for in place of whatever needs it, with a link straight to the field in Settings: on Projections, on Analytics (where only the Sequence tab needs spending) and by the assistant, whose analytics tool had the same defaults of 42, 65 and $7,000. Spending saved on the Projections page counts as given. A fund whose fee is unknown is left out of the fee figures and counted on screen, instead of being priced at 0.15%. Proved by `scripts/test-missing-inputs.ts`.
 
 ### 29. Four calculations give different answers to "will the money last?"
 

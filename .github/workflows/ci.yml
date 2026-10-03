@@ -90,6 +90,10 @@ jobs:
       # assistant build its inputs with the same functions.
       - run: pnpm exec tsx scripts/test-one-engine.ts
 
+      # A missing age, retirement age or spending figure is asked for, never
+      # assumed, and an unknown fund fee is left out rather than guessed.
+      - run: pnpm exec tsx scripts/test-missing-inputs.ts
+
       # The tax reference table. Every assertion is a way a half-loaded year
       # could return a believable number instead of an error — which is the
       # only reason moving these figures out of source is an improvement.

@@ -3,14 +3,15 @@ import { totalAnnual } from "@/lib/utils/contributions";
 import type { SalaryGrowthConfig } from "@/lib/utils/salary-growth";
 import { buildProjectionAccounts } from "./build-accounts";
 import type { ProjectionHousehold, SavedProjectionControls } from "./settings";
+import { givenMonthlySpending, missingPlanningInputs, type PlanningField } from "@/lib/planning-inputs";
 
 /**
  * A household's projection setup, from its database rows.
  *
  * The Projections page and the AI assistant's projection tool read the same
- * rows and must turn them into the same inputs, so both call this. Returns
- * null until the household has given its age and retirement age, which no
- * projection can be run without.
+ * rows and must turn them into the same inputs, so both call this. Until the
+ * household has given its age, retirement age and retirement spending, it
+ * returns which of them are missing instead: no projection is run on a guess.
  */
 
 type Preferences = typeof userPreferences.$inferSelect;
@@ -23,9 +24,12 @@ export function projectionSetupFromRows(rows: {
   contribs: Parameters<typeof buildProjectionAccounts>[0]["contribs"];
   selfSS: SocialSecurity | undefined;
   spouseSS: SocialSecurity | undefined;
-}): { household: ProjectionHousehold; saved: SavedProjectionControls } | null {
+}):
+  | { ok: true; household: ProjectionHousehold; saved: SavedProjectionControls }
+  | { ok: false; missing: PlanningField[] } {
   const { pref } = rows;
-  if (!pref?.currentAge || !pref?.retirementAge) return null;
+  const missing = missingPlanningInputs(pref, ["currentAge", "retirementAge", "monthlyExpensesRetirement"]);
+  if (missing.length > 0 || !pref?.currentAge || !pref?.retirementAge) return { ok: false, missing };
 
   // Per-owner retirement years (0-indexed from now)
   const selfYearsToRetirement = Math.max(0, pref.retirementAge - pref.currentAge);
@@ -39,6 +43,7 @@ export function projectionSetupFromRows(rows: {
   const salaryFor = (c: { owner: string }) => (c.owner === "self" ? selfSalary : spouseSalary);
 
   return {
+    ok: true,
     household: {
       accounts: buildProjectionAccounts({
         accounts: rows.accounts,
@@ -60,7 +65,7 @@ export function projectionSetupFromRows(rows: {
       spouseSSAtFRA: rows.spouseSS?.benefitAtFRA ? Number(rows.spouseSS.benefitAtFRA) : 0,
       selfFRA: rows.selfSS?.fullRetirementAge || 67,
       spouseFRA: rows.spouseSS?.fullRetirementAge || 67,
-      monthlyExpenses: pref.monthlyExpensesRetirement ? Number(pref.monthlyExpensesRetirement) : 7000,
+      monthlyExpenses: givenMonthlySpending(pref)!,
       annualContributions: totalAnnual(rows.contribs, salaryFor).total,
       riskTolerance: pref.riskTolerance ?? undefined,
     },
