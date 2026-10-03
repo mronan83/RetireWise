@@ -517,7 +517,7 @@ The provider is Claude, Gemini or OpenAI. A missing key is an error, never a sil
 - Features: F-39, F-19
 - Verified by: `scripts/test-dividends.ts`, `scripts/test-one-engine.ts`
 
-The assistant's projection is the Projections page's: it builds its inputs with the same functions from the controls last saved there (`src/lib/projections/household.ts`, `src/lib/projections/settings.ts`), and runs the same engine against the same markets. Its withdrawal-order comparison is the one calculation outside the engine (Q10).
+The assistant's projection is the Projections page's: it builds its inputs with the same functions from the controls last saved there (`src/lib/projections/household.ts`, `src/lib/projections/settings.ts`), and runs the same engine against the same markets. Its analytics tool starts from the Analytics page's own balances at retirement (`src/lib/projections/at-retirement.ts`). Its withdrawal-order comparison is the one calculation outside the engine (Q10).
 
 ### FR-DATA-01. Export a portfolio report and holdings and transactions as CSV
 
@@ -1244,7 +1244,7 @@ Merges by ticker, but with no date check or review: a position missing from the 
 - Group: Analysis
 - Status: Verified
 - Requirements: FR-PLAN-07, FR-PLAN-08, FR-PLAN-09, FR-ANA-01
-- Code: `src/app/(dashboard)/analytics/page.tsx`, `src/app/(dashboard)/analytics/analytics-dashboard.tsx`, `src/lib/utils/financial-analytics.ts`, `src/lib/tax/load.ts`
+- Code: `src/app/(dashboard)/analytics/page.tsx`, `src/app/(dashboard)/analytics/analytics-dashboard.tsx`, `src/lib/projections/at-retirement.ts`, `src/lib/utils/financial-analytics.ts`, `src/lib/tax/load.ts`
 - Checks: `scripts/test-analytics.ts`, `scripts/test-rmd.ts`, `scripts/test-tax-reference.ts`, `scripts/test-missing-inputs.ts`
 
 ### F-38. AI analysis cards
@@ -1802,6 +1802,7 @@ Only the assistant compares withdrawal orders. Since 3 Oct it does so with the c
 - 2026-10-02 · #55 done: the tested engine pays federal tax on withdrawals and taxable Social Security, takes RMDs only from tax-deferred accounts, and reinvests the unspent part. FR-PLAN-10 Verified by the new `scripts/test-projection-tax.ts`; GAP-28 closed. · Claude
 - 2026-10-03 · #29 and #30 done: one tested engine everywhere. The page's odds, its scenarios and the assistant run `runDetailedProjection`, the odds against 500 seeded markets, with inputs built by shared functions; one Social Security rule. The older engine and two dead components deleted. FR-PLAN-04, FR-PLAN-05 and FR-AI-04 Verified by the new `scripts/test-one-engine.ts`; FR-PLAN-03, FR-PLAN-06, F-33 and F-35 Implemented; GAP-02 and GAP-03 closed; GAP-25 narrowed. · Claude
 - 2026-10-03 · #42 done: a missing age, retirement age or spending figure is asked for, never assumed, on Projections, Analytics and by the assistant; unknown fund fees are left out and counted. FR-PLAN-09, F-34 and F-37 Verified by the new `scripts/test-missing-inputs.ts`; GAP-15 closed. · Claude
+- 2026-10-03 · Found while doing #42: the assistant's analytics tool still projected balances at retirement with a flat annuity the Analytics page had dropped. Both now call one function on the tested engine; part of #29, checked in `scripts/test-one-engine.ts`. · Claude
 - 2026-10-02 · #28 done: erasure deletes holding snapshots and the export includes them, goal links and join attempts. The account-data check now reads every household-keyed table from the database. FR-DATA-02, FR-DATA-03 and NFR-PRIV-01 Verified; GAP-01 closed. · Claude
 - 2026-10-02 · #50 done: releases retry passing Vercel and GitHub failures and a second run resumes the first run's build. Added NFR-DEL-06, Verified by the new `scripts/test-release.ts`; NFR-DEL-01 and F-48 now Implemented; GAP-23 closed. · Claude
 

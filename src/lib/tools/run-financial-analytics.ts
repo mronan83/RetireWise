@@ -2,7 +2,6 @@ import { tool } from "ai";
 import { describeMissing, givenMonthlySpending, missingPlanningInputs, type PlanningField } from "@/lib/planning-inputs";
 import { z } from "zod";
 import { getApiUserId } from "@/lib/auth-helpers";
-import { totalAnnual } from "../utils/contributions";
 import { eq, and } from "drizzle-orm";
 import { getDb } from "../db";
 import { userPreferences, socialSecurityBenefits, contributions } from "../db/schema";
@@ -22,6 +21,8 @@ import {
   getRemainingInBracket,
 } from "../utils/financial-analytics";
 import { RETURN_BY_RISK } from "@/lib/utils/risk";
+import { getAccounts } from "../queries/accounts";
+import { balancesAtRetirement } from "../projections/at-retirement";
 import { loadTaxTable } from "@/lib/tax/load";
 
 
@@ -50,8 +51,9 @@ export const runFinancialAnalyticsTool = tool({
     if (!userId) return { error: "Not authenticated" };
 
     const db = getDb();
-    const [holdings, prefs, selfSS, spouseSS, contribs, taxTable] = await Promise.all([
+    const [holdings, accountsList, prefs, selfSS, spouseSS, contribs, taxTable] = await Promise.all([
       getHoldingsByClerkId(userId),
+      getAccounts(userId),
       db.select().from(userPreferences).where(eq(userPreferences.clerkId, userId)).limit(1),
       db.select().from(socialSecurityBenefits).where(
         and(eq(socialSecurityBenefits.clerkId, userId), eq(socialSecurityBenefits.owner, "self"))
@@ -83,55 +85,31 @@ export const runFinancialAnalyticsTool = tool({
     // Read only by analyses that have just checked they are given.
     const currentAge = pref?.currentAge ?? 0;
     const retirementAge = pref?.retirementAge ?? currentAge;
-    const returnPct = RETURN_BY_RISK[pref?.riskTolerance || "moderate"] || 7;
-    const yearsToRetirement = Math.max(0, retirementAge - currentAge);
-    const selfSalary = pref?.annualSalary ? Number(pref.annualSalary) : 0;
-    const spouseSalary = pref?.spouseAnnualSalary ? Number(pref.spouseAnnualSalary) : 0;
     const selfSSMonthly = selfSS[0]?.benefitAtFRA ? Number(selfSS[0].benefitAtFRA) : 0;
     const spouseSSMonthly = spouseSS[0]?.benefitAtFRA ? Number(spouseSS[0].benefitAtFRA) : 0;
     const monthlyExpenses = givenMonthlySpending(pref) ?? 0;
 
-    // Categorize by tax treatment
-    let taxDeferredBalance = 0;
-    let taxFreeBalance = 0;
-    let taxableBalance = 0;
-    const totalValue = holdings.reduce((s, h) => s + Number(h.currentValue), 0);
-
-    for (const h of holdings) {
-      const val = Number(h.currentValue);
-      const t = h.accountType;
-      if (t === "401k" || t === "403b" || t === "ira_traditional" || t === "pension") {
-        taxDeferredBalance += val;
-      } else if (t === "ira_roth" || t === "hsa") {
-        taxFreeBalance += val;
-      } else {
-        taxableBalance += val;
-      }
-    }
-
-    // Calculate annual contributions from line items
-    const totalAnnualContrib = totalAnnual(contribs, (c) =>
-      c.owner === "self" ? selfSalary : spouseSalary
-    ).total;
-
-    // Project balances forward accounting for contributions.
-    //
-    // The tax-deferred share used to be a flat 0.6 — "~60% of contribs go to
-    // tax-deferred" — which is a guess about a household whose actual split
-    // is recorded right here. Someone contributing only to a Roth had 60% of
-    // it counted as tax-deferred anyway, and every RMD figure downstream
-    // inherited that.
-    const TAX_DEFERRED_TYPES = new Set(["401k", "403b", "ira_traditional", "pension"]);
-    const taxDeferredContrib = totalAnnual(
-      contribs.filter((c) => TAX_DEFERRED_TYPES.has(c.accountType)),
-      (c) => (c.owner === "self" ? selfSalary : spouseSalary)
-    ).total;
-
-    const growthFactor = Math.pow(1 + returnPct / 100, yearsToRetirement);
-    const annuityFactor =
-      returnPct > 0 ? (growthFactor - 1) / (returnPct / 100) : yearsToRetirement;
-    const projectedTaxDeferred = taxDeferredBalance * growthFactor + taxDeferredContrib * annuityFactor;
-    const projectedPortfolio = totalValue * growthFactor + totalAnnualContrib * annuityFactor;
+    // Balances today and when work stops: the Analytics page's own figures,
+    // from the tested engine. This tool used to project them with a flat
+    // annuity of its own, so it and the page disagreed. Without ages only the
+    // fee and Social Security analyses can run, and they read neither.
+    const balances =
+      pref?.currentAge && pref?.retirementAge
+        ? balancesAtRetirement({
+            pref: { ...pref, currentAge: pref.currentAge, retirementAge: pref.retirementAge },
+            accounts: accountsList,
+            holdings,
+            contribs,
+          })
+        : null;
+    const returnPct = balances?.returnPct ?? (RETURN_BY_RISK[pref?.riskTolerance || "moderate"] || 7);
+    const yearsToRetirement = balances?.yearsToRetirement ?? 0;
+    const selfSalary = balances?.selfSalary ?? 0;
+    const spouseSalary = balances?.spouseSalary ?? 0;
+    const totalAnnualContrib = balances?.totalAnnualContributions ?? 0;
+    const projectedTaxDeferred = balances?.atRetirement.taxDeferred ?? 0;
+    const projectedTaxFree = balances?.atRetirement.taxFree ?? 0;
+    const projectedPortfolio = balances?.atRetirement.total ?? 0;
 
     const startYear = new Date().getFullYear();
 
@@ -197,7 +175,7 @@ export const runFinancialAnalyticsTool = tool({
         const ladder = calculateRothConversionLadder({
           currentAge, retirementAge, rmdStartAge: RMD_START_AGE,
           taxDeferredBalance: projectedTaxDeferred,
-          rothBalance: taxFreeBalance * growthFactor,
+          rothBalance: projectedTaxFree,
           otherTaxableIncomeForAge: (age: number) => (age >= ssClaimAge ? ssAnnual : 0),
           returnPct, targetBracketRate: 0.22,
           startYear,
