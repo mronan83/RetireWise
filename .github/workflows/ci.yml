@@ -94,6 +94,10 @@ jobs:
       # assumed, and an unknown fund fee is left out rather than guessed.
       - run: pnpm exec tsx scripts/test-missing-inputs.ts
 
+      # The privacy page names every service the code sends data to, and does
+      # not claim there are no third-party scripts while Plaid's loads.
+      - run: pnpm exec tsx scripts/test-privacy-page.ts
+
       # The tax reference table. Every assertion is a way a half-loaded year
       # could return a believable number instead of an error — which is the
       # only reason moving these figures out of source is an improvement.
