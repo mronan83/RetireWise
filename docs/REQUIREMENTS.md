@@ -432,12 +432,14 @@ A half-loaded year is refused and the newest complete year is used; a table a ye
 ### FR-PLAN-09. Projections and analytics ask for missing inputs rather than assume them
 
 - Priority: Should
-- Status: Partial
+- Status: Verified
 - Source: `.github/workflows/ci.yml` (onboarding check: "stop a projection being believed before its inputs exist")
 - Features: F-34, F-37
-- Gap: GAP-15
+- Verified by: `scripts/test-missing-inputs.ts`
 
 When current age or retirement spending is missing, a figure that depends on it is not shown. In its place, a short note says what is needed and why, with a link straight to the field in Settings; the figure appears as soon as the value is set. A fund whose fee is unknown is left out of the fee total, and the page says how many funds were left out (Q4).
+
+The Projections page, Analytics and both of the assistant's tools ask through one definition of what is missing (`src/lib/planning-inputs.ts`), and the prompt is one component (`src/components/planning/missing-inputs.tsx`). Retirement spending saved on the Projections page counts as given. The check proves the decisions; how the prompt looks on screen is not checked.
 
 ### FR-PLAN-10. A projection pays income tax on what it withdraws, and takes each withdrawal from the right account
 
@@ -1215,11 +1217,10 @@ Merges by ticker, but with no date check or review: a position missing from the 
 ### F-34. Interactive retirement projection and Monte Carlo
 
 - Group: Planning
-- Status: Partial
+- Status: Verified
 - Requirements: FR-PLAN-04, FR-PLAN-05, FR-PLAN-09, FR-PLAN-10
-- Code: `src/app/(dashboard)/projections/page.tsx`, `src/app/(dashboard)/projections/interactive-controls.tsx`, `src/lib/utils/projection-scenarios.ts`, `src/lib/utils/glide-path.ts`, `src/lib/projections/build-accounts.ts`, `src/app/api/settings/projection-controls/route.ts`, `src/lib/projections/monte-carlo.ts`, `src/lib/projections/settings.ts`, `src/lib/projections/household.ts`
-- Checks: `scripts/test-analytics.ts`, `scripts/test-projection-tax.ts`, `scripts/test-one-engine.ts`
-- Gap: GAP-15
+- Code: `src/app/(dashboard)/projections/page.tsx`, `src/app/(dashboard)/projections/interactive-controls.tsx`, `src/lib/utils/projection-scenarios.ts`, `src/lib/utils/glide-path.ts`, `src/lib/projections/build-accounts.ts`, `src/app/api/settings/projection-controls/route.ts`, `src/lib/projections/monte-carlo.ts`, `src/lib/projections/settings.ts`, `src/lib/projections/household.ts`, `src/lib/planning-inputs.ts`, `src/components/planning/missing-inputs.tsx`
+- Checks: `scripts/test-analytics.ts`, `scripts/test-projection-tax.ts`, `scripts/test-one-engine.ts`, `scripts/test-missing-inputs.ts`
 
 ### F-35. What-if scenarios
 
@@ -1241,11 +1242,10 @@ Merges by ticker, but with no date check or review: a position missing from the 
 ### F-37. Financial analytics
 
 - Group: Analysis
-- Status: Partial
+- Status: Verified
 - Requirements: FR-PLAN-07, FR-PLAN-08, FR-PLAN-09, FR-ANA-01
 - Code: `src/app/(dashboard)/analytics/page.tsx`, `src/app/(dashboard)/analytics/analytics-dashboard.tsx`, `src/lib/utils/financial-analytics.ts`, `src/lib/tax/load.ts`
-- Checks: `scripts/test-analytics.ts`, `scripts/test-rmd.ts`, `scripts/test-tax-reference.ts`
-- Gap: GAP-15
+- Checks: `scripts/test-analytics.ts`, `scripts/test-rmd.ts`, `scripts/test-tax-reference.ts`, `scripts/test-missing-inputs.ts`
 
 ### F-38. AI analysis cards
 
@@ -1514,11 +1514,13 @@ It counts contributions whose `is_active` is not null; the column is never null.
 
 - Affects: FR-PLAN-09, F-34, F-37
 - Severity: Medium
-- Evidence: `src/app/(dashboard)/analytics/page.tsx:87`, `src/app/(dashboard)/projections/page.tsx:78`, `src/lib/utils/financial-analytics.ts:541`
+- Evidence: `src/app/(dashboard)/analytics/page.tsx`, `src/app/(dashboard)/projections/page.tsx`, `src/lib/utils/financial-analytics.ts`, `src/lib/tools/run-financial-analytics.ts`
 - Backlog: #42
-- Status: Open
+- Status: Closed 2026-10-03
 
 The assumed values are age 42, $7,000 a month of spending, and a 0.15% fee on any fund whose fee is unknown. This is the guessed-figure pattern the dividend work removed. Q4 decided: refuse, and ask gracefully.
+
+Closed by #42 on 3 Oct. A missing age, retirement age or spending figure is now asked for in place of what needs it, with a link to the field, on Projections, on Analytics (the Sequence tab alone needs spending) and by the assistant. An unknown fund fee is left out of the fee figures and counted. The assistant's analytics tool had the same three defaults and is fixed too.
 
 ### GAP-16. Plan limits are mostly unenforced
 
@@ -1799,6 +1801,7 @@ Only the assistant compares withdrawal orders. Since 3 Oct it does so with the c
 - 2026-10-02 · Answers to Q4 and Q9 recorded. FR-PLAN-09 now says how a missing input is asked for, and FR-PLAN-04 makes the tested engine the only one. #42 and #29 unblocked; #29 now follows #55. · Claude
 - 2026-10-02 · #55 done: the tested engine pays federal tax on withdrawals and taxable Social Security, takes RMDs only from tax-deferred accounts, and reinvests the unspent part. FR-PLAN-10 Verified by the new `scripts/test-projection-tax.ts`; GAP-28 closed. · Claude
 - 2026-10-03 · #29 and #30 done: one tested engine everywhere. The page's odds, its scenarios and the assistant run `runDetailedProjection`, the odds against 500 seeded markets, with inputs built by shared functions; one Social Security rule. The older engine and two dead components deleted. FR-PLAN-04, FR-PLAN-05 and FR-AI-04 Verified by the new `scripts/test-one-engine.ts`; FR-PLAN-03, FR-PLAN-06, F-33 and F-35 Implemented; GAP-02 and GAP-03 closed; GAP-25 narrowed. · Claude
+- 2026-10-03 · #42 done: a missing age, retirement age or spending figure is asked for, never assumed, on Projections, Analytics and by the assistant; unknown fund fees are left out and counted. FR-PLAN-09, F-34 and F-37 Verified by the new `scripts/test-missing-inputs.ts`; GAP-15 closed. · Claude
 - 2026-10-02 · #28 done: erasure deletes holding snapshots and the export includes them, goal links and join attempts. The account-data check now reads every household-keyed table from the database. FR-DATA-02, FR-DATA-03 and NFR-PRIV-01 Verified; GAP-01 closed. · Claude
 - 2026-10-02 · #50 done: releases retry passing Vercel and GitHub failures and a second run resumes the first run's build. Added NFR-DEL-06, Verified by the new `scripts/test-release.ts`; NFR-DEL-01 and F-48 now Implemented; GAP-23 closed. · Claude
 

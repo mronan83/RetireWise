@@ -1,4 +1,5 @@
 import { tool } from "ai";
+import { describeMissing, givenMonthlySpending, missingPlanningInputs, type PlanningField } from "@/lib/planning-inputs";
 import { z } from "zod";
 import { getApiUserId } from "@/lib/auth-helpers";
 import { totalAnnual } from "../utils/contributions";
@@ -66,15 +67,29 @@ export const runFinancialAnalyticsTool = tool({
     ]);
 
     const pref = prefs[0];
-    const currentAge = pref?.currentAge || 42;
-    const retirementAge = pref?.retirementAge || 65;
+
+    // Ask for what an analysis needs rather than assume it, as the Analytics
+    // page does. These used to default to age 42, retiring at 65 and $7,000
+    // a month, and the assistant would quote the results as the household's.
+    const needed: PlanningField[] =
+      analysis === "fee_impact" || analysis === "ss_break_even"
+        ? []
+        : analysis === "sequence_risk"
+          ? ["currentAge", "retirementAge", "monthlyExpensesRetirement"]
+          : ["currentAge", "retirementAge"];
+    const missing = missingPlanningInputs(pref, needed);
+    if (missing.length > 0) return { error: describeMissing(missing), missingInputs: missing };
+
+    // Read only by analyses that have just checked they are given.
+    const currentAge = pref?.currentAge ?? 0;
+    const retirementAge = pref?.retirementAge ?? currentAge;
     const returnPct = RETURN_BY_RISK[pref?.riskTolerance || "moderate"] || 7;
     const yearsToRetirement = Math.max(0, retirementAge - currentAge);
     const selfSalary = pref?.annualSalary ? Number(pref.annualSalary) : 0;
     const spouseSalary = pref?.spouseAnnualSalary ? Number(pref.spouseAnnualSalary) : 0;
     const selfSSMonthly = selfSS[0]?.benefitAtFRA ? Number(selfSS[0].benefitAtFRA) : 0;
     const spouseSSMonthly = spouseSS[0]?.benefitAtFRA ? Number(spouseSS[0].benefitAtFRA) : 0;
-    const monthlyExpenses = pref?.monthlyExpensesRetirement ? Number(pref.monthlyExpensesRetirement) : 7000;
+    const monthlyExpenses = givenMonthlySpending(pref) ?? 0;
 
     // Categorize by tax treatment
     let taxDeferredBalance = 0;
@@ -263,7 +278,12 @@ export const runFinancialAnalyticsTool = tool({
           weightedExpenseRatio: result.weightedExpenseRatio,
           totalAnnualFees: result.totalAnnualFees,
           thirtyYearDrag: result.thirtyYearCumulativeDrag,
-          topFeeHoldings: result.holdings.slice(0, 10),
+          topFeeHoldings: result.holdings.filter((h) => h.expenseRatio !== null).slice(0, 10),
+          holdingsWithUnknownFees: result.unknownFeeCount,
+          valueWithUnknownFees: result.unknownFeeValue,
+          note: result.unknownFeeCount > 0
+            ? "Holdings whose fund fee is not known are left out of every figure here; say so rather than estimate them."
+            : undefined,
           tip: "Look for lower-cost index fund alternatives. Moving from 0.5% to 0.03% saves tens of thousands over 30 years.",
         };
       }

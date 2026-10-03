@@ -6,6 +6,7 @@ import { getHoldingsByClerkId } from "@/lib/queries/holdings";
 import { InteractiveProjections } from "./interactive-controls";
 import { getAccounts } from "@/lib/queries/accounts";
 import { projectionSetupFromRows } from "@/lib/projections/household";
+import { MissingInputs } from "@/components/planning/missing-inputs";
 
 export default async function ProjectionsPage() {
   return withHousehold(() => ProjectionsPageContent());
@@ -30,27 +31,6 @@ async function ProjectionsPageContent() {
 
   const pref = prefs[0];
 
-  if (!pref?.currentAge || !pref?.retirementAge) {
-    return (
-      <div className="space-y-6">
-        <div>
-          <h1 className="text-2xl font-bold tracking-tight">Retirement Projections</h1>
-          <p className="text-muted-foreground">Model your retirement timeline</p>
-        </div>
-        <div className="rounded-lg border border-dashed p-12 text-center">
-          <h3 className="text-lg font-semibold">Set up your preferences first</h3>
-          <p className="mt-2 text-sm text-muted-foreground max-w-md mx-auto">
-            Go to Settings and fill in your age, retirement age, and monthly expenses
-            to run retirement projections.
-          </p>
-          <a href="/settings" className="mt-4 inline-block text-primary underline text-sm">
-            Go to Settings
-          </a>
-        </div>
-      </div>
-    );
-  }
-
   // The same setup the AI assistant's projection tool builds, from the same rows.
   const setup = projectionSetupFromRows({
     pref,
@@ -59,7 +39,20 @@ async function ProjectionsPageContent() {
     contribs,
     selfSS: selfSS[0],
     spouseSS: spouseSS[0],
-  })!;
+  });
+
+  // Nothing is projected on a guess: until the inputs exist, ask for them.
+  if (!setup.ok) {
+    return (
+      <div className="space-y-6">
+        <div>
+          <h1 className="text-2xl font-bold tracking-tight">Retirement Projections</h1>
+          <p className="text-muted-foreground">Model your retirement timeline</p>
+        </div>
+        <MissingInputs fields={setup.missing} />
+      </div>
+    );
+  }
   const { household } = setup;
 
   return (
@@ -76,7 +69,7 @@ async function ProjectionsPageContent() {
         currentAge={household.currentAge}
         retirementAge={household.retirementAge}
         spouseAge={household.spouseAge}
-        spouseRetirementAge={pref.spouseRetirementAge}
+        spouseRetirementAge={pref?.spouseRetirementAge ?? null}
         selfSSAtFRA={household.selfSSAtFRA}
         spouseSSAtFRA={household.spouseSSAtFRA}
         selfFRA={household.selfFRA}
