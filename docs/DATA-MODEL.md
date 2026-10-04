@@ -1,6 +1,6 @@
 # RetireWise data model
 
-Last reviewed: 2026-10-03
+Last reviewed: 2026-10-04
 
 RetireWise keeps every household's finances in one Postgres database on Supabase: 30 tables in eight domains, declared with Drizzle in `src/lib/db/schema.ts` and created by the SQL migrations in `src/lib/db/migrations`. Households are kept apart by row-level security. Each request runs as a restricted role that can see only the rows of the household it signed in to.
 
@@ -243,7 +243,9 @@ One row per recurring contribution line, such as "Matt 401(k) 6%": the employee'
 One row per person in a household: estimated monthly benefit at 62, at full retirement age and at 70, planned claiming age, spousal benefit and the cost-of-living assumption.
 
 - `owner`: One row per person is kept by the code that saves it; no unique index enforces it.
-- `assumed_cola_pct`: The cost-of-living increase assumed each year; defaults to 2.5%.
+- `benefit_at_fra`: The one figure the projection uses, with `full_retirement_age`; the claiming age comes from the Projections page.
+- `assumed_cola_pct`: Saved, defaulting to 2.5%, but no calculation reads it: the projection raises benefits with the market scenario's inflation (GAP-38).
+- `planned_claiming_age`: Saved and never read by a calculation, like `spousal_benefit_amount` and `eligible_for_spousal_benefit` (GAP-38).
 
 ### goals
 
@@ -731,3 +733,4 @@ The database checks need a migrated Postgres; CI starts one for the "Mobile layo
 
 - 2026-10-03 · First version: 30 tables in eight domains, 22 enums, 19 business rules, derived data and the security model; the page is generated from the schema and migrations with this document, and `pnpm datamodel:check` keeps them in step · Claude
 - 2026-10-03 · Declared `debts_secured_by_idx` in the schema, which migration 0018 had created without it; corrected the schema comment on `net_worth_item_history`, which had value and secondary value the wrong way round; opened GAP-31, GAP-32 and #60 from defects found while writing this · Claude
+- 2026-10-04 · `social_security_benefits`: said which fields the projection reads and which it ignores (GAP-38), found while writing How RetireWise works · Claude

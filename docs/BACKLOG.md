@@ -1,8 +1,8 @@
 # RetireWise backlog
 
-Last reviewed: 2026-10-03
+Last reviewed: 2026-10-04
 
-Items from the [delivery review](https://claude.ai/artifact/Eo9g6bEnWFi9TBoSPwohPk) (G1–G7), the Plaid investigation of 29 Sep, the requirements traceability review of 2 Oct (#28–#56, one per gap), and the architecture and data model review of 3 Oct (#58–#64). The page is published from this file after each successful `pnpm deploy:prod`, so it always describes what is live.
+Items from the [delivery review](https://claude.ai/artifact/Eo9g6bEnWFi9TBoSPwohPk) (G1–G7), the Plaid investigation of 29 Sep, the requirements traceability review of 2 Oct (#28–#56, one per gap), the architecture and data model review of 3 Oct (#58–#64), and the calculations review of 4 Oct (#65 onwards). The page is published from this file after each successful `pnpm deploy:prod`, so it always describes what is live.
 
 <!--
 How to edit
@@ -564,6 +564,72 @@ Rows a person entered before redeeming an invite stay under their own id; once t
 
 `next.config.ts` and `vercel.json` set no headers, so pages can be framed and nothing limits where scripts load from. Add a Content-Security-Policy that allows Plaid Link, and the standard framing, referrer and content-type headers, checked in the browser tests.
 
+### 65. A couple's Social Security starts when the first partner claims
+
+- Type: Defect
+- Priority: P1
+- Effort: S
+- Severity: Medium
+- Blocker: None
+- Source: How RetireWise works review, GAP-36
+
+`projectionInputs()` in `src/lib/projections/settings.ts` adds both partners' benefits into one figure and starts it in the year of the earlier claim. A couple claiming at 62 and 70 is paid the larger, delayed benefit eight years early, so every projection with staggered claims overstates income and the odds. Pass each benefit with its own start year to the engine, and check a staggered case in `scripts/test-one-engine.ts`.
+
+### 66. The Projections page shows Social Security in today's dollars beside future dollars
+
+- Type: Defect
+- Priority: P2
+- Effort: S
+- Severity: Low
+- Blocker: None
+- Source: How RetireWise works review, GAP-37
+
+The engine records Social Security in today's dollars and everything else in each year's dollars. The drawdown table on the Projections page prints it raw next to withdrawals and balances, so late in retirement it looks about half its real size. The "Monthly Spending vs Income" card mixes the two as well and is not the engine at all. The assistant already converts it. Record it in the year's dollars in the engine, or convert it on the page, and make the card read the engine.
+
+### 67. Settings asks for Social Security details that no calculation uses
+
+- Type: Gap
+- Priority: P3
+- Effort: S
+- Severity: Low
+- Blocker: None
+- Source: How RetireWise works review, GAP-38
+
+The Social Security form saves a cost-of-living assumption, a planned claiming age, spousal benefits and more, but the projection reads only the benefit at full retirement age and the full retirement age itself. The cost-of-living increase is the market scenario's inflation, and the claiming age is the Projections page's control. Either use the fields or stop asking for them, and say on the form which figures the projection uses.
+
+### 68. Some contribution records are counted wrongly in the projection
+
+- Type: Defect
+- Priority: P1
+- Effort: M
+- Severity: Medium
+- Blocker: None
+- Source: How RetireWise works review, GAP-39
+
+Found by running the engine. A fixed-amount contribution with employer money has that money counted twice and capped with the employee's deferral (a $20,000 year projected as $23,000). A fixed-amount contribution paused today never resumes, whatever its resume date, and an account whose only contribution is paused today drops out of the projection. An inactive record listed first can set an account's method and zero its contributions. The fixes are in `src/lib/projections/build-accounts.ts` and the fixed-amount branch of `runDetailedProjection`, each with a test.
+
+### 69. Three what-if scenarios do not do what they say
+
+- Type: Defect
+- Priority: P2
+- Effort: S
+- Severity: Medium
+- Blocker: None
+- Source: How RetireWise works review, GAP-40
+
+On the Projections page, "Boost Savings" changes nothing for a contribution set as a percentage of salary; "Retire Earlier" starts withdrawals five years sooner but keeps contributing and leaves Social Security where it was; "Lower Returns" changes nothing when the glide path is on. Apply each override through the engine's inputs so it reaches every account and age, and give the overrides a check of their own.
+
+### 70. Required distributions: past 95, per person, and from 75 for people born from 1960
+
+- Type: Gap
+- Priority: P3
+- Effort: M
+- Severity: Low
+- Blocker: None
+- Source: How RetireWise works review, GAP-41
+
+`calculateRMD()` follows the IRS Uniform Lifetime Table to 95 and then a formula that divides by less than the table does (5.0 at 100), which overstates distributions and their tax in the last years of a long horizon. The engine also takes one distribution on both partners' combined balance at the primary person's age, starting at 73 for everyone. Check the divisors past 95 against IRS Publication 590-B, model each person's own balance and start age, and extend `scripts/test-rmd.ts`.
+
 ## Notes on sequencing
 
 - Do #1 before #7: previews should lose production's data before they get data of their own.
@@ -578,6 +644,7 @@ Rows a person entered before redeeming an invite stay under their own id; once t
 - #54 before #35: the leave action cannot delete "what the member added" until that is recorded.
 - #58 is the next privacy fix: small, and it makes the erasure promise true again. #59, #61 and #62 are small and independent.
 - #60 before the next schema change, or that change's migration will fail.
+- #65 and #68 change the answer to "will the money last?" for real households, so they come before anything cosmetic. #66 and #69 are on the same page and can ride along.
 - Q3, Q4, Q5, Q6 and Q9 were answered on 2 Oct, so no traceability item waits on a decision from you; #53 waits on your go-ahead.
 - #55, #29 and #30 are done (2–3 Oct): one tested engine answers everywhere. You answered Q10 on 3 Oct: the landing-page claim stays, and the withdrawal-order comparison stays as it is.
 

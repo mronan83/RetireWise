@@ -19,8 +19,9 @@
  *
  * Only after all of that does it build the published pages from the
  * released commit: the backlog, the requirements trace, the technical
- * architecture and the data model (.pages/backlog.html, traceability.html,
- * architecture.html, data-model.html), so they always describe what is live.
+ * architecture, the data model and how RetireWise works (.pages/backlog.html,
+ * traceability.html, architecture.html, data-model.html, how-it-works.html),
+ * so they always describe what is live.
  * Nothing builds them on a merge, a dry run, or a release that turns out to be
  * a no-op.
  *
@@ -35,6 +36,7 @@ import { relative } from "path";
 import { buildArchPage } from "./architecture/build";
 import { buildBacklogPage } from "./backlog/build";
 import { buildModelPage } from "./data-model/build";
+import { buildHowPage } from "./how-it-works/build";
 import { withSnapshot } from "./pages/snapshot";
 import { buildTracePage } from "./traceability/build";
 import { fetchWithRetry, findResumable, waitUntil, type ListedDeployment } from "./lib/release";
@@ -248,13 +250,14 @@ async function main() {
   } catch (e) {
     console.warn(`  ⚠ Released, but the traceability page was not built: ${e instanceof Error ? e.message : String(e)}`);
   }
-  // These two read the code itself, so they are built from a copy of the
+  // These read the code itself, so they are built from a copy of the
   // released commit rather than whatever happens to be checked out.
   try {
     await withSnapshot(sha, async (root) => {
       for (const [name, artifact, build] of [
         ["Architecture", "RetireWise Technical Architecture", buildArchPage],
         ["Data model", "RetireWise Data Model", buildModelPage],
+        ["How it works", "How RetireWise Works", buildHowPage],
       ] as const) {
         try {
           const { out, problems } = await build({ sha, previousSha: liveSha, root });
@@ -266,7 +269,7 @@ async function main() {
       }
     });
   } catch (e) {
-    console.warn(`  ⚠ Released, but the architecture and data model pages were not built: ${e instanceof Error ? e.message : String(e)}`);
+    console.warn(`  ⚠ Released, but the pages read from the code were not built: ${e instanceof Error ? e.message : String(e)}`);
   }
 }
 
