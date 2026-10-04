@@ -44,8 +44,7 @@ function main() {
     returnPct: 0,          // isolate inflation from growth
     inflationPct: 3,
     annualExpenses: 100_000,
-    annualSSIncome: 0,
-    ssStartYear: 99,
+    socialSecurity: [],
     withdrawalMethod: "expense" as const,
   };
   const near0 = runDetailedProjection({ ...base, yearsToRetirement: 1 });
@@ -220,7 +219,7 @@ function main() {
     accounts: built, totalAnnualContributions: 20_000,
     yearsToRetirement: 20, yearsInRetirement: 1, startAge: 45,
     returnPct: 7, inflationPct: 3, annualExpenses: 84_000,
-    annualSSIncome: 0, ssStartYear: 999,
+    socialSecurity: [],
   });
   const engineAtRetirement = engine.totalValues[19];
 
@@ -238,6 +237,58 @@ function main() {
     "the engine caps the employee deferral at the IRS limit, which the annuity never did",
     engine.contributions[0] < 200_000 * 0.1 + 200_000 * 0.05 + 200_000 * 0.02 + 1,
     String(Math.round(engine.contributions[0]))
+  );
+
+  // ---- contribution records counted once, as entered (#68) ----------------
+  // The builder used to hand the engine today's total, employer money
+  // included and zero while paused; the engine then added the employer's
+  // non-elective money again, capped the match with the deferral, and kept a
+  // paused fixed contribution at zero for good.
+  const firstYears = (contribs: object[], holdings: { accountId: string; currentValue: string }[] = [{ accountId: "a1", currentValue: "1000" }]) => {
+    const accts = buildProjectionAccounts({
+      accounts: [acctRow as never], holdings, contribs: contribs as never,
+      selfSalary: 100_000, spouseSalary: 0, selfSalaryGrowth: null, spouseSalaryGrowth: null,
+      selfCurrentAge: 40, spouseCurrentAge: null, selfYearsToRetirement: 10, spouseYearsToRetirement: 10,
+    });
+    if (accts.length === 0) return null;
+    return runDetailedProjection({
+      accounts: accts, totalAnnualContributions: 0, yearsToRetirement: 10, yearsInRetirement: 1,
+      startAge: 40, returnPct: 0, inflationPct: 0, annualExpenses: 0, socialSecurity: [],
+    }).contributions.slice(0, 3).map(Math.round);
+  };
+  const fixed = {
+    ...contribRow, contributionMethod: "fixed_amount" as const, contributionPercent: null,
+    contributionAmount: "20000", frequency: "annually", hasEmployerMatch: false,
+    employerMatchRate: null, employerMatchMaxPercent: null, hasEmployerNonElective: false,
+    employerNonElectivePercent: null,
+  };
+  const nonElective = firstYears([{ ...fixed, hasEmployerNonElective: true, employerNonElectivePercent: "3" }]);
+  check("a fixed $20,000 with 3% non-elective money is $23,000 a year, not $26,000", nonElective?.[0] === 23_000, String(nonElective));
+  const matched = firstYears([{ ...fixed, contributionAmount: "23500", hasEmployerMatch: true, employerMatchRate: "0.5", employerMatchMaxPercent: "6" }]);
+  check(
+    "a fixed deferral at the IRS limit keeps its match: $23,500 + $3,000",
+    matched?.[0] === 26_500,
+    String(matched)
+  );
+  const day = (offset: number) => new Date(Date.now() + offset * 86_400_000).toISOString().slice(0, 10);
+  const paused = { ...fixed, pausedFrom: day(-30), resumesOn: day(730) };
+  const resumed = firstYears([paused]);
+  check(
+    "a fixed contribution paused today resumes on its date",
+    resumed !== null && resumed[0] === 0 && resumed[2] === 20_000,
+    String(resumed)
+  );
+  const empty = firstYears([paused], []);
+  check(
+    "and an account with nothing in it yet is kept, not dropped",
+    empty !== null && empty[2] === 20_000,
+    String(empty)
+  );
+  const inactiveFirst = firstYears([{ ...contribRow, id: "old", isActive: false }, { ...fixed, id: "c2" }]);
+  check(
+    "an inactive record listed first does not decide how the account is funded",
+    inactiveFirst?.[0] === 20_000,
+    String(inactiveFirst)
   );
 
   // ---- unchanged ground truth ---------------------------------------------

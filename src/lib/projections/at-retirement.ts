@@ -79,8 +79,7 @@ export function balancesAtRetirement(input: {
     returnPct,
     inflationPct: 3,
     annualExpenses: 0,
-    annualSSIncome: 0,
-    ssStartYear: 999,
+    socialSecurity: [],
   });
 
   const last = yearsToRetirement - 1;

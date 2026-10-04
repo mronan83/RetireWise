@@ -65,7 +65,7 @@ The engine keeps each account separately and steps forward one year at a time, f
 - Checked by: `scripts/test-missing-inputs.ts`, `scripts/test-one-engine.ts`
 - Shown in: the Projections page; the assistant's retirement projection
 
-The household's accounts, holdings and contribution records become one engine account each: its balance is the sum of its holdings, its contributions come from the records linked to it, and its salary and retirement year are its owner's. The Projections page's controls (claiming ages, spending, scenario, method, horizon, glide path) are added with their defaults where none were saved: the {{default.scenario}} scenario, {{default.retirementYears}} years of retirement, and a {{default.withdrawalRate}} withdrawal rate when a rate is used. If the age, the retirement age or the spending is missing, the engine is not run at all.
+The household's accounts, holdings and contribution records become one engine account each: its balance is the sum of its holdings, its contributions come from the records linked to it that are still in force, and its salary and retirement year are its owner's. The Projections page's controls (claiming ages, spending, scenario, method, horizon, glide path) are added with their defaults where none were saved: the {{default.scenario}} scenario, {{default.retirementYears}} years of retirement, and a {{default.withdrawalRate}} withdrawal rate when a rate is used. If the age, the retirement age or the spending is missing, the engine is not run at all.
 
 ### 1. Growth
 
@@ -81,16 +81,18 @@ Every account earns the same return in a given year, on its balance at the start
 
 ### 2. Contributions
 
-- Code: `src/lib/utils/projection-scenarios.ts` `runDetailedProjection`, `src/lib/utils/salary-growth.ts` `getSalaryAtYear`, `src/lib/utils/contributions.ts` `totalAnnual` `fundedFractionOfYear`, `src/lib/constants.ts` `getIrsLimitForAge`
+- Code: `src/lib/utils/projection-scenarios.ts` `runDetailedProjection`, `src/lib/projections/build-accounts.ts` `buildProjectionAccounts`, `src/lib/utils/salary-growth.ts` `getSalaryAtYear`, `src/lib/utils/contributions.ts` `employeeAnnual` `fundedFractionOfYear`, `src/lib/constants.ts` `getIrsLimitForAge`
 - Checked by: `scripts/test-analytics.ts`, `scripts/test-one-engine.ts`
 - Shown in: the Projections page; Settings, Contributions
 
-Contributions stop in the year their owner retires. For a contribution set as a percentage of salary:
+Contributions stop in the year their owner retires. Only records still in force count, and the first of them sets whether the account is funded as a percentage of salary or as an amount:
 
 ```formula
 salary(y)     = salary today × (1 + raise)^y
-deferral %(y) = deferral % + escalation × y
+deferral %(y) = deferral % + escalation × y                       (a percentage)
 employee      = deferral %(y) × salary(y)
+employee      = yearly amount + increase × y                      (an amount)
+deferral %(y) = employee ÷ salary(y)
 match         = min(deferral %(y), matched-up-to %) × salary(y) × match rate
 non-elective  = non-elective % × salary(y)            (or a flat amount)
 paused share  = the part of the year a pause covers
@@ -98,7 +100,7 @@ employee'     = min(employee × (1 − paused share), IRS limit at the owner's a
 contribution  = employee' + match × (1 − paused share) + non-elective
 ```
 
-A fixed-amount contribution uses the yearly amount (the per-paycheck amount times the paychecks in a year) plus any yearly increase, in place of the percentage. The IRS limit applies to the employee's own deferral only, never to employer money: {{irs.401k.under50}} for a 401(k) under 50, {{irs.401k.over50}} from 50 and {{irs.401k.60to63}} from 60 to 63 when catch-up is on. A pause stops the employee's money and the match earned on it; non-elective employer money is paid regardless.
+An amount is the per-paycheck amount times the paychecks in a year. Its match is worked out the same way as a percentage's, from the amount as a share of pay, and the engine is given the employee's deferral alone, so employer money is never counted twice or capped with it. The IRS limit applies to the employee's own deferral only, never to employer money: {{irs.401k.under50}} for a 401(k) under 50, {{irs.401k.over50}} from 50 and {{irs.401k.60to63}} from 60 to 63 when catch-up is on. A pause stops the employee's money and the match earned on it, for the part of each year it covers, and the contribution resumes on its resume date; non-elective employer money is paid regardless.
 
 ### 3. Retirement spending
 
@@ -117,10 +119,10 @@ Spending is entered in today's dollars and inflated from today, not from the fir
 
 ```formula
 each benefit       = monthly benefit at full retirement age × share for the claiming age
-Social Security(y) = (yours + partner's) × 12 × P(y)      from the first claim, in retirement
+Social Security(y) = Σ each claimed benefit × 12 × P(y)      each from the year its owner claims it
 ```
 
-Benefits are entered in today's dollars, from each person's SSA statement, and rise with the scenario's inflation, which stands in for the cost-of-living adjustment. They are used only in retirement years, to reduce what savings must provide.
+Each partner's benefit starts in the year that partner claims it, so a couple claiming at 62 and 70 is paid one benefit from 62 and both from 70. Benefits are entered in today's dollars, from each person's SSA statement, and rise with the scenario's inflation, which stands in for the cost-of-living adjustment. They are used only in retirement years, to reduce what savings must provide.
 
 ### 5. Withdrawals and their tax
 
@@ -648,10 +650,8 @@ A model is useful because it leaves things out. These are the choices this one m
 
 ### Where it is known to be wrong
 
-- A couple's Social Security starts in the year the first partner claims, so a later claim is paid early (#65).
 - The Projections page shows Social Security in today's dollars next to future dollars, and its spending-versus-income card is not the engine (#66). This page shows it as the engine uses it.
 - The Social Security form's cost-of-living, planned-claiming-age and spousal fields are never used (#67).
-- Fixed-amount contributions with employer money are counted twice, a fixed contribution paused today never resumes, and an inactive contribution record can zero an account (#68).
 - Three what-if scenarios on the Projections page miss what they change (#69).
 - Required distributions follow the IRS table to 95 and a steeper formula after it, and are taken on both partners' combined balance from 73 for everyone (#70).
 - The projection uses the tax figures built into the code, not the yearly table (#61); the contribution limits are fixed for 2025 (#31); and the 2025 tax figures predate the July 2025 law (#56).
@@ -757,3 +757,4 @@ Every function exported from a calculation module, and what it does. `pnpm how:c
 
 - 2026-10-04 · First version · Claude
 - 2026-10-04 · Published as the How RetireWise Works artifact ahead of the next release, at the owner's request; its calculators run the code in production at 3d88a37 · Claude
+- 2026-10-04 · A couple's Social Security is paid per partner from each one's claim (#65), and contribution records are counted once, from those in force, with pauses that resume (#68) · Claude

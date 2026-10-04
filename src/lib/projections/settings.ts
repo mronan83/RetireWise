@@ -109,8 +109,12 @@ export type ProjectionInputs = {
   glidePath: GlidePathConfig | undefined;
   selfSSMonthly: number;
   spouseSSMonthly: number;
+  /** Both benefits a year, once both partners have claimed. */
   combinedSSAnnual: number;
+  /** The first year (0-indexed from now) either partner is paid. */
   ssStartYear: number;
+  selfSSStartYear: number;
+  spouseSSStartYear: number;
   yearsToRetirement: number;
 };
 
@@ -132,10 +136,14 @@ export function projectionInputs(h: ProjectionHousehold, c: ProjectionControls):
   const spouseSSMonthly = adjustSSBenefit(h.spouseSSAtFRA, h.spouseFRA || 67, c.spouseSSAge);
   const combinedSSAnnual = (selfSSMonthly + spouseSSMonthly) * 12;
 
-  // Social Security starts when the first person claims.
+  // Each benefit starts in the year its owner claims it.
   const selfSSStartYear = Math.max(0, c.selfSSAge - h.currentAge);
   const spouseSSStartYear = h.spouseAge ? Math.max(0, c.spouseSSAge - h.spouseAge) : selfSSStartYear;
-  const ssStartYear = Math.min(selfSSStartYear, spouseSSStartYear);
+  const socialSecurity = [
+    { annual: selfSSMonthly * 12, startYear: selfSSStartYear },
+    { annual: spouseSSMonthly * 12, startYear: spouseSSStartYear },
+  ].filter((b) => b.annual > 0);
+  const ssStartYear = socialSecurity.length ? Math.min(...socialSecurity.map((b) => b.startYear)) : selfSSStartYear;
 
   const yearsToRetirement = Math.max(0, h.retirementAge - h.currentAge);
 
@@ -152,8 +160,7 @@ export function projectionInputs(h: ProjectionHousehold, c: ProjectionControls):
       withdrawalRatePct: c.withdrawalRatePct,
       withdrawalMethod: c.withdrawalMethod,
       maxAnnualWithdrawal: c.maxWithdrawalAmount || undefined,
-      annualSSIncome: combinedSSAnnual,
-      ssStartYear,
+      socialSecurity,
       glidePath,
       catchUpEnabled: c.catchUpEnabled,
     },
@@ -164,6 +171,8 @@ export function projectionInputs(h: ProjectionHousehold, c: ProjectionControls):
     spouseSSMonthly,
     combinedSSAnnual,
     ssStartYear,
+    selfSSStartYear,
+    spouseSSStartYear,
     yearsToRetirement,
   };
 }

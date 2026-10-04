@@ -654,12 +654,12 @@ Releases run from a Claude session with a broad token, and main has no branch pr
 
 Contribution limits are fixed for 2025, the tax figures predate the July 2025 law, the projection ignores the yearly tax table the analytics read, and required distributions past 95 follow a formula steeper than the IRS table.
 
-### The projection gets some households' inputs wrong
+### The Projections page's what-ifs miss what they change
 
-- Backlog: #65, #68, #69
+- Backlog: #69
 - Severity: Medium
 
-A couple's Social Security starts with the first claim, some contribution records are counted twice or not at all, and three what-if scenarios miss what they change. Each overstates or misstates the odds for the households it touches; the engine's own rules are otherwise tested.
+Three what-if scenarios on the Projections page miss what they change, so each misstates its odds for the households it touches. The engine's own rules are tested, including a couple who claim Social Security at different ages and contribution records that are paused, inactive or fixed amounts with employer money (#65 and #68, closed).
 
 ### Imports and bank connections can lose, duplicate or strand data
 
@@ -926,3 +926,4 @@ Choices that shaped the system, newest last. A record is never deleted; a later 
 
 - 2026-10-03 · Rewritten from the code: principles, system context, frontend, identity and households, server logic, nine key flows, environments, delivery, quality attributes, thirteen risks and twenty-six decision records. The inventory is generated, `pnpm arch:check` keeps the two in step, and the stale data-flow document is replaced by the key flows · Claude
 - 2026-10-04 · ADR-027: the calculations are explained in a living page that runs the production engine; a fourteenth risk for the projection defects that page found (#65, #68, #69), and #70 added to the planning-figures risk · Claude
+- 2026-10-04 · #65 and #68 closed: the engine takes each partner's Social Security with its own start year, and each account's own deferral from records in force; the projection-inputs risk narrowed to the what-ifs (#69); the release builds the trace page from a copy of the released commit, like the pages that read the code (#76) · Claude

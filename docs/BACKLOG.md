@@ -564,17 +564,6 @@ Rows a person entered before redeeming an invite stay under their own id; once t
 
 `next.config.ts` and `vercel.json` set no headers, so pages can be framed and nothing limits where scripts load from. Add a Content-Security-Policy that allows Plaid Link, and the standard framing, referrer and content-type headers, checked in the browser tests.
 
-### 65. A couple's Social Security starts when the first partner claims
-
-- Type: Defect
-- Priority: P1
-- Effort: S
-- Severity: Medium
-- Blocker: None
-- Source: How RetireWise works review, GAP-36
-
-`projectionInputs()` in `src/lib/projections/settings.ts` adds both partners' benefits into one figure and starts it in the year of the earlier claim. A couple claiming at 62 and 70 is paid the larger, delayed benefit eight years early, so every projection with staggered claims overstates income and the odds. Pass each benefit with its own start year to the engine, and check a staggered case in `scripts/test-one-engine.ts`.
-
 ### 66. The Projections page shows Social Security in today's dollars beside future dollars
 
 - Type: Defect
@@ -596,17 +585,6 @@ The engine records Social Security in today's dollars and everything else in eac
 - Source: How RetireWise works review, GAP-38
 
 The Social Security form saves a cost-of-living assumption, a planned claiming age, spousal benefits and more, but the projection reads only the benefit at full retirement age and the full retirement age itself. The cost-of-living increase is the market scenario's inflation, and the claiming age is the Projections page's control. Either use the fields or stop asking for them, and say on the form which figures the projection uses.
-
-### 68. Some contribution records are counted wrongly in the projection
-
-- Type: Defect
-- Priority: P1
-- Effort: M
-- Severity: Medium
-- Blocker: None
-- Source: How RetireWise works review, GAP-39
-
-Found by running the engine. A fixed-amount contribution with employer money has that money counted twice and capped with the employee's deferral (a $20,000 year projected as $23,000). A fixed-amount contribution paused today never resumes, whatever its resume date, and an account whose only contribution is paused today drops out of the projection. An inactive record listed first can set an account's method and zero its contributions. The fixes are in `src/lib/projections/build-accounts.ts` and the fixed-amount branch of `runDetailedProjection`, each with a test.
 
 ### 69. Three what-if scenarios do not do what they say
 
@@ -699,12 +677,36 @@ Plaid security types map "etf" and "mutual fund" to `us_stock` in `src/lib/plaid
 - #54 before #35: the leave action cannot delete "what the member added" until that is recorded.
 - #58 is the next privacy fix: small, and it makes the erasure promise true again. #59, #61 and #62 are small and independent.
 - #60 before the next schema change, or that change's migration will fail.
-- #65 and #68 change the answer to "will the money last?" for real households, so they come before anything cosmetic. #66 and #69 are on the same page and can ride along.
+- #66 and #69 are next on the Projections page: with #65 and #68 done, the engine's answer is right, and what remains is how the page shows it and what its what-ifs change.
 - #72 and #73 are both the Analytics page and the withdrawal comparison; do them together, after #61, so every figure uses one tax table and one dollar basis. #71 and #75 change the figures on account cards and the allocation, and #74 collects the small fixes.
 - Q3, Q4, Q5, Q6 and Q9 were answered on 2 Oct, so no traceability item waits on a decision from you; #53 waits on your go-ahead.
 - #55, #29 and #30 are done (2–3 Oct): one tested engine answers everywhere. You answered Q10 on 3 Oct: the landing-page claim stays, and the withdrawal-order comparison stays as it is.
 
 ## Done
+
+### 76. The release checks its trace page against the working tree, not the released commit
+
+- Type: Ops
+- Closed: 2026-10-04
+- In: PR 9
+
+Found in the 4 Oct release, and opened and closed in the same pull request. `pnpm deploy:prod` built the requirements trace page from the released commit's document but checked it against whatever was checked out, so a branch that had already closed #65 and #68 made the release report two problems it did not have. The page published for that release was rebuilt from a copy of the released commit. The trace page is now built from that copy, like the pages that read the code.
+
+### 68. Some contribution records are counted wrongly in the projection
+
+- Type: Defect
+- Closed: 2026-10-04
+- In: PR 9
+
+The builder now hands the engine each account's own deferral, from records still in force, unpaused and before the cap. The engine works out the employer's money for a fixed amount as it does for a percentage, so a $20,000 deferral with 3% non-elective money projects as $23,000, not $26,000, and a deferral at the IRS limit keeps its match. A fixed contribution paused today resumes on its date, an account whose only contribution is paused is kept, and an inactive record listed first no longer decides how an account is funded. Proved by `scripts/test-analytics.ts`.
+
+### 65. A couple's Social Security starts when the first partner claims
+
+- Type: Defect
+- Closed: 2026-10-04
+- In: PR 9
+
+The engine now takes each partner's benefit with its own start year, so a partner who waits to 70 is paid from 70, and the other partner's claim at 62 pays only their own benefit until then. The Projections page's reduced-Social-Security what-if scales both benefits, and the assistant reports each partner's start. Proved by `scripts/test-one-engine.ts`.
 
 ### 57. A release could report success for a build production never served
 

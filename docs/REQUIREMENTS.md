@@ -372,7 +372,7 @@ A debt secured against an asset replaces the loan typed onto that asset; it is n
 - Source: `docs/USER-GUIDE.md:120`
 - Features: F-32
 - Verified by: `scripts/test-analytics.ts`
-- Gap: GAP-04, GAP-39
+- Gap: GAP-04
 
 ### FR-PLAN-03. Record Social Security for both partners, with claiming age and cost-of-living adjustment
 
@@ -389,7 +389,7 @@ A debt secured against an asset replaces the loan typed onto that asset; it is n
 - Source: `docs/USER-GUIDE.md:66`
 - Features: F-34
 - Verified by: `scripts/test-analytics.ts`, `scripts/test-projection-tax.ts`, `scripts/test-one-engine.ts`
-- Gap: GAP-36, GAP-37
+- Gap: GAP-37
 
 Spending is inflated from today, not from the year retirement starts. Withdrawals never fall below the required minimum distribution. Every screen and the assistant use this one tested engine, including for the odds that savings last (Q9).
 
@@ -1248,7 +1248,7 @@ Merges by ticker, but with no date check or review: a position missing from the 
 - Requirements: FR-PLAN-02
 - Code: `src/app/(dashboard)/settings/contributions-section.tsx`, `src/lib/actions/contributions.ts`, `src/lib/utils/contributions.ts`
 - Checks: `scripts/test-analytics.ts`
-- Gap: GAP-04, GAP-39
+- Gap: GAP-04
 
 ### F-33. Social Security estimates
 
@@ -1266,7 +1266,7 @@ Merges by ticker, but with no date check or review: a position missing from the 
 - Requirements: FR-PLAN-04, FR-PLAN-05, FR-PLAN-09, FR-PLAN-10
 - Code: `src/app/(dashboard)/projections/page.tsx`, `src/app/(dashboard)/projections/interactive-controls.tsx`, `src/lib/utils/projection-scenarios.ts`, `src/lib/utils/glide-path.ts`, `src/lib/projections/build-accounts.ts`, `src/app/api/settings/projection-controls/route.ts`, `src/lib/projections/monte-carlo.ts`, `src/lib/projections/settings.ts`, `src/lib/projections/household.ts`, `src/lib/planning-inputs.ts`, `src/components/planning/missing-inputs.tsx`
 - Checks: `scripts/test-analytics.ts`, `scripts/test-projection-tax.ts`, `scripts/test-one-engine.ts`, `scripts/test-missing-inputs.ts`
-- Gap: GAP-33, GAP-36, GAP-37, GAP-39
+- Gap: GAP-33, GAP-37
 
 ### F-35. What-if scenarios
 
@@ -1814,9 +1814,11 @@ Found while writing the technical architecture on 3 Oct. Redemption checks only 
 - Severity: Medium
 - Evidence: `src/lib/projections/settings.ts:133`, `src/lib/projections/settings.ts:138`, `src/lib/utils/projection-scenarios.ts:298`
 - Backlog: #65
-- Status: Open
+- Status: Closed 2026-10-04
 
 Found while writing How RetireWise works on 4 Oct. Both benefits are added into one figure that starts in the year of the earlier claim, so a partner who waits to 70 is paid the larger benefit from the other's claiming year. Projections with staggered claims overstate income and the odds.
+
+Closed by #65: the engine takes each partner's benefit with its own start year. `scripts/test-one-engine.ts` checks a couple claiming at 62 and 70.
 
 ### GAP-37. The Projections page mixes today's dollars with future dollars
 
@@ -1844,9 +1846,11 @@ The cost-of-living assumption, planned claiming age and spousal fields are saved
 - Severity: Medium
 - Evidence: `src/lib/projections/build-accounts.ts:66`, `src/lib/projections/build-accounts.ts:77`, `src/lib/utils/projection-scenarios.ts:349`
 - Backlog: #68
-- Status: Open
+- Status: Closed 2026-10-04
 
 Found by running the engine while writing How RetireWise works. Fixed-amount contributions count employer money twice and cap it with the employee's deferral; one paused today never resumes; an inactive record can zero an account's contributions.
+
+Closed by #68: the engine is given each account's own deferral from records in force, unpaused and before the cap, and works out the employer's money itself. `scripts/test-analytics.ts` checks each case.
 
 ### GAP-40. Three what-if scenarios do not do what they say
 
@@ -2037,6 +2041,7 @@ Only the assistant compares withdrawal orders. Since 3 Oct it does so with the c
 - 2026-10-02 · #50 done: releases retry passing Vercel and GitHub failures and a second run resumes the first run's build. Added NFR-DEL-06, Verified by the new `scripts/test-release.ts`; NFR-DEL-01 and F-48 now Implemented; GAP-23 closed. · Claude
 - 2026-10-03 · The technical architecture and data model rewritten as living documents (NFR-DOC-02, F-50): half generated from the code, checked in CI, published after each release. `docs/DATA-FLOW.md` folded into the architecture's key flows; GAP-17 narrowed to the README, user guide and help. Writing them found GAP-31 to GAP-35 (#58, #59, #61–#63) and #60 and #64. NFR-PRIV-01, FR-DATA-02, FR-DATA-03, FR-NW-01, FR-INV-02, F-23, F-25 and F-34 moved from Verified to Partial on that evidence; GAP-11 now also covers the zero basis a file import invents. · Claude
 - 2026-10-04 · How RetireWise works added as a living document (NFR-DOC-03, F-51): every calculation explained, its figures read from the code, its calculators running the production engine from the released commit. Writing it found GAP-36 to GAP-45 (#65–#73, #75) and the small fixes in #74, and added five calculations with no check to #51. FR-PLAN-04, FR-PLAN-07, FR-ACC-07, FR-ANA-01 and FR-AI-04 moved from Verified, and FR-PLAN-03, FR-PLAN-06, FR-ONB-03 and FR-ONB-04 from Implemented, to Partial on that evidence. · Claude
+- 2026-10-04 · GAP-36 and GAP-39 closed by #65 and #68: a couple's Social Security is paid per partner from each one's claim, and contribution records are counted once, from those in force, with pauses that resume. FR-PLAN-02, FR-PLAN-04, F-32 and F-34 stay Partial on their other gaps (GAP-04, GAP-33, GAP-37). The release now checks this page against the released commit, not the working tree (#76). · Claude
 
 ## Sources
 
