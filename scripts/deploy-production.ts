@@ -243,17 +243,20 @@ async function main() {
   } catch (e) {
     console.warn(`  ⚠ Released, but the backlog page was not built: ${e instanceof Error ? e.message : String(e)}`);
   }
-  try {
-    const { out, problems } = buildTracePage({ sha, previousSha: liveSha });
-    console.log(`  Traceability page: ${relative(process.cwd(), out)} (publish it to the RetireWise Requirements & Feature Traceability artifact)`);
-    if (problems.length) console.warn(`  ⚠ ${problems.length} trace problem(s) at this commit; run pnpm trace:check.`);
-  } catch (e) {
-    console.warn(`  ⚠ Released, but the traceability page was not built: ${e instanceof Error ? e.message : String(e)}`);
-  }
   // These read the code itself, so they are built from a copy of the
-  // released commit rather than whatever happens to be checked out.
+  // released commit rather than whatever happens to be checked out. The
+  // traceability check reads the backlog, the CI workflow and the files the
+  // requirements name; checked against a working tree that had moved on, it
+  // reported problems the release did not have.
   try {
     await withSnapshot(sha, async (root) => {
+      try {
+        const { out, problems } = buildTracePage({ sha, previousSha: liveSha, root });
+        console.log(`  Traceability page: ${relative(process.cwd(), out)} (publish it to the RetireWise Requirements & Feature Traceability artifact)`);
+        if (problems.length) console.warn(`  ⚠ ${problems.length} trace problem(s) at this commit; run pnpm trace:check.`);
+      } catch (e) {
+        console.warn(`  ⚠ Released, but the traceability page was not built: ${e instanceof Error ? e.message : String(e)}`);
+      }
       for (const [name, artifact, build] of [
         ["Architecture", "RetireWise Technical Architecture", buildArchPage],
         ["Data model", "RetireWise Data Model", buildModelPage],

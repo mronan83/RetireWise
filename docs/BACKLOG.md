@@ -684,6 +684,14 @@ Plaid security types map "etf" and "mutual fund" to `us_stock` in `src/lib/plaid
 
 ## Done
 
+### 76. The release checks its trace page against the working tree, not the released commit
+
+- Type: Ops
+- Closed: 2026-10-04
+- In: PR 9
+
+Found in the 4 Oct release, and opened and closed in the same pull request. `pnpm deploy:prod` built the requirements trace page from the released commit's document but checked it against whatever was checked out, so a branch that had already closed #65 and #68 made the release report two problems it did not have. The page published for that release was rebuilt from a copy of the released commit. The trace page is now built from that copy, like the pages that read the code.
+
 ### 68. Some contribution records are counted wrongly in the projection
 
 - Type: Defect
