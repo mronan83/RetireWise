@@ -53,7 +53,7 @@ export const CALCULATION_MODULES = [
 ];
 
 /** Interactive pieces the page can place where a ```widget fence names them. */
-export const WIDGETS = ["playground", "year", "ss-claiming", "tax", "rmd", "glide-path", "monte-carlo", "assumptions"] as const;
+export const WIDGETS = ["playground", "year", "ss-claiming", "tax", "rmd", "glide-path", "monte-carlo", "withdrawal-order", "assumptions"] as const;
 
 export type HowDoc = { doc: Doc; entries: Entry[]; log: { date: string; change: string; by: string }[] };
 
@@ -81,6 +81,7 @@ function declares(source: string, name: string): boolean {
   return new RegExp(`(?:function|const|let|class|type|interface)\\s+${name}\\b`).test(source);
 }
 
+const readIf = (root: string, file: string) => (existsSync(join(root, file)) ? readFileSync(join(root, file), "utf8") : "");
 const money = (n: number) => `$${Math.round(n).toLocaleString("en-US")}`;
 const pct = (n: number) => `${Number(n.toFixed(2))}%`;
 
@@ -88,8 +89,93 @@ const pct = (n: number) => `${Number(n.toFixed(2))}%`;
  * Every figure the document may quote, read from the code. Keys are stable
  * names; values are formatted for reading.
  */
-export function facts(e: Engine): Record<string, string> {
+export function facts(e: Engine, root = process.cwd()): Record<string, string> {
   const f: Record<string, string> = {};
+
+  // Alert thresholds sit in code that reads the database, so they are read
+  // from its source. If the code changes shape, the keys go missing and the
+  // check fails, rather than the page quoting an old threshold.
+  const alertSource = readIf(root, "src/lib/utils/alert-generator.ts");
+  const grab = (key: string, re: RegExp, unit = "%") => {
+    const m = alertSource.match(re);
+    if (m) f[key] = `${m[1]}${unit}`;
+  };
+  grab("alert.drift", /bigDrifts = [^;]*Math\.abs\(v\.drift\) > (\d+(?:\.\d+)?)/);
+  grab("alert.driftCritical", /bigDrifts\.some\(\(\[, v\]\) => Math\.abs\(v\.drift\) > (\d+(?:\.\d+)?)\)/);
+  grab("alert.move", /Math\.abs\(dailyChangePct\) > (\d+(?:\.\d+)?)\) \{/);
+  grab("alert.moveCritical", /Math\.abs\(dailyChangePct\) > (\d+(?:\.\d+)?) \? "critical"/);
+  grab("alert.concentration", /topPct > (\d+(?:\.\d+)?)\) \{/);
+  grab("alert.concentrationCritical", /topPct > (\d+(?:\.\d+)?) \? "critical"/);
+
+  // Freshness thresholds, found by asking freshnessOf about ever older figures.
+  const hoursAgo = (h: number) => new Date(Date.now() - h * 3_600_000).toISOString();
+  const firstHour = (kind: Parameters<Engine["freshnessOf"]>[1], state: string) => {
+    let lo = 0, hi = 24 * 800;
+    while (hi - lo > 1) { const mid = Math.floor((lo + hi) / 2); if (e.freshnessOf(hoursAgo(mid), kind) === state || (state === "aging" && e.freshnessOf(hoursAgo(mid), kind) === "stale")) hi = mid; else lo = mid; }
+    return hi;
+  };
+  const span = (h: number) => (h % 24 === 0 && h >= 72 ? `${h / 24} days` : `${h} hours`);
+  for (const kind of ["price", "linked_balance", "manual_balance", "valuation"] as const) {
+    f[`fresh.${kind}.aging`] = span(firstHour(kind, "aging"));
+    f[`fresh.${kind}.stale`] = span(firstHour(kind, "stale"));
+  }
+
+  f["div.window"] = `${e.WINDOW_DAYS} days`;
+  f["div.grace"] = `${e.GRACE_DAYS} days`;
+  f["backoff.first"] = `${e.backoffMs(1) / 60_000} minutes`;
+  f["backoff.cap"] = `${e.backoffMs(100) / 3_600_000} hours`;
+  f["backoff.deadLetter"] = String(e.DEAD_LETTER_AFTER);
+
+  // Analytics figures, measured from the functions.
+  const care = e.projectHealthcareCosts({ currentAge: 60, retirementAge: 60, yearsToProject: 2, annualRetirementIncome: 0, inflationPct: 0 });
+  f["care.inflationFloor"] = pct((care[1].totalAnnual / care[0].totalAnnual - 1) * 100);
+  const repl = e.calculateIncomeReplacement({ selfSalary: 100_000, spouseSalary: 0, portfolioAtRetirement: 0, withdrawalRate: 4, selfSSMonthly: 0, spouseSSMonthly: 0, pensionMonthly: 0 });
+  f["replacement.target"] = pct(repl.target);
+  const t = e.DEFAULT_TAX_TABLE;
+  f["care.preMedicare"] = money(t.preMedicarePremiumMonthly);
+  f["care.outOfPocket"] = money(t.outOfPocketAnnual);
+  f["care.partB"] = money(t.medicarePartBMonthly);
+  f["care.partD"] = money(t.medicarePartDMonthly);
+  f["care.medigap"] = money(t.medigapMonthly);
+  f["care.irmaaFrom"] = money(t.irmaaTiers[0].upTo);
+  const catchUpAt = (type: string, age: number) => e.calculateCatchUpImpact({ currentAge: age, retirementAge: age + 1, returnPct: 0, accountType: type })[0].catchUpAmount;
+  f["catchup.401k.over50"] = money(catchUpAt("401k", 55));
+  f["catchup.401k.60to63"] = money(catchUpAt("401k", 61));
+  f["catchup.hsa.amount"] = money(catchUpAt("hsa", 70));
+  f["catchup.hsa.from"] = String([...Array(30)].map((_, i) => 40 + i).find((a) => catchUpAt("hsa", a) > 0) ?? "");
+  f["catchup.hsa.limitAt55"] = money(e.getIrsLimitForAge("hsa", 55));
+  f["catchup.hsa.limitAt50"] = money(e.getIrsLimitForAge("hsa", 50));
+  for (const [k, v] of Object.entries(e.FREQUENCY_PER_YEAR)) f[`freq.${k}`] = String(v);
+  f["sequence.scenarios"] = e.calculateSequenceRisk({ portfolioAtRetirement: 1, annualWithdrawal: 0, years: 1 }).map((s) => `“${s.scenario}”`).join(", ");
+  f["withdrawal.orders"] = e
+    .calculateWithdrawalStrategies({ taxDeferredBalance: 1, taxFreeBalance: 1, taxableBalance: 1, annualExpenses: 0, annualSSIncome: 0, yearsInRetirement: 1, realReturnRate: 0, startAge: 65 })
+    .map((s) => `“${s.name}”`)
+    .join(", ");
+
+  // How far a return period may start before the account's first snapshot.
+  const day = (d: string, value: number) => ({ date: d, value, positions: [{ ticker: "X", shares: 1, price: value }] });
+  const graceOk = (k: number) => e.twrSince([day(e.addDays("2026-01-01", k), 100), day(e.addDays("2026-01-01", k + 30), 110)], "2026-01-01") !== null;
+  f["twr.grace"] = `${[...Array(60)].map((_, k) => k).filter(graceOk).pop() ?? 0} days`;
+
+  // What the Analytics page passes to the functions, read from its source for
+  // the same reason as the alert thresholds. The page writes some of these in
+  // more than one place; a figure is quoted only while every copy agrees, so
+  // changing one copy fails the check instead of half-changing the page.
+  const dash = readIf(root, "src/app/(dashboard)/analytics/analytics-dashboard.tsx");
+  const from = (key: string, res: RegExp[], as: (v: number) => string) => {
+    const seen = new Set(res.flatMap((re) => [...dash.matchAll(re)].map((m) => Number(m[1]))));
+    if (seen.size === 1) f[key] = as([...seen][0]);
+  };
+  from("analytics.ssTaxed", [/\(selfSSAtFRA \+ spouseSSAtFRA\) \* 12 \* (0?\.\d+)/g, /ssAnnual \* (0?\.\d+)/g], (v) => pct(v * 100));
+  from("analytics.rothTarget", [/targetBracketRate: (0?\.\d+)/g], (v) => pct(v * 100));
+  from("analytics.withdrawal", [/withdrawalRate: (\d+(?:\.\d+)?)/g], pct);
+  // The tax and healthcare tabs write the same rate as a fraction.
+  const asFraction = new Set([...dash.matchAll(/projectedPortfolio \* (0?\.\d+)/g)].map((m) => pct(Number(m[1]) * 100)));
+  if (asFraction.size !== 1 || !asFraction.has(f["analytics.withdrawal"])) delete f["analytics.withdrawal"];
+  from("analytics.inflation", [/inflationPct: (\d+(?:\.\d+)?)/g], pct);
+  from("analytics.years", [/yearsToProject: (\d+)/g], String);
+  const atRet = readIf(root, "src/lib/projections/at-retirement.ts").match(/inflationPct: (\d+(?:\.\d+)?)/);
+  if (atRet) f["atRetirement.inflation"] = pct(Number(atRet[1]));
   const run = e.simulate(e.EXAMPLE_INPUTS);
   const x = e.EXAMPLE_INPUTS;
 

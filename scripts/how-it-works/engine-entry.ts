@@ -39,7 +39,26 @@ export { getSalaryAtYear } from "../../src/lib/utils/salary-growth";
 export { BUILT_IN_TAX_YEAR, DEFAULT_TAX_TABLE } from "../../src/lib/tax/table";
 export { IRS_LIMITS, getIrsLimitForAge } from "../../src/lib/constants";
 export { RETURN_BY_RISK } from "../../src/lib/utils/risk";
-export { composeNetWorth } from "../../src/lib/net-worth/compose";
+export { composeNetWorth, looksLikeSameLoan } from "../../src/lib/net-worth/compose";
+export {
+  calculateCatchUpImpact,
+  calculateFeeImpact,
+  calculateIncomeReplacement,
+  calculateRothConversionLadder,
+  calculateSequenceRisk,
+  calculateSSBreakEven,
+  projectHealthcareCosts,
+  projectRMDs,
+} from "../../src/lib/utils/financial-analytics";
+export { calculateWithdrawalStrategies } from "../../src/lib/utils/withdrawal-strategies";
+export { addDays, flowBetween, timeWeightedReturn, twrSince } from "../../src/lib/performance/twr";
+export { gainLossFor, positionBasis, rollupBasis } from "../../src/lib/utils/cost-basis";
+export { calculateAllocation, calculateAllocationDrift } from "../../src/lib/utils/calculations";
+export { GRACE_DAYS, WINDOW_DAYS, summarizeDividends } from "../../src/lib/utils/dividends";
+export { computeGoalProgress } from "../../src/lib/goals/progress";
+export { freshnessOf, relativeAge } from "../../src/lib/utils/freshness";
+export { DEAD_LETTER_AFTER, backoffMs } from "../../src/lib/plaid/backoff";
+export { FREQUENCY_PER_YEAR, contributionBreakdown, vestingStatus } from "../../src/lib/utils/contributions";
 
 /** What a reader can change on the page: one earner's household, simplified. */
 export type PlaygroundInputs = {
@@ -259,4 +278,31 @@ export function explainYear(run: Run, y: number) {
 
 function getGlidePathParamsForEngine(age: number, params: DetailedProjectionParams): number {
   return params.glidePath ? getGlidePathParams(age, params.glidePath).returnPct : params.returnPct;
+}
+
+/**
+ * The withdrawal-order comparison's inputs for a run: the engine's balances in
+ * the last working year by tax treatment, restated in today's dollars because
+ * the comparison works in today's dollars with a return after inflation.
+ */
+export function withdrawalInputs(run: Run) {
+  const y = Math.max(0, run.inputs.yearsToRetirement - 1);
+  const level = run.inputs.yearsToRetirement > 0 ? run.priceLevel[y] : 1;
+  const at = (treatment: string) =>
+    Math.round(
+      run.projection.accountProjections
+        .filter((a) => a.taxTreatment === treatment)
+        .reduce((s, a) => s + (run.inputs.yearsToRetirement > 0 ? a.projectedValues[y] : a.currentValue), 0) / level,
+    );
+  const params = run.inputs.params;
+  return {
+    taxDeferredBalance: at("tax_deferred"),
+    taxFreeBalance: at("tax_free"),
+    taxableBalance: at("taxable"),
+    annualExpenses: Math.round(params.annualExpenses),
+    annualSSIncome: Math.round(run.inputs.combinedSSAnnual),
+    yearsInRetirement: run.controls.retirementYears,
+    realReturnRate: (params.returnPct - params.inflationPct) / 100,
+    startAge: run.household.retirementAge,
+  };
 }

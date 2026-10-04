@@ -42,7 +42,7 @@ async function main() {
   if (args.includes("--check")) {
     const markdown = readFileSync(DOC_FILE, "utf8");
     const engine = await loadEngine(process.cwd());
-    const values = facts(engine);
+    const values = facts(engine, process.cwd());
     const h = parseHowDoc(markdown);
     const report = validate(h, values);
     if (report.errors.length > 0) fail(`${DOC_FILE} does not match the code (${report.errors.length}):\n  ${report.errors.join("\n  ")}`);

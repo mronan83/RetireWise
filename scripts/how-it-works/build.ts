@@ -20,7 +20,7 @@ export const HOW_OUT = ".pages/how-it-works.html";
 async function build(root: string, release: HowRelease, out: string) {
   const markdown = readFileSync(join(root, DOC_FILE), "utf8");
   const engine = await loadEngine(root);
-  const values = facts(engine);
+  const values = facts(engine, root);
   const report = validate(parseHowDoc(markdown), values, root);
   const engineJs = await bundleEngine(root, "browser");
   mkdirSync(dirname(out), { recursive: true });

@@ -266,7 +266,7 @@ Each appears twice among the 14 linked institutions, most likely from reconnecti
 - Blocker: None
 - Source: Requirements traceability, GAP-04
 
-Three copies of the 2025 limits cap projected contributions, while Settings shows and refreshes a table the engine never reads. The HSA catch-up applies from 50 instead of 55. The check meant to prove the cap uses a deferral under it, so it passes even if capping is broken. Read limits from the table by year, and test a deferral over the cap.
+Three copies of the 2025 limits cap projected contributions, while Settings shows and refreshes a table the engine never reads. The HSA catch-up applies from 50 instead of 55, the HSA row is labelled family but holds the self-only limit, and Analytics implies a different 50-and-over HSA figure from the limits table. The check meant to prove the cap uses a deferral under it, so it passes even if capping is broken. Read limits from the table by year, and test a deferral over the cap.
 
 ### 32. "Sync now" writes the database's ID where Plaid's item ID belongs
 
@@ -442,7 +442,7 @@ A household with no investments gets no net-worth snapshot, because the loop con
 - Blocker: None
 - Source: Requirements traceability, GAP-24
 
-An IRS cap check that never reaches the cap, a coverage rule restated in the test instead of imported, and an "underwater" case that asserts positive equity. Several checks read source text instead of running code. Requirements that rely on them are marked Partial until they are fixed.
+An IRS cap check that never reaches the cap, a coverage rule restated in the test instead of imported, and an "underwater" case that asserts positive equity. Several checks read source text instead of running code. Five calculations have no check at all: income replacement, allocation and drift, the alerts, salary growth, and the Social Security break-even ages; How RetireWise works marks each "nothing yet". Requirements that rely on them are marked Partial until they are fixed.
 
 ### 52. Components and actions that nothing uses
 
@@ -453,7 +453,7 @@ An IRS cap check that never reaches the cap, a coverage rule restated in the tes
 - Blocker: None
 - Source: Requirements traceability, GAP-25
 
-`alerts-panel.tsx` is imported nowhere, and several server actions have no caller. Delete them, or wire them up where a gap needs them (#39 needs the holdings actions). `scenario-runner.tsx` and `projection-charts.tsx` were deleted with the older engine in #29. Four dependencies are unused too: `nuqs`, `react-rnd` and `re-resizable` are imported nowhere, and `cmdk` only by `src/components/ui/command.tsx`, which nothing imports. The `ai_analyses` table has no writer.
+`alerts-panel.tsx` is imported nowhere, and several server actions have no caller. Delete them, or wire them up where a gap needs them (#39 needs the holdings actions). `scenario-runner.tsx` and `projection-charts.tsx` were deleted with the older engine in #29. Four dependencies are unused too: `nuqs`, `react-rnd` and `re-resizable` are imported nowhere, and `cmdk` only by `src/components/ui/command.tsx`, which nothing imports. The `ai_analyses` table has no writer. Unused calculation helpers too: `calculateCAGR`, `capEmployeeDeferral`, `fundedFactors`, `projectSalary`, `calculateContributionsWithSalaryGrowth` and `generateGlidePathSchedule` have no caller in the app, and `shouldClose` is used only by its test.
 ### 53. Anyone can create an account, and no email address is confirmed
 
 - Type: Security
@@ -529,7 +529,7 @@ Drizzle keeps a snapshot of the schema after each migration it generates. Migrat
 - Blocker: None
 - Source: Architecture review, GAP-33
 
-The Projections page and the assistant's projection never pass a tax table to the engine, so it always uses the figures built into `src/lib/tax/table.ts`. Analytics reads `tax_reference`. Updating the table for a new year changes Analytics but not the projection. Load the table once and pass it through `projectionInputs()` in `src/lib/projections/settings.ts`, with a check that both paths use the same year.
+The Projections page and the assistant's projection never pass a tax table to the engine, so it always uses the figures built into `src/lib/tax/table.ts`. Analytics reads `tax_reference`. Updating the table for a new year changes Analytics but not the projection. Load the table once and pass it through `projectionInputs()` in `src/lib/projections/settings.ts`, with a check that both paths use the same year. The assistant's withdrawal-order comparison has the same gap.
 
 ### 62. Disconnecting or erasing leaves the connection open at Plaid
 
@@ -630,6 +630,61 @@ On the Projections page, "Boost Savings" changes nothing for a contribution set 
 
 `calculateRMD()` follows the IRS Uniform Lifetime Table to 95 and then a formula that divides by less than the table does (5.0 at 100), which overstates distributions and their tax in the last years of a long horizon. The engine also takes one distribution on both partners' combined balance at the primary person's age, starting at 73 for everyone. Check the divisors past 95 against IRS Publication 590-B, model each person's own balance and start age, and extend `scripts/test-rmd.ts`.
 
+### 71. Account returns misread splits, reinvested dividends and renamed tickers
+
+- Type: Defect
+- Priority: P2
+- Effort: M
+- Severity: Medium
+- Blocker: None
+- Source: How RetireWise works review, GAP-42
+
+`flowBetween()` in `src/lib/performance/twr.ts` infers money in and out from changes in share counts. A reinvested dividend therefore counts as a deposit, so the return is price-only; a stock split looks like a large deposit and wrecks that day; a ticker Plaid re-spells loses the day's move. The 3-, 5- and 10-year figures on account cards are cumulative, not annualised, and are not labelled so. The daily change, the large-move alert and the benchmark comparison are balance changes rather than returns. Use recorded transactions for flows where they exist, handle splits, and label or annualise long periods.
+
+### 72. Analytics mixes today's and future dollars, and taxes Social Security its own way
+
+- Type: Defect
+- Priority: P2
+- Effort: M
+- Severity: Medium
+- Blocker: None
+- Source: How RetireWise works review, GAP-43
+
+The Analytics page takes balances at retirement from the engine, in future dollars, and sets them beside spending, salary, Social Security, tax brackets and IRMAA thresholds in today's dollars; its sequence test starts withdrawals at today's spending, and income replacement compares future income with today's salary. It and the assistant's analytics tool tax a flat 85% of Social Security where the engine uses the IRS worksheet ($34,000 taxable against $0 on $40,000 of benefits and nothing else). It uses the full-retirement-age benefit and ignores the claiming ages saved on the Projections page, buckets accounts by type rather than tax treatment, computes a spouse's break-even without showing it, taxes the whole 4% withdrawal even when part of it is Roth or taxable money, and costs healthcare for a couple turning 65 together whether or not there is a partner. Put every figure on one basis and use the engine's rules.
+
+### 73. The Roth ladder, sequence and withdrawal-order comparisons are not like for like
+
+- Type: Defect
+- Priority: P2
+- Effort: M
+- Severity: Medium
+- Blocker: None
+- Source: How RetireWise works review, GAP-44
+
+The Roth conversion ladder leaves the standard deduction unused when other income is below it, converting up to $30,000 a year less than it could at the same rate. The sequence-risk scenarios do not share an average return, so the "2008 crash" path ends with about 2.7 times the "Steady 7%" one. In the withdrawal-order comparison behind the landing page's claim (Q10), "Roth first" and "Taxable, then Roth" always give the same result, because taxable withdrawals are untaxed and every bucket earns the same return; it also ignores the yearly tax table. Fix each so the comparison measures only what it says it compares.
+
+### 74. Small disagreements between tools, alerts and helpers
+
+- Type: Defect
+- Priority: P3
+- Effort: M
+- Severity: Low
+- Blocker: None
+- Source: How RetireWise works review
+
+Each is small; together they are why the assistant and the screens sometimes differ. Tax-loss savings use 24% in chat and 22% in the report, with no $3,000 limit, and the count of positions skipped for an unknown basis is never returned. Rebalancing ignores classes outside the target. The assistant's summary labels the retirement balance "At73". Concentration is measured per holding row, not per ticker, and alerts never clear when their condition passes. The marginal-rate helpers report 10% below the standard deduction. A net-worth snapshot taken after an edit uses the last portfolio snapshot. "Over 0 years ago" appears for ages of 360 to 364 days. A statement amount written "1,500" reads as 1.5. Two analysis prompts ask for things the tools no longer do.
+
+### 75. Linked funds are all classed as US stocks
+
+- Type: Defect
+- Priority: P2
+- Effort: S
+- Severity: Medium
+- Blocker: None
+- Source: How RetireWise works review, GAP-45
+
+Plaid security types map "etf" and "mutual fund" to `us_stock` in `src/lib/plaid/sync.ts`, so a bond fund or an international fund in a linked 401(k) counts as US stock in the allocation, the drift alerts and rebalancing. A linked Roth 401(k) becomes a Roth IRA and gets the IRA contribution limit. Classify funds from Plaid's sector or fund category where it is given, ask the owner where it is not, and map Roth 401(k)s to their own type.
+
 ## Notes on sequencing
 
 - Do #1 before #7: previews should lose production's data before they get data of their own.
@@ -645,6 +700,7 @@ On the Projections page, "Boost Savings" changes nothing for a contribution set 
 - #58 is the next privacy fix: small, and it makes the erasure promise true again. #59, #61 and #62 are small and independent.
 - #60 before the next schema change, or that change's migration will fail.
 - #65 and #68 change the answer to "will the money last?" for real households, so they come before anything cosmetic. #66 and #69 are on the same page and can ride along.
+- #72 and #73 are both the Analytics page and the withdrawal comparison; do them together, after #61, so every figure uses one tax table and one dollar basis. #71 and #75 change the figures on account cards and the allocation, and #74 collects the small fixes.
 - Q3, Q4, Q5, Q6 and Q9 were answered on 2 Oct, so no traceability item waits on a decision from you; #53 waits on your go-ahead.
 - #55, #29 and #30 are done (2–3 Oct): one tested engine answers everywhere. You answered Q10 on 3 Oct: the landing-page claim stays, and the withdrawal-order comparison stays as it is.
 

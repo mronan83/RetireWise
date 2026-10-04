@@ -25,7 +25,7 @@ const pctText = (n: number) => `${Number(n.toFixed(2))}%`;
 function assumptions(e: Engine): string {
   const t = e.DEFAULT_TAX_TABLE;
   const scen = e.MARKET_SCENARIOS.map(
-    (s) => `<tr><td>${esc(s.name)}</td><td class="num">${pctText(s.returnPct)}</td><td class="num">${pctText(s.volatility)}</td><td class="num">${pctText(s.inflationPct)}</td><td>${esc(s.description)}</td></tr>`
+    (s) => `<tr><td>${esc(s.name)}</td><td class="num">${pctText(s.returnPct)}</td><td class="num">${pctText(s.volatility)}</td><td class="num">${pctText(s.inflationPct)}</td><td class="desc">${esc(s.description)}</td></tr>`
   ).join("");
   const profiles = e.RISK_PROFILE_ORDER.map((id) => {
     const p = e.RISK_PROFILES[id];
@@ -107,6 +107,8 @@ function widget(name: string, e: Engine): string {
       return `<div class="widget" id="w-glide"><div class="wrow"><label class="fld" for="gp-start"><span>Start as</span><select id="gp-start">${e.RISK_PROFILE_ORDER.map((id) => `<option value="${id}">${esc(e.RISK_PROFILES[id].label)}</option>`).join("")}</select></label><label class="fld" for="gp-end"><span>End as</span><select id="gp-end">${e.RISK_PROFILE_ORDER.map((id) => `<option value="${id}">${esc(e.RISK_PROFILES[id].label)}</option>`).join("")}</select></label>${num("gp-from", "Shift from age", 'min="20" max="90" step="1"')}${num("gp-to", "Until age", 'min="20" max="95" step="1"')}<label class="fld" for="gp-curve"><span>Shape</span><select id="gp-curve"><option value="linear">Steady</option><option value="accelerated">Slow, then faster</option></select></label></div><p class="readout" id="gp-out"></p><div class="plot" id="gp-plot"></div></div>`;
     case "monte-carlo":
       return `<div class="widget" id="w-mc"><p class="note">The example household above, as it stands now, under each market scenario: the share of simulated markets in which its savings last.</p><div class="plot" id="mc-plot"></div></div>`;
+    case "withdrawal-order":
+      return `<div class="widget" id="w-wd"><div class="wrow">${num("wd-taxDeferredBalance", "Tax-deferred savings", 'min="0" step="10000"')}${num("wd-taxFreeBalance", "Roth savings", 'min="0" step="10000"')}${num("wd-taxableBalance", "Taxable savings", 'min="0" step="10000"')}${num("wd-annualExpenses", "Spending, a year", 'min="0" step="1000"')}${num("wd-annualSSIncome", "Social Security, a year", 'min="0" step="1000"')}${num("wd-yearsInRetirement", "Years", 'min="1" max="60" step="1"')}${num("wd-realReturnPct", "Return after inflation, %", 'min="-5" max="10" step="0.5"')}${num("wd-startAge", "From age", 'min="50" max="90" step="1"')}</div><p class="note">Today's dollars. It starts from the example household above, at retirement, and follows it until you change a figure here. <button type="button" class="linkbtn" id="wd-take">Take the household above again</button></p><div class="scroll"><table class="plain ledger" id="wd-table"></table></div><p class="readout" id="wd-out"></p></div>`;
     case "assumptions":
       return assumptions(e);
     default:
@@ -204,6 +206,7 @@ ${sectionsHtml}
 </div>
 <div class="tip" id="tip" role="status" hidden></div>
 <script>${engineJs.replace(/<\/script/gi, "<\\/script")}</script>
+<script>var HOW_FACTS = ${JSON.stringify(values).replace(/</g, "\\u003c")};</script>
 <script>${JS}</script>
 `;
 }
@@ -213,7 +216,7 @@ const HOW_CSS = `
 :root { --s1: #2a78d6; --s2: #eb6834; --s3: #1baf7a; --s4: #4a3aa7; --grid: #E3E8E6; --axis: #9AA8A2; }
 @media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) { --s1: #3987e5; --s2: #d95926; --s3: #199e70; --s4: #9085e9; --grid: #26302D; --axis: #4F5D58; } }
 :root[data-theme="dark"] { --s1: #3987e5; --s2: #d95926; --s3: #199e70; --s4: #9085e9; --grid: #26302D; --axis: #4F5D58; }
-.formula { margin: 0; background: var(--panel); border: 1px solid var(--line); border-left: 3px solid var(--accent); border-radius: 6px; padding: 12px 16px; overflow-x: auto; font: 500 0.88rem/1.7 var(--mono); color: var(--ink); max-width: 86ch; }
+.formula { margin: 0; background: var(--panel); border: 1px solid var(--line); border-left: 3px solid var(--accent); border-radius: 6px; padding: 12px 16px; overflow-x: auto; font: 500 0.88rem/1.7 var(--mono); color: var(--ink); max-width: 100%; }
 .formula code { background: transparent; padding: 0; font-size: inherit; white-space: pre; }
 .play { display: grid; grid-template-columns: 290px minmax(0, 1fr); gap: 20px; align-items: start; background: var(--panel); border: 1px solid var(--line); border-radius: 10px; padding: 16px; }
 .controls { display: grid; gap: 12px; position: sticky; top: calc(env(safe-area-inset-top, 0px) + 12px); max-height: calc(100vh - 24px); overflow-y: auto; padding-right: 4px; }
@@ -259,6 +262,14 @@ const HOW_CSS = `
 .wrow .fld { flex: 1 1 150px; }
 .wrow .fld.grow { flex: 2 1 240px; }
 .readout { margin: 0; font-size: 1rem; }
+.assume td.desc { min-width: 16rem; }
+#codemap td.src, #codemap td.src * { white-space: nowrap; word-break: normal; overflow-wrap: normal; }
+#codemap td:nth-child(2) { min-width: 16rem; }
+.ibar { display: inline-block; width: 72px; height: 8px; margin-right: 10px; border-radius: 4px; background: var(--grid); vertical-align: middle; overflow: hidden; }
+.ibar i { display: block; height: 100%; border-radius: 4px; }
+table.ledger td .sub { display: block; color: var(--muted); font-size: 0.82rem; font-weight: 400; margin-top: 2px; }
+@media (max-width: 600px) { .ibar { display: none; } #w-wd table.ledger td .sub { display: none; } #w-wd table.ledger th, #w-wd table.ledger td { padding: 6px 4px; font-size: 0.82rem; letter-spacing: 0; } }
+.linkbtn { background: none; border: 0; padding: 0; font: inherit; color: var(--accent); text-decoration: underline; cursor: pointer; }
 .readout b { font-variant-numeric: tabular-nums; }
 table.ledger td:last-child, table.ledger th:last-child, td.num, th.num { text-align: right; font-variant-numeric: tabular-nums; white-space: nowrap; }
 table.ledger tr.sum td { font-weight: 700; border-top: 1px solid var(--line-strong); }
@@ -290,7 +301,8 @@ const JS = String.raw`
   var compact = function (n) {
     var a = Math.abs(n);
     if (a >= 1e6) return "$" + (n / 1e6).toFixed(a >= 1e7 ? 0 : 1).replace(/\.0$/, "") + "M";
-    if (a >= 1e3) return "$" + Math.round(n / 1e3) + "K";
+    if (a >= 1e4) return "$" + Math.round(n / 1e3) + "K";
+    if (a >= 1e3) return "$" + (n / 1e3).toFixed(1).replace(/\.0$/, "") + "K";
     return "$" + Math.round(n);
   };
   var pct = function (n, d) { return (Math.round(n * Math.pow(10, d || 0)) / Math.pow(10, d || 0)) + "%"; };
@@ -315,12 +327,13 @@ const JS = String.raw`
   }
   function hideTip() { tip.hidden = true; }
   function css(name) { return getComputedStyle(document.documentElement).getPropertyValue(name).trim(); }
+  // The top of an axis with four gridlines, each at a round figure.
   function niceMax(v) {
-    if (v <= 0) return 1;
-    var p = Math.pow(10, Math.floor(Math.log10(v)));
+    if (v <= 0) return 4;
+    var step = v / 4, p = Math.pow(10, Math.floor(Math.log10(step)));
     var steps = [1, 2, 2.5, 5, 10];
-    for (var i = 0; i < steps.length; i++) if (steps[i] * p >= v) return steps[i] * p;
-    return 10 * p;
+    for (var i = 0; i < steps.length; i++) if (steps[i] * p >= step) return 4 * steps[i] * p;
+    return 40 * p;
   }
   function frame(width, height, pad) { return { w: width, h: height, l: pad[3], r: pad[1], t: pad[0], b: pad[2], iw: width - pad[1] - pad[3], ih: height - pad[0] - pad[2] }; }
   // Charts are drawn at the width they occupy, so text is its real size at any width.
@@ -483,6 +496,7 @@ const JS = String.raw`
   function recompute() {
     run = E.simulate(state);
     tiles(); fan(); flows(); table(); yearWidget(); scenarios();
+    if ($("w-wd") && !$("w-wd").dataset.touched) wdFill();
     var changed = JSON.stringify(state) !== JSON.stringify(E.EXAMPLE_INPUTS);
     $("pg-flag").textContent = changed ? "Your figures, in this page only: nothing is saved or sent anywhere. The production engine recalculated." : "An example household, not anyone's real figures. Change anything; the production engine recalculates.";
   }
@@ -525,7 +539,11 @@ const JS = String.raw`
     var b = parseFloat($("ss-benefit").value) || 0, fra = parseFloat($("ss-fra").value) || 67, age = Number($("ss-age").value);
     $("ss-age-out").textContent = String(age);
     var v = E.adjustSSBenefit(b, fra, age);
-    $("ss-out").innerHTML = "Claiming at " + age + " pays <b>" + money(v) + "</b> a month, <b>" + pct((v / (b || 1)) * 100, 1) + "</b> of the full benefit.";
+    var be = E.calculateSSBreakEven(b, fra).filter(function (r) { return r.claimingAge === age; })[0];
+    var after = age === 62 ? " The earliest claim: every later age is measured against it."
+      : be && be.breakEvenVs62 ? " By <b>" + be.breakEvenVs62 + "</b>, waiting this long has paid as much in total as claiming at 62, and from then on it is ahead."
+      : " Waiting this long never catches up with claiming at 62 within the ages Analytics counts.";
+    $("ss-out").innerHTML = "Claiming at " + age + " pays <b>" + money(v) + "</b> a month, <b>" + pct((v / (b || 1)) * 100, 1) + "</b> of the full benefit." + (b > 0 ? after : "");
     var node = $("ss-plot"); node.textContent = "";
     var ages = [62, 63, 64, 65, 66, 67, 68, 69, 70], vals = ages.map(function (a) { return E.adjustSSBenefit(b, fra, a); });
     var W = widthOf(node, 640), f = frame(W, 200, [18, 10, 24, 52]), max = niceMax(Math.max.apply(null, vals.concat([1])));
@@ -536,7 +554,7 @@ const JS = String.raw`
       var cx = f.l + slot * i + slot / 2, y1 = f.t + f.ih - (vals[i] / max) * f.ih;
       el("rect", { x: cx - bw / 2, y: y1, width: bw, height: f.t + f.ih - y1, rx: 3, fill: css("--s1"), opacity: a === age ? 1 : 0.35 }, svg);
       var t = el("text", { x: cx, y: f.t + f.ih + 16, "text-anchor": "middle", class: "ax" }, svg); t.textContent = a;
-      if (a === age) { var l = el("text", { x: cx, y: y1 - 6, "text-anchor": "middle", class: "lbl" }, svg); l.textContent = compact(vals[i]); }
+      if (a === age) { var l = el("text", { x: cx, y: y1 - 6, "text-anchor": "middle", class: "lbl" }, svg); l.textContent = money(vals[i]); }
     });
   }
   if ($("w-ss")) {
@@ -555,7 +573,7 @@ const JS = String.raw`
     var marginal = E.getMarginalRate(income / level) * 100;
     var rows = [
       ["Provisional income", "other income + half of Social Security", money(o + s / 2)],
-      ["Taxable Social Security", "0%, up to 50%, up to 85% of benefits as provisional income passes " + money(32000) + " and " + money(44000), money(taxableSS)],
+      ["Taxable Social Security", "none, then up to " + HOW_FACTS["ss.taxMid"] + ", then up to " + HOW_FACTS["ss.taxMax"] + " of benefits, as provisional income passes " + HOW_FACTS["ss.taxFrom"] + " and " + HOW_FACTS["ss.tax85From"], money(taxableSS)],
       ["Income for tax", "tax-deferred withdrawals + taxable Social Security", money(income)],
       ["Standard deduction, inflated", money(E.DEFAULT_TAX_TABLE.standardDeduction) + " × " + level.toFixed(3), money(ded)],
       ["Federal tax", "today's brackets on the income deflated to today, then inflated back", money(t)],
@@ -631,15 +649,54 @@ const JS = String.raw`
     }, 250);
   }
 
+  // ---- withdrawal order -----------------------------------------------------
+  var WD = ["taxDeferredBalance", "taxFreeBalance", "taxableBalance", "annualExpenses", "annualSSIncome", "yearsInRetirement", "startAge"];
+  function wdFill() {
+    if (!$("w-wd")) return;
+    var v = E.withdrawalInputs(run || E.simulate(state));
+    WD.forEach(function (k) { $("wd-" + k).value = v[k]; });
+    $("wd-realReturnPct").value = Math.round(v.realReturnRate * 1000) / 10;
+    wd();
+  }
+  function wd() {
+    var p = {};
+    WD.forEach(function (k) { p[k] = Math.max(0, parseFloat($("wd-" + k).value) || 0); });
+    p.yearsInRetirement = Math.max(1, Math.min(60, Math.round(p.yearsInRetirement)));
+    p.startAge = Math.round(p.startAge);
+    p.realReturnRate = (parseFloat($("wd-realReturnPct").value) || 0) / 100;
+    var rows = E.calculateWithdrawalStrategies(p);
+    var top = function (key) { return Math.max.apply(null, rows.map(function (r) { return r[key]; }).concat([1])); };
+    var maxTax = top("totalTaxesPaid"), maxEnd = top("portfolioAtEnd");
+    var fmt = window.innerWidth < 600 ? compact : money;
+    var bar = function (v, max, color) { return "<span class=\"ibar\" aria-hidden=\"true\"><i style=\"width:" + Math.max(0, (v / max) * 100).toFixed(1) + "%;background:" + css(color) + "\"></i></span>"; };
+    var twins = [];
+    var body = rows.map(function (r, i) {
+      var twin = rows.filter(function (o, j) { return j < i && o.totalTaxesPaid === r.totalTaxesPaid && o.portfolioAtEnd === r.portfolioAtEnd; })[0];
+      if (twin) twins.push([twin.name, r.name]);
+      return "<tr><td><b>" + r.name + "</b><span class=\"sub\">" + r.description + (twin ? " · the same result as " + twin.name : "") + "</span></td><td class=\"num\">" + bar(r.totalTaxesPaid, maxTax, "--s2") + fmt(r.totalTaxesPaid) + "</td><td class=\"num\">" + bar(r.portfolioAtEnd, maxEnd, "--s1") + fmt(r.portfolioAtEnd) + "</td></tr>";
+    }).join("");
+    $("wd-table").innerHTML = "<thead><tr><th>Order</th><th class=\"num\">Tax paid</th><th class=\"num\">Left at end</th></tr></thead><tbody>" + body + "</tbody>";
+    var best = rows.slice().sort(function (a, b) { return a.totalTaxesPaid - b.totalTaxesPaid; })[0], base = rows[0];
+    var text = best.totalTaxesPaid < base.totalTaxesPaid
+      ? "<b>" + best.name + "</b> pays the least tax, " + money(base.totalTaxesPaid - best.totalTaxesPaid) + " less than " + base.name + "."
+      : base.name + " pays as little tax as any order.";
+    twins.forEach(function (t) { text += " <b>" + t[0] + "</b> and <b>" + t[1] + "</b> come out identical: taxable withdrawals carry no tax in this comparison and every pot earns the same return, so the order in which taxable and Roth money is spent cannot change the result (#73)."; });
+    $("wd-out").innerHTML = text;
+  }
+  if ($("w-wd")) {
+    $("w-wd").addEventListener("input", function () { $("w-wd").dataset.touched = "1"; wd(); });
+    $("wd-take").addEventListener("click", function () { delete $("w-wd").dataset.touched; wdFill(); });
+  }
+
   var lastWidth = window.innerWidth, resizeTimer = null;
   window.addEventListener("resize", function () {
     if (window.innerWidth === lastWidth) return;
     lastWidth = window.innerWidth; clearTimeout(resizeTimer);
-    resizeTimer = setTimeout(function () { if (run && $("pg-fan")) { fan(); flows(); } if ($("w-ss")) ss(); if ($("w-glide")) glide(); scenarios(); }, 150);
+    resizeTimer = setTimeout(function () { if (run && $("pg-fan")) { fan(); flows(); } if ($("w-ss")) ss(); if ($("w-glide")) glide(); if ($("w-wd")) wd(); scenarios(); }, 150);
   });
 
   if ($("pg-form")) recompute();
-  else if ($("w-year") || $("mc-plot")) { run = E.simulate(state); yearWidget(); scenarios(); }
+  else if ($("w-year") || $("mc-plot") || $("w-wd")) { run = E.simulate(state); yearWidget(); scenarios(); wdFill(); }
 
   // ---- code map filter --------------------------------------------------------
   var q = $("cm-q");

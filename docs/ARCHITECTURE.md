@@ -919,7 +919,7 @@ Choices that shaped the system, newest last. A record is never deleted; a later 
 - Decided: 2026-10-04
 - Context: The owner asked for a full account of how every figure is calculated, kept current. A written explanation of an engine drifts from it the first time the engine changes, and nobody notices until a figure disagrees.
 - Decision: `docs/HOW-IT-WORKS.md` explains each calculation; its quoted figures are filled from the code; its calculators run the production engine, bundled with esbuild from the released commit into the page. CI fails when a calculation function is missing from its code map or a pull request changes a calculation without it.
-- Consequences: The explanation and the app cannot quote different numbers. Writing it found six defects (#65 to #70). The page carries about 18 KB of engine code, and esbuild is now a development dependency.
+- Consequences: The explanation and the app cannot quote different numbers. Figures that live in page code rather than a function, such as the alert thresholds and the Analytics page's assumptions, are read from the source text, and one written in more than one place is quoted only while every copy agrees, so a half-made change fails the check. Writing it found eleven defects (#65 to #75). The page carries about 36 KB of production code, the engine and the calculators beside it, and esbuild is now a development dependency.
 - Evidence: `scripts/how-it-works/engine-entry.ts`, `scripts/how-it-works/bundle.ts`, `scripts/build-how-it-works.ts`
 
 ## Change log
