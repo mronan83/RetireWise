@@ -183,8 +183,13 @@ export function runDetailedProjection(params: {
   withdrawalRatePct?: number;
   withdrawalMethod?: "expense" | "rate" | "higher"; // how to determine withdrawal amount
   maxAnnualWithdrawal?: number; // cap on annual withdrawal (null/0 = unlimited)
-  annualSSIncome: number;
-  ssStartYear: number; // year when SS starts (0-indexed from now)
+  /**
+   * Each person's Social Security: a benefit a year in today's dollars, paid
+   * from the year (0-indexed from now) that person claims it. Kept per person
+   * because partners claim at different ages: one combined figure started at
+   * the first claim paid a later, larger benefit years before it was claimed.
+   */
+  socialSecurity: { annual: number; startYear: number }[];
   glidePath?: GlidePathConfig; // optional glide path rebalancing
   catchUpEnabled?: boolean; // whether to apply 50+ and 60-63 catch-up IRS limits (default true)
   taxTable?: TaxTable; // federal brackets and standard deduction (default: the built-in year)
@@ -207,8 +212,7 @@ export function runDetailedProjection(params: {
     withdrawalRatePct,
     withdrawalMethod = "expense",
     maxAnnualWithdrawal,
-    annualSSIncome,
-    ssStartYear,
+    socialSecurity,
     glidePath,
     catchUpEnabled = true,
     taxTable = DEFAULT_TAX_TABLE,
@@ -294,8 +298,7 @@ export function runDetailedProjection(params: {
 
   for (let y = 0; y < totalYears; y++) {
     const isRetirement = y >= yearsToRetirement;
-    const hasSS = y >= ssStartYear;
-    const yearSS = hasSS ? annualSSIncome : 0;
+    const yearSS = socialSecurity.reduce((sum, b) => sum + (y >= b.startYear ? b.annual : 0), 0);
 
     years.push(y);
     ages.push(startAge + y + 1);
@@ -345,8 +348,19 @@ export function runDetailedProjection(params: {
               employer += (matchablePct / 100) * yearSalary * acct.employerMatchRate;
             }
           } else {
-            // Fixed amount + $ increase per year
+            // Fixed amount + $ increase per year. annualContribution is the
+            // employee's own deferral only; the employer's money is worked out
+            // here, as it is for a percentage, so it is neither counted twice
+            // nor capped with the deferral.
             employee = acct.annualContribution + (acct.annualEscalation > 0 ? acct.annualEscalation * y : 0);
+
+            // A match is written against the deferral as a share of pay, even
+            // when the employee elects a dollar amount.
+            if (acct.employerMatchRate > 0 && acct.employerMatchMaxPct > 0 && yearSalary > 0) {
+              const deferredPct = (employee / yearSalary) * 100;
+              const matchablePct = Math.min(deferredPct, acct.employerMatchMaxPct);
+              employer += (matchablePct / 100) * yearSalary * acct.employerMatchRate;
+            }
           }
 
           // A pause stops the employee's money, and with it the match that is

@@ -1296,7 +1296,7 @@ function ScenarioAnalysis(props: ScenarioAnalysisProps) {
     retirementYearsOverride?: number;
     returnPctOverride?: number;
     inflationPctOverride?: number;
-    ssIncomeOverride?: number;
+    ssMultiplier?: number;
     contributionsMultiplier?: number;
   }) {
     const base = props.baseParams;
@@ -1312,7 +1312,7 @@ function ScenarioAnalysis(props: ScenarioAnalysisProps) {
       yearsInRetirement: overrides.retirementYearsOverride ?? base.yearsInRetirement,
       returnPct: overrides.returnPctOverride ?? base.returnPct,
       inflationPct: overrides.inflationPctOverride ?? base.inflationPct,
-      annualSSIncome: overrides.ssIncomeOverride ?? base.annualSSIncome,
+      socialSecurity: base.socialSecurity.map((b) => ({ ...b, annual: b.annual * (overrides.ssMultiplier ?? 1) })),
     };
 
     const proj = runDetailedProjection(params);
@@ -1352,7 +1352,7 @@ function ScenarioAnalysis(props: ScenarioAnalysisProps) {
         result = runProjection({ inflationPctOverride: value });
         break;
       case "reduced_ss":
-        result = runProjection({ ssIncomeOverride: props.baseParams.annualSSIncome * (1 - value / 100) });
+        result = runProjection({ ssMultiplier: 1 - value / 100 });
         break;
       default:
         return;

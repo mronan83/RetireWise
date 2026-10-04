@@ -59,8 +59,7 @@ function main() {
     returnPct: 0,
     inflationPct: 0,
     annualExpenses: 80_000,
-    annualSSIncome: 0,
-    ssStartYear: 99,
+    socialSecurity: [],
     withdrawalMethod: "expense" as const,
   };
   const traditional = runDetailedProjection({ ...base, accounts: [account("401k", "401k", "tax_deferred", 2_000_000)] });
@@ -98,7 +97,7 @@ function main() {
   // the RMD. It must leave the 401(k) and nothing else.
   const rmdBase = {
     ...base, startAge: 74, yearsInRetirement: 1, annualExpenses: 50_000,
-    annualSSIncome: 50_000, ssStartYear: 0,
+    socialSecurity: [{ annual: 50_000, startYear: 0 }],
   };
   const rmdHousehold = runDetailedProjection({
     ...rmdBase,

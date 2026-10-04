@@ -130,7 +130,8 @@ export const runRetirementProjectionTool = tool({
           selfMonthlyAtClaimingAge: Math.round(inputs.selfSSMonthly),
           spouseClaimingAge: setup.household.spouseAge ? controls.spouseSSAge : null,
           spouseMonthlyAtClaimingAge: Math.round(inputs.spouseSSMonthly),
-          startsInYearsFromNow: inputs.ssStartYear,
+          selfStartsInYearsFromNow: inputs.selfSSStartYear,
+          spouseStartsInYearsFromNow: setup.household.spouseAge ? inputs.spouseSSStartYear : null,
         },
         annualContributions: Math.round(setup.household.annualContributions),
         glidePath: gp

@@ -1,4 +1,4 @@
-import { totalAnnual, fundedFractionOfYear } from "@/lib/utils/contributions";
+import { employeeAnnual, fundedFractionOfYear } from "@/lib/utils/contributions";
 import type { accounts, contributions } from "@/lib/db/schema";
 import type { SalaryGrowthConfig } from "@/lib/utils/salary-growth";
 
@@ -57,27 +57,35 @@ export function buildProjectionAccounts(input: {
       const value = acctHoldings.reduce((s, h) => s + Number(h.currentValue), 0);
 
       // Match contributions: prefer the direct accountId link, fall back to
-      // owner + type. Retired entries are excluded by totalAnnual, so a
-      // contribution left over from a previous job stops inflating this
-      // account.
+      // owner + type. Only entries still in force count, so a contribution
+      // left over from a previous job neither adds to this account nor, by
+      // being listed first, decides how it is funded.
       const matchingContribs = contribs.filter((c) =>
         c.accountId ? c.accountId === a.id : c.owner === a.owner && c.accountType === a.accountType
       );
+      const active = matchingContribs.filter((c) => c.isActive);
+
+      // The employee's own deferral for a year, unpaused and before the IRS
+      // cap. The engine adds the employer's money, applies the cap to the
+      // deferral alone, and applies pauses year by year through
+      // contributionFactors. Today's total (employer money included, and zero
+      // while paused) counted the employer's money twice and kept a paused
+      // fixed contribution at zero for good.
       const acctAnnualContribution = a.isActivelyContributing
-        ? totalAnnual(matchingContribs, salaryFor).total
+        ? active.reduce((sum, c) => sum + employeeAnnual(c, salaryFor(c)), 0)
         : 0;
 
-      const escalationContrib = matchingContribs.find((c) => c.hasAnnualEscalation);
+      const escalationContrib = active.find((c) => c.hasAnnualEscalation);
       const annualEscalation = escalationContrib
         ? Number(escalationContrib.annualEscalationAmount || 0)
         : 0;
       const maxAnnual = escalationContrib?.maxAnnualContribution
         ? Number(escalationContrib.maxAnnualContribution)
         : 0;
-      const contribMethod = matchingContribs[0]?.contributionMethod || "fixed_amount";
+      const mainContrib = active[0];
+      const contribMethod = mainContrib?.contributionMethod || "fixed_amount";
       const salary = a.owner === "self" ? selfSalary : spouseSalary;
 
-      const mainContrib = matchingContribs.filter((c) => c.isActive)[0];
       const contribPct =
         mainContrib?.contributionMethod === "percent_of_salary"
           ? Number(mainContrib.contributionPercent || 0)
@@ -115,9 +123,7 @@ export function buildProjectionAccounts(input: {
         // account, the least-funded of them sets the year — a pause on the
         // main deferral is the thing that actually stops the money.
         contributionFactors: Array.from({ length: PROJECTION_YEARS }, (_, y) =>
-          matchingContribs
-            .filter((c) => c.isActive)
-            .reduce((lowest, c) => Math.min(lowest, fundedFractionOfYear(c, y)), 1)
+          active.reduce((lowest, c) => Math.min(lowest, fundedFractionOfYear(c, y)), 1)
         ),
         salary,
         salaryGrowth: a.owner === "self" ? selfSalaryGrowth : spouseSalaryGrowth,
@@ -127,5 +133,12 @@ export function buildProjectionAccounts(input: {
           (a.owner === "spouse" ? (spouseCurrentAge ?? selfCurrentAge) : selfCurrentAge) ?? undefined,
       };
     })
-    .filter((a) => a.value > 0 || a.annualContribution > 0);
+    // Keep an account that holds money or will be paid into, including one
+    // whose only contribution is paused today and resumes later.
+    .filter(
+      (a) =>
+        a.value > 0 ||
+        (a.isActivelyContributing &&
+          (a.annualContribution > 0 || a.contributionPct > 0 || a.employerNonElectivePct > 0 || a.employerNonElectiveAmount > 0))
+    );
 }

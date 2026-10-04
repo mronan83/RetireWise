@@ -67,6 +67,31 @@ function main() {
   const early = projectionInputs(household, saved);
   check("claiming at 62 pays 70% of the full benefit, by the SSA's tiered rule", near(early.selfSSMonthly, 2_100, 0.01), String(early.selfSSMonthly));
   check("and Social Security starts at 62, seven years from now", early.ssStartYear === 7, String(early.ssStartYear));
+
+  // ---- a couple who claim at different ages (#65) -------------------------
+  // One combined benefit, started at the first claim, paid the partner's
+  // larger age-70 benefit eight years before it was claimed.
+  const couple: ProjectionHousehold = { ...household, spouseAge: 55, spouseSSAtFRA: 2_000 };
+  const staggered = projectionInputs(couple, controlsFromSaved(couple, { ssClaimAgeSelf: 62, ssClaimAgeSpouse: 70 }));
+  const ss = runDetailedProjection(staggered.params).ssIncome;
+  const firstOnly = 12 * adjustSSBenefit(3_000, 67, 62);
+  const bothClaimed = firstOnly + 12 * adjustSSBenefit(2_000, 67, 70);
+  check("a couple's Social Security: nothing before the first claim", ss[6] === 0, String(ss[6]));
+  check(
+    "from 62 only the partner who claimed at 62 is paid",
+    near(ss[7], firstOnly) && near(ss[14], firstOnly),
+    `${Math.round(ss[7])} and ${Math.round(ss[14])}, expected ${Math.round(firstOnly)}`
+  );
+  check(
+    "and the other partner's delayed benefit starts when they claim at 70, not before",
+    near(ss[15], bothClaimed),
+    `${Math.round(ss[15])}, expected ${Math.round(bothClaimed)}`
+  );
+  check(
+    "each partner's claim is reported with its own start",
+    staggered.selfSSStartYear === 7 && staggered.spouseSSStartYear === 15 && staggered.ssStartYear === 7,
+    JSON.stringify({ self: staggered.selfSSStartYear, spouse: staggered.spouseSSStartYear })
+  );
   check(
     "the engine gets the saved horizon, spending and market",
     early.params.yearsInRetirement === 25 && early.params.annualExpenses === 96_000 && early.params.returnPct === early.scenario.returnPct,
@@ -179,7 +204,7 @@ function main() {
       selfCurrentAge: 45, spouseCurrentAge: null, selfYearsToRetirement: 20, spouseYearsToRetirement: 20,
     }),
     totalAnnualContributions: shared.totalAnnualContributions, yearsToRetirement: 20, yearsInRetirement: 1,
-    startAge: 45, returnPct: shared.returnPct, inflationPct: 3, annualExpenses: 0, annualSSIncome: 0, ssStartYear: 999,
+    startAge: 45, returnPct: shared.returnPct, inflationPct: 3, annualExpenses: 0, socialSecurity: [],
   });
   check(
     "the analytics balances at retirement are the engine's",
