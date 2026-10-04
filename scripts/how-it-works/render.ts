@@ -16,6 +16,12 @@ export type HowRelease = {
   firstPublication: boolean;
   changes: string[];
   preview?: boolean;
+  /**
+   * Set when the page is published ahead of a release: the commit live in
+   * production, whose app code is identical to sha's, so the calculators
+   * still run exactly what is live.
+   */
+  liveSha?: string;
 };
 
 const money = (n: number) => `$${Math.round(n).toLocaleString("en-US")}`;
@@ -178,7 +184,7 @@ ${FONTS}
 <header class="hero">
   <p class="eyebrow">RetireWise · How it works</p>
   <h1>How RetireWise works</h1>
-  <p class="meta">${r.preview ? `<b>Preview, not released.</b> Built from ${commit(r.sha)}` : `As live in production at ${commit(r.sha)}`} · ${esc(r.date)} · last reviewed ${esc(h.doc.lastReviewed)}</p>
+  <p class="meta">${r.liveSha ? `Calculators as live in production at ${commit(r.liveSha)}; explanation from ${commit(r.sha)}, ahead of the next release` : r.preview ? `<b>Preview, not released.</b> Built from ${commit(r.sha)}` : `As live in production at ${commit(r.sha)}`} · ${esc(r.date)} · last reviewed ${esc(h.doc.lastReviewed)}</p>
   ${renderBlocks(h.doc.intro, inline, "lede")}
   <div class="stats">${stat(calcCount, "calculations explained")}${stat(fnCount, "functions mapped")}${stat(values["mc.simulations"], "simulated markets a run")}${stat(values["scenario.count"], "market scenarios")}${stat(`${(engineJs.length / 1024).toFixed(0)}<small> KB</small>`, "of production code on this page")}</div>
   <div class="release" role="status"><p class="eyebrow">This release</p>${
@@ -202,7 +208,7 @@ ${sectionsHtml}
 </section>
 </main>
 </div>
-<p class="foot">${r.preview ? "A preview for review. The published page is built only after a successful <code>pnpm deploy:prod</code>, so it describes what is live." : "Published after a successful <code>pnpm deploy:prod</code>, so this page describes what is live."} Built by <code>scripts/build-how-it-works.ts</code>, which also fails CI when the document and the code disagree: <code>pnpm how:check</code>.</p>
+<p class="foot">${r.liveSha ? `Published ahead of a release at the owner's request. No app code differs between ${commit(r.sha)} and ${commit(r.liveSha)}, which is in production, so the calculators run exactly what is live. From the next release on, the page is rebuilt and republished after each successful <code>pnpm deploy:prod</code>.` : r.preview ? "A preview for review. The published page is built only after a successful <code>pnpm deploy:prod</code>, so it describes what is live." : "Published after a successful <code>pnpm deploy:prod</code>, so this page describes what is live."} Built by <code>scripts/build-how-it-works.ts</code>, which also fails CI when the document and the code disagree: <code>pnpm how:check</code>.</p>
 </div>
 <div class="tip" id="tip" role="status" hidden></div>
 <script>${engineJs.replace(/<\/script/gi, "<\\/script")}</script>

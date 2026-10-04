@@ -31,12 +31,21 @@ async function build(root: string, release: HowRelease, out: string) {
 /**
  * sha: build from that commit. Without one, build a preview from the working
  * tree, uncommitted edits included. root: an existing snapshot of sha.
+ * liveSha: publish ahead of a release. Allowed only when sha's app code is
+ * identical to that commit's, the one in production, so the calculators on
+ * the page still run exactly what is live.
  */
-export async function buildHowPage(opts: { sha?: string; previousSha?: string; out?: string; preview?: boolean; root?: string }) {
+export async function buildHowPage(opts: { sha?: string; previousSha?: string; out?: string; preview?: boolean; root?: string; liveSha?: string }) {
   const out = resolve(opts.out ?? HOW_OUT);
   const date = new Date().toISOString().slice(0, 10);
   if (!opts.sha) return build(process.cwd(), { sha: git("rev-parse", "HEAD"), date, firstPublication: true, changes: [], preview: true }, out);
   const sha = git("rev-parse", `${opts.sha}^{commit}`);
   const release: HowRelease = { sha, date, preview: opts.preview, ...releaseChanges(DOC_FILE, sha, opts.previousSha) };
+  if (opts.liveSha) {
+    const live = git("rev-parse", `${opts.liveSha}^{commit}`);
+    const differs = git("diff", "--name-only", live, sha, "--", "src");
+    if (differs) throw new Error(`App code differs between ${live.slice(0, 7)} and ${sha.slice(0, 7)}, so the calculators would not be what is live: ${differs.split("\n").length} file(s) under src/.`);
+    Object.assign(release, { liveSha: live, preview: false });
+  }
   return opts.root ? build(opts.root, release, out) : withSnapshot(sha, (root) => build(root, release, out));
 }

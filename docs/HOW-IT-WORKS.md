@@ -756,3 +756,4 @@ Every function exported from a calculation module, and what it does. `pnpm how:c
 ## Change log
 
 - 2026-10-04 · First version · Claude
+- 2026-10-04 · Published as the How RetireWise Works artifact ahead of the next release, at the owner's request; its calculators run the code in production at 3d88a37 · Claude

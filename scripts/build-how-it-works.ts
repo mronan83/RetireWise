@@ -10,9 +10,11 @@
  *       engine and runs the example household, so a page that would not work
  *       fails here first. Runs in CI.
  *
- *   pnpm how:build [--sha <commit>] [--previous <commit>] [--out <path>]
+ *   pnpm how:build [--sha <commit>] [--previous <commit>] [--out <path>] [--live <commit>]
  *       Write the page. Without --sha it is a preview of the working tree.
  *       The published page is built by deploy:prod after a successful release.
+ *       --live names the commit in production, to publish ahead of a release;
+ *       it refuses unless the app code at --sha is identical to it.
  *
  *   tsx scripts/build-how-it-works.ts --require-update <base>
  *       For a pull request: fail if it changes a calculation module or the
@@ -69,7 +71,9 @@ async function main() {
         );
     }
   } else {
-    const { out, problems } = await buildHowPage({ sha: option("--sha"), previousSha: option("--previous"), out: option("--out"), preview: true });
+    const live = option("--live");
+    if (live && !option("--sha")) fail("--live needs --sha: the commit whose explanation is published.");
+    const { out, problems } = await buildHowPage({ sha: option("--sha"), previousSha: option("--previous"), out: option("--out"), preview: !live, liveSha: live });
     console.log(`✓ Wrote ${out}`);
     if (problems.length) console.warn(`  ⚠ ${problems.length} problem(s); run pnpm how:check.`);
   }

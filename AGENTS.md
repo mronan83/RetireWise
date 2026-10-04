@@ -43,7 +43,7 @@ The RetireWise Backlog page is generated from it and published **only after a su
 - Never type a figure the code holds (a rate, limit, default or result). Write `{{key}}` and let the page fill it from the code; `pnpm how:check` lists the keys and fails on an unknown one.
 - `pnpm how:check` runs in CI and fails when a calculation module or exported function is missing from the code map, a "Code:" line names a function that is not where it says, a "Checked by:" names a check CI does not run, or the engine or example household no longer runs. Fix the document or the code, never the check.
 - A PR that changes a calculation module or `scripts/how-it-works/engine-entry.ts` must change `docs/HOW-IT-WORKS.md`, unless a commit message says `How it works: unchanged — <why>`.
-- The page is published only after a successful `pnpm deploy:prod`, beside the others. `deploy:prod` writes `.pages/how-it-works.html`; publish it to the existing How RetireWise Works artifact (create it only on its first release).
+- The page is published after a successful `pnpm deploy:prod`, beside the others. `deploy:prod` writes `.pages/how-it-works.html`; publish it to the existing How RetireWise Works artifact (find it by that title in the Artifact list). The one exception is the owner asking for it ahead of a release: `pnpm how:build --sha <commit> --live <commit in production>` builds it, and refuses unless the app code is identical to production's, so the calculators still run what is live.
 
 # Replies to the owner
 
