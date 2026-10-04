@@ -35,8 +35,18 @@ The RetireWise Backlog page is generated from it and published **only after a su
 - A defect found while assessing becomes a gap and a backlog item in the same PR, as the traceability rules require.
 - The pages are published only after a successful `pnpm deploy:prod`, beside the backlog and traceability pages. `deploy:prod` writes `.pages/architecture.html` and `.pages/data-model.html`; publish them to the existing RetireWise Technical Architecture and RetireWise Data Model artifacts (create each only on its first release).
 
+# How RetireWise works
+
+`docs/HOW-IT-WORKS.md` explains every calculation RetireWise performs: the projection, Social Security, taxes, required distributions, withdrawals, the odds, the analytics and the everyday figures. Its page runs the production engine, bundled from the released commit, so readers can change the inputs and watch the real calculation. Claude keeps it accurate.
+
+- Assess it against every change that touches a calculation. Update the explanation and formula the change affects, the code map row for any function added, renamed or removed, and add a change-log line.
+- Never type a figure the code holds (a rate, limit, default or result). Write `{{key}}` and let the page fill it from the code; `pnpm how:check` lists the keys and fails on an unknown one.
+- `pnpm how:check` runs in CI and fails when a calculation module or exported function is missing from the code map, a "Code:" line names a function that is not where it says, a "Checked by:" names a check CI does not run, or the engine or example household no longer runs. Fix the document or the code, never the check.
+- A PR that changes a calculation module or `scripts/how-it-works/engine-entry.ts` must change `docs/HOW-IT-WORKS.md`, unless a commit message says `How it works: unchanged — <why>`.
+- The page is published after a successful `pnpm deploy:prod`, beside the others. `deploy:prod` writes `.pages/how-it-works.html`; publish it to the existing How RetireWise Works artifact (find it by that title in the Artifact list). The one exception is the owner asking for it ahead of a release: `pnpm how:build --sha <commit> --live <commit in production>` builds it, and refuses unless the app code is identical to production's, so the calculators still run what is live.
+
 # Replies to the owner
 
-Every reply that reports a change, fix or enhancement includes a **Living documents** section, placed just before **Your move**, with one line for each of Requirements, Backlog, Architecture and Data model. Each line says what was revised, or "assessed, unchanged" and why. Say also whether the published pages are current or wait on the next release.
+Every reply that reports a change, fix or enhancement includes a **Living documents** section, placed just before **Your move**, with one line for each of Requirements, Backlog, Architecture, Data model and How it works. Each line says what was revised, or "assessed, unchanged" and why. Say also whether the published pages are current or wait on the next release.
 
 End every reply with a section headed **Your move** that lists only what the owner alone has to do: decisions, approvals ("merge", "deploy", a go-ahead), and actions in accounts Claude cannot reach. For each, say exactly what to do, where, and roughly how long it takes, most urgent first. If there is nothing, write "Nothing needed from you." Keep everything else above that section.

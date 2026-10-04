@@ -1,6 +1,6 @@
 # RetireWise technical architecture
 
-Last reviewed: 2026-10-03
+Last reviewed: 2026-10-04
 
 RetireWise is a retirement planner for one household at a time, used by its owner, family and friends. It is one Next.js application on Vercel, backed by one Supabase project for its Postgres database and its sign-in. Plaid brings in bank and brokerage data, Yahoo Finance supplies prices, and each household's own Anthropic, Google or OpenAI key answers questions about its plan.
 
@@ -76,9 +76,9 @@ Merging does not deploy. Production moves only when the owner asks and `pnpm dep
 
 ### Documents that make claims are checked in CI
 
-- Evidence: `scripts/build-backlog.ts`, `scripts/build-traceability.ts`, `scripts/build-architecture.ts`, `scripts/build-data-model.ts`, `scripts/test-privacy-page.ts`
+- Evidence: `scripts/build-backlog.ts`, `scripts/build-traceability.ts`, `scripts/build-architecture.ts`, `scripts/build-data-model.ts`, `scripts/build-how-it-works.ts`, `scripts/test-privacy-page.ts`
 
-The backlog, the requirements trace, this document, the data model and the privacy page are all checked against the code in CI. A pull request that changes what they describe has to change them too, or say in a commit message why it does not. Their pages are published only after a release, so they describe what is live.
+The backlog, the requirements trace, this document, the data model, the explanation of every calculation and the privacy page are all checked against the code in CI. A pull request that changes what they describe has to change them too, or say in a commit message why it does not. Their pages are published only after a release, so they describe what is live.
 
 ## System context
 
@@ -516,10 +516,10 @@ Environment variables, by name only. Values live in Vercel and in each developer
 
 ## Delivery, quality and operations
 
-- **CI.** `.github/workflows/ci.yml` runs on every push and pull request in two jobs. "Lint and types" runs lint, the type check, the static guards (tenant scope, protected routes), the document checks (backlog, requirements, architecture, data model, each with a rule that a pull request updates them) and every check of pure logic. "Mobile layout" starts Postgres, migrates and seeds it, runs the database checks (isolation, invites, export and erasure, onboarding), builds the app and runs the browser tests on three phones.
+- **CI.** `.github/workflows/ci.yml` runs on every push and pull request in two jobs. "Lint and types" runs lint, the type check, the static guards (tenant scope, protected routes), the document checks (backlog, requirements, architecture, data model, how it works, each with a rule that a pull request updates them) and every check of pure logic. "Mobile layout" starts Postgres, migrates and seeds it, runs the database checks (isolation, invites, export and erasure, onboarding), builds the app and runs the browser tests on three phones.
 - **Branch protection.** None on main, so a direct push skips CI (#16). A release still refuses a commit whose CI is not green.
 - **Release.** `scripts/deploy-production.ts` and `scripts/lib/release.ts`, as in the release flow above. Rolling back is a release of an older commit, which rebuilds it (#5), and nothing shows which commit is live (#4).
-- **Published pages.** After a successful release, `pnpm deploy:prod` builds the backlog, requirements trace, technical architecture and data model pages from the released commit, and Claude publishes them to their fixed addresses.
+- **Published pages.** After a successful release, `pnpm deploy:prod` builds the backlog, requirements trace, technical architecture, data model and How RetireWise Works pages from the released commit, and Claude publishes them to their fixed addresses. The last of these bundles the projection engine with esbuild, a development dependency, so its calculators run the released code in the reader's browser.
 - **Health.** `/api/health` checks the database and reports whether sign-in is configured; `/api/health/freshness` fails when a scheduled job has stopped or data has gone stale. Nothing outside calls either (#2), and errors go only to Vercel's short-lived logs (#8).
 - **Runbooks.** `docs/disaster-recovery.md` (daily backups, a four-hour recovery target, never rehearsed: #17), `docs/incident-response.md`, `docs/data-retention.md` and `docs/annual-tax-update.md`.
 
@@ -649,10 +649,17 @@ Releases run from a Claude session with a broad token, and main has no branch pr
 
 ### Planning figures can be out of date or inconsistent
 
-- Backlog: #31, #56, #61
+- Backlog: #31, #56, #61, #70
 - Severity: Medium
 
-Contribution limits are fixed for 2025, the tax figures predate the July 2025 law, and the projection ignores the yearly tax table the analytics read.
+Contribution limits are fixed for 2025, the tax figures predate the July 2025 law, the projection ignores the yearly tax table the analytics read, and required distributions past 95 follow a formula steeper than the IRS table.
+
+### The projection gets some households' inputs wrong
+
+- Backlog: #65, #68, #69
+- Severity: Medium
+
+A couple's Social Security starts with the first claim, some contribution records are counted twice or not at all, and three what-if scenarios miss what they change. Each overstates or misstates the odds for the households it touches; the engine's own rules are otherwise tested.
 
 ### Imports and bank connections can lose, duplicate or strand data
 
@@ -906,6 +913,16 @@ Choices that shaped the system, newest last. A record is never deleted; a later 
 - Consequences: A new dependency, route group, module, table or index has to be explained before it merges. The old data-flow document was folded into the key flows here.
 - Evidence: `scripts/build-architecture.ts`, `scripts/build-data-model.ts`, `scripts/architecture/model.ts`, `scripts/data-model/model.ts`
 
+### ADR-027. Explain the calculations by running them
+
+- Status: Accepted
+- Decided: 2026-10-04
+- Context: The owner asked for a full account of how every figure is calculated, kept current. A written explanation of an engine drifts from it the first time the engine changes, and nobody notices until a figure disagrees.
+- Decision: `docs/HOW-IT-WORKS.md` explains each calculation; its quoted figures are filled from the code; its calculators run the production engine, bundled with esbuild from the released commit into the page. CI fails when a calculation function is missing from its code map or a pull request changes a calculation without it. It is published after each release; it may go out ahead of one only at the owner's request, and only when the app code is identical to production's (`pnpm how:build --live`), so its calculators never run code that is not live.
+- Consequences: The explanation and the app cannot quote different numbers. Figures that live in page code rather than a function, such as the alert thresholds and the Analytics page's assumptions, are read from the source text, and one written in more than one place is quoted only while every copy agrees, so a half-made change fails the check. Writing it found eleven defects (#65 to #75). The page carries about 36 KB of production code, the engine and the calculators beside it, and esbuild is now a development dependency.
+- Evidence: `scripts/how-it-works/engine-entry.ts`, `scripts/how-it-works/bundle.ts`, `scripts/build-how-it-works.ts`
+
 ## Change log
 
 - 2026-10-03 · Rewritten from the code: principles, system context, frontend, identity and households, server logic, nine key flows, environments, delivery, quality attributes, thirteen risks and twenty-six decision records. The inventory is generated, `pnpm arch:check` keeps the two in step, and the stale data-flow document is replaced by the key flows · Claude
+- 2026-10-04 · ADR-027: the calculations are explained in a living page that runs the production engine; a fourteenth risk for the projection defects that page found (#65, #68, #69), and #70 added to the planning-figures risk · Claude

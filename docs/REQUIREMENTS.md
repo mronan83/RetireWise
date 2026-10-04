@@ -175,6 +175,7 @@ Owner is self, spouse or joint. Tax treatment decides which analyses apply (FR-A
 - Source: `docs/USER-GUIDE.md:35`; `docs/USER-GUIDE.md:113`
 - Features: F-09, F-11
 - Backlog: #11, #13, #14
+- Gap: GAP-45
 
 ### FR-ACC-03. Link banks, cards and loans so balances arrive automatically
 
@@ -213,10 +214,11 @@ Backoff is 15 minutes doubling to a 12-hour cap; eight failures in a row, or an 
 ### FR-ACC-07. Each account shows its value, gain, period returns and how fresh its data is
 
 - Priority: Must
-- Status: Verified
+- Status: Partial
 - Source: `docs/USER-GUIDE.md:38`
 - Features: F-14
 - Verified by: `scripts/test-performance.ts`, `scripts/test-cost-basis.ts`, `scripts/test-freshness.ts`
+- Gap: GAP-42
 
 ### FR-ACC-08. Each account page shows and manages its own contributions and holdings
 
@@ -370,22 +372,24 @@ A debt secured against an asset replaces the loan typed onto that asset; it is n
 - Source: `docs/USER-GUIDE.md:120`
 - Features: F-32
 - Verified by: `scripts/test-analytics.ts`
-- Gap: GAP-04
+- Gap: GAP-04, GAP-39
 
 ### FR-PLAN-03. Record Social Security for both partners, with claiming age and cost-of-living adjustment
 
 - Priority: Must
-- Status: Implemented
+- Status: Partial
 - Source: `src/app/(dashboard)/settings/social-security-form.tsx`
 - Features: F-33
+- Gap: GAP-38
 
 ### FR-PLAN-04. A year-by-year retirement projection with controls that persist
 
 - Priority: Must
-- Status: Verified
+- Status: Partial
 - Source: `docs/USER-GUIDE.md:66`
 - Features: F-34
 - Verified by: `scripts/test-analytics.ts`, `scripts/test-projection-tax.ts`, `scripts/test-one-engine.ts`
+- Gap: GAP-36, GAP-37
 
 Spending is inflated from today, not from the year retirement starts. Withdrawals never fall below the required minimum distribution. Every screen and the assistant use this one tested engine, including for the odds that savings last (Q9).
 
@@ -402,9 +406,10 @@ The odds are the tested engine itself run against 500 simulated markets: one ret
 ### FR-PLAN-06. Compare what-if scenarios side by side
 
 - Priority: Should
-- Status: Implemented
+- Status: Partial
 - Source: `docs/USER-GUIDE.md:73`
 - Features: F-35
+- Gap: GAP-40
 
 The six scenarios are a 30% crash, retiring five years earlier, saving 50% more, a 4% return, 5% inflation, and Social Security cut by 25%.
 
@@ -413,10 +418,11 @@ Each scenario is the page's own engine inputs with one thing changed, run agains
 ### FR-PLAN-07. Required minimum distributions are computed correctly, starting at 73
 
 - Priority: Must
-- Status: Verified
+- Status: Partial
 - Source: `.github/workflows/ci.yml` (RMD check)
 - Features: F-37
 - Verified by: `scripts/test-rmd.ts`
+- Gap: GAP-41
 
 Headline figures read the first row aged 73 or over, not the retirement-age row. The rule that RMDs start at 75 for people born in 1960 or later is not modelled; see Q9.
 
@@ -458,10 +464,11 @@ Not modelled: state tax, capital gains on taxable-account withdrawals (treated a
 ### FR-ANA-01. Nine analyses: RMD, tax, Roth conversion ladder, Social Security break-even, catch-up, income replacement, fees, sequence risk, healthcare
 
 - Priority: Must
-- Status: Verified
+- Status: Partial
 - Source: `src/app/(dashboard)/analytics/analytics-dashboard.tsx`
 - Features: F-37
 - Verified by: `scripts/test-analytics.ts`, `scripts/test-rmd.ts`
+- Gap: GAP-43, GAP-44
 
 ### FR-ANA-02. One-click analysis prompts, offered only where they apply
 
@@ -514,10 +521,11 @@ The provider is Claude, Gemini or OpenAI. A missing key is an error, never a sil
 ### FR-AI-04. The assistant never states a figure the data does not support, and agrees with the screens
 
 - Priority: Must
-- Status: Verified
+- Status: Partial
 - Source: `.github/workflows/ci.yml` (dividend check)
 - Features: F-39, F-19
 - Verified by: `scripts/test-dividends.ts`, `scripts/test-one-engine.ts`
+- Gap: GAP-43
 
 The assistant's projection is the Projections page's: it builds its inputs with the same functions from the controls last saved there (`src/lib/projections/household.ts`, `src/lib/projections/settings.ts`), and runs the same engine against the same markets. Its analytics tool starts from the Analytics page's own balances at retirement (`src/lib/projections/at-retirement.ts`). Its withdrawal-order comparison is the one calculation outside the engine (Q10).
 
@@ -596,18 +604,20 @@ Leaving, or being removed, deletes every row the member added and disconnects th
 ### FR-ONB-03. Alerts for allocation drift, large daily moves and concentration, each dismissible
 
 - Priority: Should
-- Status: Implemented
+- Status: Partial
 - Source: `docs/USER-GUIDE.md:149`
 - Features: F-29
+- Gap: GAP-45
 
 The thresholds are drift above 5%, a daily move above 2% and a holding above 25% of the portfolio.
 
 ### FR-ONB-04. The dashboard summarises the household: totals, allocation, performance, goals, accounts and holdings
 
 - Priority: Must
-- Status: Implemented
+- Status: Partial
 - Source: `docs/USER-GUIDE.md:21`
 - Features: F-28
+- Gap: GAP-45
 
 ### FR-BIL-01. Every household gets the full product while billing is off, and a paid plan can be switched on by configuration
 
@@ -949,6 +959,16 @@ The technical architecture and data model are held to a stricter rule, NFR-DOC-0
 
 CI fails when `docs/ARCHITECTURE.md` stops naming a dependency, environment variable, scheduled job, CI job, API group or module the code has, or when `docs/DATA-MODEL.md` leaves a table, column note or enum unexplained, or a household table without row-level security. A pull request that reshapes the system or changes the schema must update the document, or say in a commit message why it does not. Both pages are published only after a successful release, and every reply that reports a change says what was revised in each document, or why nothing was.
 
+### NFR-DOC-03. Every calculation is explained, and the explanation runs the code it explains
+
+- Priority: Must
+- Status: Verified
+- Enforced by: `scripts/build-how-it-works.ts`, `scripts/how-it-works/engine-entry.ts`, `AGENTS.md`
+- Source: The owner, 4 Oct 2026
+- Verified by: `scripts/build-how-it-works.ts`
+
+`docs/HOW-IT-WORKS.md` explains the projection and every other calculation, with formulas. Its figures are filled from the code, and its calculators run the production engine, bundled from the released commit. CI fails when a calculation function has no entry in its code map, when it cites a function that is not where it says, or when a pull request changes a calculation without updating it or saying why not.
+
 ## Features
 
 ### F-01. Public landing page and demo entry
@@ -1068,10 +1088,11 @@ CI fails when `docs/ARCHITECTURE.md` stops naming a dependency, environment vari
 ### F-14. Account values, returns and freshness
 
 - Group: Holdings and investments
-- Status: Verified
+- Status: Partial
 - Requirements: FR-ACC-07, FR-INV-06, NFR-INT-01, NFR-INT-02
 - Code: `src/components/dashboard/account-card.tsx`, `src/lib/performance/twr.ts`, `src/lib/utils/cost-basis.ts`, `src/lib/utils/freshness.ts`, `src/lib/queries/snapshots.ts`
 - Checks: `scripts/test-performance.ts`, `scripts/test-cost-basis.ts`, `scripts/test-freshness.ts`
+- Gap: GAP-42
 
 ### F-15. Holdings list and manual add
 
@@ -1227,15 +1248,16 @@ Merges by ticker, but with no date check or review: a position missing from the 
 - Requirements: FR-PLAN-02
 - Code: `src/app/(dashboard)/settings/contributions-section.tsx`, `src/lib/actions/contributions.ts`, `src/lib/utils/contributions.ts`
 - Checks: `scripts/test-analytics.ts`
-- Gap: GAP-04
+- Gap: GAP-04, GAP-39
 
 ### F-33. Social Security estimates
 
 - Group: Planning
-- Status: Implemented
+- Status: Partial
 - Requirements: FR-PLAN-03
 - Code: `src/app/(dashboard)/settings/social-security-form.tsx`, `src/lib/actions/social-security.ts`
 - Checks: none
+- Gap: GAP-38
 
 ### F-34. Interactive retirement projection and Monte Carlo
 
@@ -1244,15 +1266,16 @@ Merges by ticker, but with no date check or review: a position missing from the 
 - Requirements: FR-PLAN-04, FR-PLAN-05, FR-PLAN-09, FR-PLAN-10
 - Code: `src/app/(dashboard)/projections/page.tsx`, `src/app/(dashboard)/projections/interactive-controls.tsx`, `src/lib/utils/projection-scenarios.ts`, `src/lib/utils/glide-path.ts`, `src/lib/projections/build-accounts.ts`, `src/app/api/settings/projection-controls/route.ts`, `src/lib/projections/monte-carlo.ts`, `src/lib/projections/settings.ts`, `src/lib/projections/household.ts`, `src/lib/planning-inputs.ts`, `src/components/planning/missing-inputs.tsx`
 - Checks: `scripts/test-analytics.ts`, `scripts/test-projection-tax.ts`, `scripts/test-one-engine.ts`, `scripts/test-missing-inputs.ts`
-- Gap: GAP-33
+- Gap: GAP-33, GAP-36, GAP-37, GAP-39
 
 ### F-35. What-if scenarios
 
 - Group: Planning
-- Status: Implemented
+- Status: Partial
 - Requirements: FR-PLAN-06
 - Code: `src/app/(dashboard)/projections/interactive-controls.tsx`, `src/lib/utils/projection-scenarios.ts`, `src/lib/projections/monte-carlo.ts`
 - Checks: none
+- Gap: GAP-40
 
 ### F-36. IRS limits and tax reference
 
@@ -1266,10 +1289,11 @@ Merges by ticker, but with no date check or review: a position missing from the 
 ### F-37. Financial analytics
 
 - Group: Analysis
-- Status: Verified
+- Status: Partial
 - Requirements: FR-PLAN-07, FR-PLAN-08, FR-PLAN-09, FR-ANA-01
 - Code: `src/app/(dashboard)/analytics/page.tsx`, `src/app/(dashboard)/analytics/analytics-dashboard.tsx`, `src/lib/projections/at-retirement.ts`, `src/lib/utils/financial-analytics.ts`, `src/lib/tax/load.ts`
 - Checks: `scripts/test-analytics.ts`, `scripts/test-rmd.ts`, `scripts/test-tax-reference.ts`, `scripts/test-missing-inputs.ts`
+- Gap: GAP-41, GAP-43, GAP-44
 
 ### F-38. AI analysis cards
 
@@ -1384,6 +1408,14 @@ Both pages are marked as drafts that no lawyer has reviewed.
 - Requirements: NFR-DOC-02
 - Code: `docs/ARCHITECTURE.md`, `docs/DATA-MODEL.md`, `scripts/architecture/model.ts`, `scripts/architecture/render.ts`, `scripts/data-model/model.ts`, `scripts/data-model/render.ts`, `scripts/pages/snapshot.ts`
 - Checks: `scripts/build-architecture.ts`, `scripts/build-data-model.ts`
+
+### F-51. How RetireWise works
+
+- Group: Delivery
+- Status: Verified
+- Requirements: NFR-DOC-03
+- Code: `docs/HOW-IT-WORKS.md`, `scripts/how-it-works/engine-entry.ts`, `scripts/how-it-works/bundle.ts`, `scripts/how-it-works/model.ts`, `scripts/how-it-works/render.ts`
+- Checks: `scripts/build-how-it-works.ts`
 
 ## Gaps
 
@@ -1776,6 +1808,106 @@ Found while writing the technical architecture on 3 Oct. No code calls Plaid's i
 
 Found while writing the technical architecture on 3 Oct. Redemption checks only for an existing membership. Anything the person entered before joining stays under their own id, which no request reaches once they belong to a household.
 
+### GAP-36. A couple's Social Security starts when the first partner claims
+
+- Affects: FR-PLAN-04, F-34
+- Severity: Medium
+- Evidence: `src/lib/projections/settings.ts:133`, `src/lib/projections/settings.ts:138`, `src/lib/utils/projection-scenarios.ts:298`
+- Backlog: #65
+- Status: Open
+
+Found while writing How RetireWise works on 4 Oct. Both benefits are added into one figure that starts in the year of the earlier claim, so a partner who waits to 70 is paid the larger benefit from the other's claiming year. Projections with staggered claims overstate income and the odds.
+
+### GAP-37. The Projections page mixes today's dollars with future dollars
+
+- Affects: FR-PLAN-04, F-34
+- Severity: Low
+- Evidence: `src/app/(dashboard)/projections/interactive-controls.tsx:1110`, `src/lib/utils/projection-scenarios.ts:303`
+- Backlog: #66
+- Status: Open
+
+The engine records Social Security in today's dollars; the page's drawdown table shows it beside withdrawals and balances in each year's dollars, and its spending-versus-income card mixes the two outside the engine. The engine's own calculation is right: it inflates Social Security before using it.
+
+### GAP-38. Settings records Social Security details no calculation reads
+
+- Affects: FR-PLAN-03, F-33
+- Severity: Low
+- Evidence: `src/app/(dashboard)/settings/social-security-form.tsx:206`, `src/lib/projections/household.ts:64`
+- Backlog: #67
+- Status: Open
+
+The cost-of-living assumption, planned claiming age and spousal fields are saved and never used. The projection uses the market scenario's inflation and the Projections page's claiming ages instead.
+
+### GAP-39. Some contribution records are counted wrongly in the projection
+
+- Affects: FR-PLAN-02, F-32, F-34
+- Severity: Medium
+- Evidence: `src/lib/projections/build-accounts.ts:66`, `src/lib/projections/build-accounts.ts:77`, `src/lib/utils/projection-scenarios.ts:349`
+- Backlog: #68
+- Status: Open
+
+Found by running the engine while writing How RetireWise works. Fixed-amount contributions count employer money twice and cap it with the employee's deferral; one paused today never resumes; an inactive record can zero an account's contributions.
+
+### GAP-40. Three what-if scenarios do not do what they say
+
+- Affects: FR-PLAN-06, F-35
+- Severity: Medium
+- Evidence: `src/app/(dashboard)/projections/interactive-controls.tsx:1345`
+- Backlog: #69
+- Status: Open
+
+"Boost Savings" misses percentage contributions, "Retire Earlier" keeps contributing and leaves Social Security alone, and "Lower Returns" is ignored when the glide path is on.
+
+### GAP-41. Required distributions past 95, and not per person
+
+- Affects: FR-PLAN-07, F-37
+- Severity: Low
+- Evidence: `src/lib/utils/financial-analytics.ts:37`
+- Backlog: #70
+- Status: Open
+
+Past 95 the divisor comes from a formula that falls faster than the IRS table, overstating distributions and their tax late in a long horizon. One distribution is taken on both partners' combined balance at the primary person's age, from 73 for everyone.
+
+### GAP-42. Account returns misread splits, reinvested dividends and renamed tickers
+
+- Affects: FR-ACC-07, F-14
+- Severity: Medium
+- Evidence: `src/lib/performance/twr.ts:67`, `src/components/dashboard/account-card.tsx:25`
+- Backlog: #71
+- Status: Open
+
+Found while writing How RetireWise works on 4 Oct. Money in and out is inferred from changes in share counts, so a reinvested dividend counts as a deposit, a split as a large one, and a re-spelled ticker loses a day. Long-period returns are cumulative and not labelled so.
+
+### GAP-43. Analytics mixes today's and future dollars, and taxes Social Security its own way
+
+- Affects: FR-ANA-01, FR-AI-04, F-37
+- Severity: Medium
+- Evidence: `src/app/(dashboard)/analytics/analytics-dashboard.tsx:87`, `src/lib/tools/run-financial-analytics.ts`, `src/lib/utils/financial-analytics.ts:130`
+- Backlog: #72
+- Status: Open
+
+Balances at retirement are in future dollars and nearly everything set beside them is in today's. Analytics and the assistant's analytics tool tax a flat 85% of Social Security where the projection uses the IRS worksheet, so the assistant's own tools disagree. The tax tab taxes the whole withdrawal even when part of it is Roth or taxable money, and healthcare is costed for a couple whether or not there is a partner.
+
+### GAP-44. The Roth ladder, sequence and withdrawal-order comparisons are not like for like
+
+- Affects: FR-ANA-01, F-37
+- Severity: Medium
+- Evidence: `src/lib/utils/financial-analytics.ts:273`, `src/lib/utils/financial-analytics.ts:639`, `src/lib/utils/withdrawal-strategies.ts`
+- Backlog: #73
+- Status: Open
+
+The ladder leaves the standard deduction unused below it; the sequence scenarios have different average returns; two of the four withdrawal orders behind the answer to Q10 always give the same result.
+
+### GAP-45. Linked funds are all classed as US stocks
+
+- Affects: FR-ACC-02, FR-ONB-03, FR-ONB-04
+- Severity: Medium
+- Evidence: `src/lib/plaid/sync.ts:537`, `src/lib/plaid/sync.ts:502`
+- Backlog: #75
+- Status: Open
+
+ETFs and mutual funds from Plaid become US stock whatever they hold, which skews the allocation, the drift alerts and rebalancing, and a Roth 401(k) is mapped to a Roth IRA.
+
 ## Open questions
 
 ### Q1. What would show each objective is met?
@@ -1904,6 +2036,7 @@ Only the assistant compares withdrawal orders. Since 3 Oct it does so with the c
 - 2026-10-02 · #28 done: erasure deletes holding snapshots and the export includes them, goal links and join attempts. The account-data check now reads every household-keyed table from the database. FR-DATA-02, FR-DATA-03 and NFR-PRIV-01 Verified; GAP-01 closed. · Claude
 - 2026-10-02 · #50 done: releases retry passing Vercel and GitHub failures and a second run resumes the first run's build. Added NFR-DEL-06, Verified by the new `scripts/test-release.ts`; NFR-DEL-01 and F-48 now Implemented; GAP-23 closed. · Claude
 - 2026-10-03 · The technical architecture and data model rewritten as living documents (NFR-DOC-02, F-50): half generated from the code, checked in CI, published after each release. `docs/DATA-FLOW.md` folded into the architecture's key flows; GAP-17 narrowed to the README, user guide and help. Writing them found GAP-31 to GAP-35 (#58, #59, #61–#63) and #60 and #64. NFR-PRIV-01, FR-DATA-02, FR-DATA-03, FR-NW-01, FR-INV-02, F-23, F-25 and F-34 moved from Verified to Partial on that evidence; GAP-11 now also covers the zero basis a file import invents. · Claude
+- 2026-10-04 · How RetireWise works added as a living document (NFR-DOC-03, F-51): every calculation explained, its figures read from the code, its calculators running the production engine from the released commit. Writing it found GAP-36 to GAP-45 (#65–#73, #75) and the small fixes in #74, and added five calculations with no check to #51. FR-PLAN-04, FR-PLAN-07, FR-ACC-07, FR-ANA-01 and FR-AI-04 moved from Verified, and FR-PLAN-03, FR-PLAN-06, FR-ONB-03 and FR-ONB-04 from Implemented, to Partial on that evidence. · Claude
 
 ## Sources
 

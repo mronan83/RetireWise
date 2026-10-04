@@ -81,6 +81,15 @@ jobs:
       - if: github.event_name == 'pull_request'
         run: pnpm exec tsx scripts/build-data-model.ts --require-update origin/${{ github.base_ref }}
 
+      # docs/HOW-IT-WORKS.md, checked against the calculations it explains:
+      # every calculation function in its code map, every function it cites
+      # where it says, every figure it quotes read from the code. It bundles
+      # the engine and runs the example household, so the page's calculators
+      # are known to work before anything is published.
+      - run: pnpm exec tsx scripts/build-how-it-works.ts --check
+      - if: github.event_name == 'pull_request'
+        run: pnpm exec tsx scripts/build-how-it-works.ts --require-update origin/${{ github.base_ref }}
+
       # Retry policy and key rotation. Pure logic, so it belongs here rather
       # than behind the database job.
       - run: pnpm exec tsx scripts/test-ops.ts
