@@ -162,6 +162,8 @@ One row per position in an account: shares, price, value and cost basis as they 
 - `cost_basis_per_share`: Null means not reported, never zero. A file import without a basis column writes zero (GAP-11).
 - `cost_basis_source`: Where the basis came from. A `manual` basis outranks every other; see the business rules.
 - `current_value`: Always shares times current price, by every writer.
+- `last_price_update`: When the price was struck, not when the row was written: Yahoo's quote time, the institution's date (at the 4 pm close when it gives no time), or the moment a person typed it. A mutual fund's price fetched at noon is the day before's. Rows written before 6 Oct 2026 hold the time they were written. `updated_at` says when the row changed.
+- `previous_close`: The close of the market session before the one `current_price` belongs to, from migration 0020. Null when not known: never refreshed since the column was added, typed by hand, or a bank price after a missed session. Not backfilled.
 
 A Plaid sync removes positions Plaid stopped reporting, but first copies the full rows into `audit_log` so a mistaken removal can be undone. Nothing stops two rows with the same ticker in one account.
 
@@ -269,10 +271,10 @@ One row per item a goal is measured over (an investment account, debt, cash rese
 
 - Written by: the snapshot job, `src/lib/utils/portfolio-snapshot.ts`; `scripts/seed-demo.ts`; erasure
 
-One row per household per weekday: total investment value, the split between partners, allocation, top holdings and the change since the previous snapshot. The dashboard's value chart and its daily change read this.
+One row per household per weekday: total investment value, the split between partners, allocation, top holdings and the change since the previous snapshot. The dashboard's value chart reads this.
 
 - `snapshot_date`: The UTC date. Not unique in the schema; the snapshot job replaces a household's rows for the day before writing, so a second run on one day restates it. Days written before 6 Oct 2026 can still hold two rows.
-- `daily_change`: The total less the total of the household's last snapshot from an earlier day: a balance change, so money paid in or taken out counts (#71). `daily_change_pct` is it as a share of that earlier total. Alerts and reports read it; the dashboard's daily change does not, and works out the market's move from `holding_snapshots` instead.
+- `daily_change`: The total less the total of the household's last snapshot from an earlier day: a balance change, so money paid in or taken out counts (#71). `daily_change_pct` is it as a share of that earlier total. Alerts and reports read it; the dashboard's daily change does not, and works out the market's move from each holding's price and `previous_close` instead.
 - `ytd_return_pct`: Nothing writes it.
 
 ### account_snapshots
@@ -288,7 +290,7 @@ One row per investment account per weekday: value, cost basis and gain. Period r
 
 - Written by: the snapshot job, `src/lib/utils/portfolio-snapshot.ts`; erasure
 
-One row per position per account per weekday: shares, price and value. Share counts let a day's change be split into market movement and money paid in, which a time-weighted return needs. The last day's prices before the market day are the previous close the dashboard's daily change is measured from.
+One row per position per account per weekday: shares, price and value. Share counts let a day's change be split into market movement and money paid in, which a time-weighted return needs. The job runs before most mutual funds post, so a fund's price here is the day before's (GAP-48).
 
 - `account_id`: No foreign key.
 - `ticker`: Part of the unique key with the account and day; a later run that day updates the row with its shares, price and value.
@@ -574,6 +576,13 @@ Plaid access tokens and the household's AI keys are sealed with AES-256-GCM. Cip
 
 A sync never replaces a manual basis, and Plaid's silence leaves an existing basis alone. A basis is derived only for a position with no basis whose transactions prove it. An account snapshot records no basis when any position's is unknown. The holdings file import breaks this rule: it writes zero when the file has no basis, and replaces a manual basis (GAP-11).
 
+### A price is dated by the market, and an older one never replaces a newer one
+
+- Enforced by: `resolvePriceUpdate()` and `typedPriceUpdate()` in `src/lib/utils/market-session.ts`, called by `src/lib/utils/price-feed.ts`, `src/lib/plaid/sync.ts`, `src/lib/actions/holdings.ts` and `src/lib/actions/import.ts`
+- Verified by: `scripts/test-freshness.ts`, `scripts/test-cost-basis.ts`
+
+`last_price_update` is when the price was struck. A price from an earlier market session is kept out when one from a later session is stored, so the bank's morning price, the day before's close, cannot overwrite a refresh; a stored price with no previous close, as every row written before 6 Oct 2026 has, gives way to a quote that brings one. `previous_close` belongs to the session just before the price's, or is null: the bank's price takes the stored one only across exactly one session. A price typed in has none, and saving a holding with its price unchanged leaves both alone. The database would accept any combination.
+
 ### A Plaid transaction is stored once
 
 - Enforced by: the unique index on `transactions.plaid_transaction_id`, with the insert skipping a row it has seen
@@ -640,7 +649,7 @@ What is computed from other tables, when, and whether it can be rebuilt. Snapsho
 
 ### `portfolio_snapshots`, `account_snapshots` and `holding_snapshots`
 
-- Source: holdings and accounts, after a price refresh
+- Source: holdings and accounts, after a price refresh; a mutual fund is at the day before's price (GAP-48)
 - Written: the weekday snapshot job, for households holding investments
 - Rebuildable: only for today. Holdings keep no history, so a missed day is lost.
 
@@ -672,9 +681,9 @@ The job runs through the system role without a transaction, so a failure partway
 
 ### Prices and values on `holdings`
 
-- Source: Yahoo Finance quotes, cached in Upstash Redis, or the price Plaid reports
-- Written: the weekday job, `src/app/api/prices/refresh/route.ts`, and every Plaid sync
-- Rebuildable: yes, by fetching again.
+- Source: Yahoo Finance quotes, cached in Upstash Redis, or the price Plaid reports, each with the time it was struck; Yahoo's previous close, or for Plaid the stored price from the session before
+- Written: the weekday job, `src/app/api/prices/refresh/route.ts`, and every Plaid sync, through `resolvePriceUpdate` in `src/lib/utils/market-session.ts`
+- Rebuildable: yes, by fetching again; a bank price's previous close returns after two syncs on consecutive sessions.
 
 ### Derived cost basis
 
@@ -719,11 +728,11 @@ sequenceDiagram
 ## Verification
 
 - **Check this document:** `pnpm datamodel:check`, in CI. It fails when a table or enum is undescribed or in no domain, a note names a column that does not exist, a named file is missing, the schema and migrations declare different indexes, or a household table has no row-level security policy.
-- **Change the schema:** edit `src/lib/db/schema.ts`, run `pnpm db:generate`, and review the SQL it writes. Policies and grants are written by hand in the migration, since the schema declares neither. Until the stored snapshot is repaired, `pnpm db:generate` also re-emits migrations 0017 to 0019, which must be deleted from its output (#60).
-- **Apply migrations:** `pnpm db:migrate` locally, `pnpm db:migrate:ci` in CI. Production migrations are applied separately; `pnpm deploy:prod` does not run them (`docs/disaster-recovery.md`).
+- **Change the schema:** edit `src/lib/db/schema.ts`, run `pnpm db:generate`, and review the SQL it writes. Policies and grants are written by hand in the migration, since the schema declares neither. Until the stored snapshot is repaired, `pnpm db:generate` also re-emits migrations 0017 to 0020, which must be deleted from its output (#60).
+- **Apply migrations:** `pnpm db:migrate` locally, `pnpm db:migrate:ci` in CI. Production migrations are applied separately; `pnpm deploy:prod` does not run them (`docs/disaster-recovery.md`). A release whose columns the database lacks fails `/api/health`, which compares the schema with the database through `src/lib/db/schema-check.ts`.
 - **Seed the demo household:** `pnpm db:seed-demo`.
 - **Isolation:** `pnpm test:rls` proves that statements under `withTenant` run as `app_user` and see only their own household, that holdings are scoped through accounts, and that the role does not outlive its transaction.
-- **Export and erasure:** `pnpm test:account-data` finds every table with a household key from the database itself, and fails when one is missing from the export or keeps rows after erasure. It also fails when a secret or invite hash appears in an export.
+- **Export and erasure:** `pnpm test:account-data` finds every table with a household key from the database itself, and fails when one is missing from the export or keeps rows after erasure. It also fails when a secret or invite hash appears in an export, and when the migrated database lacks a column the schema declares.
 - **Invites:** `pnpm test:invites` covers code strength, the rate limit, single use, expiry and revocation.
 - **Rules in code:** `pnpm test:cost-basis`, `test:investment-transactions`, `test:goals`, `test:net-worth`, `test:ofx-import`, `test:tax-reference` and `test:ops` run without a database.
 - **Rotate keys:** `pnpm keys:rotate:dry`, then `pnpm keys:rotate`.
@@ -737,3 +746,4 @@ The database checks need a migrated Postgres; CI starts one for the "Mobile layo
 - 2026-10-04 · `social_security_benefits`: said which fields the projection reads and which it ignores (GAP-38), found while writing How RetireWise works · Claude
 - 2026-10-06 · The snapshot tables are written by `src/lib/utils/portfolio-snapshot.ts`, one set per household per day, with the daily change measured from the previous day (#49); `daily_change` explained; `cron_runs` records failed households · Claude
 - 2026-10-06 · `holding_snapshots` prices are the previous close for the dashboard's daily change, which no longer reads `portfolio_snapshots.daily_change` (#79) · Claude
+- 2026-10-06 · `holdings.previous_close` added by migration 0020, and `last_price_update` is now when the price was struck (#77, #78); a rule for which price a holding keeps; `holding_snapshots` no longer supplies the daily change's previous close, and holds funds a day behind (GAP-48); the health check compares the schema with the database · Claude

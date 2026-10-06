@@ -8,8 +8,8 @@ import { AccountCard } from "@/components/dashboard/account-card";
 import { Skeleton } from "@/components/ui/skeleton";
 import { getAccountsWithFreshness } from "@/lib/queries/accounts";
 import { getHoldingsByClerkId } from "@/lib/queries/holdings";
-import { getSnapshots, getAccountPerformanceMap, getPreviousClose } from "@/lib/queries/snapshots";
-import { dailyChange as dayChange, marketDay } from "@/lib/performance/daily-change";
+import { getSnapshots, getAccountPerformanceMap } from "@/lib/queries/snapshots";
+import { dailyChange as dayChange } from "@/lib/performance/daily-change";
 import { calculatePortfolioSummary, calculateGainLoss } from "@/lib/utils/calculations";
 import { gainLossFor, missingBasisNote, rollupBasis } from "@/lib/utils/cost-basis";
 import { RefreshPricesButton } from "@/components/dashboard/refresh-prices-button";
@@ -53,9 +53,6 @@ async function DashboardContentScoped() {
     db.select().from(vehicles).where(eq(vehicles.clerkId, userId)),
     getAccountPerformanceMap(userId),
   ]);
-  // Prices at the previous close, for the day's change at the latest prices.
-  const previousClose = await getPreviousClose(userId, marketDay());
-
   const holdingsForCalc = holdingsWithAccounts.map((h) => ({
     ...h,
     lastPriceUpdate: h.lastPriceUpdate,
@@ -69,19 +66,16 @@ async function DashboardContentScoped() {
   const pricesAsOf = oldestOf(holdingsWithAccounts.map((h) => h.lastPriceUpdate));
 
   // The day's change is worked out here, at the prices just loaded, so
-  // Refresh Prices moves it. It was the evening snapshot's figure, which held
-  // all day and counted money paid in as gain.
-  const today = previousClose
-    ? dayChange(
-        holdingsWithAccounts.map((h) => ({
-          accountId: h.accountId,
-          ticker: h.ticker,
-          shares: Number(h.shares),
-          price: Number(h.currentPrice),
-        })),
-        previousClose.positions
-      )
-    : null;
+  // Refresh Prices moves it, and each position's move is credited to the
+  // session its price belongs to, so a mutual fund's lands on its own day.
+  const daily = dayChange(
+    holdingsWithAccounts.map((h) => ({
+      shares: Number(h.shares),
+      price: Number(h.currentPrice),
+      previousClose: h.previousClose === null ? null : Number(h.previousClose),
+      priceAsOf: h.lastPriceUpdate,
+    }))
+  );
 
   const holdingsTableData = holdingsWithAccounts.map((h) => {
     const gl = calculateGainLoss(h);
@@ -170,10 +164,7 @@ async function DashboardContentScoped() {
         totalGainLoss={summary.totalGainLoss}
         totalGainLossPct={summary.totalGainLossPct}
         positionsWithoutBasis={summary.positionsWithoutBasis}
-        dailyChange={today?.change ?? 0}
-        dailyChangePct={today?.changePct ?? 0}
-        dailyChangeSince={previousClose?.date ?? null}
-        positionsNewSinceClose={today?.newSinceClose ?? 0}
+        daily={daily}
         accountCount={accountsList.length}
         holdingCount={holdingsWithAccounts.length}
         pricesAsOf={pricesAsOf}

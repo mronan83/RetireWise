@@ -231,11 +231,13 @@ jobs:
       # Export completeness and deletion completeness: the same property from
       # opposite ends. A table wired into neither would make an export that
       # silently omits it still look full, and a deletion that silently keeps
-      # it still report success.
+      # it still report success. Also the health check's schema test: the
+      # migrated database has every column the code reads, and a missing one
+      # is named.
       - name: Check export and deletion
         run: pnpm test:account-data
 
-      # The dashboard's daily change: measured from the previous day's
+      # The weekday-evening snapshot: measured from the previous day's
       # snapshot, one snapshot a day however often the job runs, and one
       # household's failure stopping only that household.
       - name: Check the daily snapshot

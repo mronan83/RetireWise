@@ -16,6 +16,8 @@
  * account has no connection at all, yet its value still ages.
  */
 
+import { sessionOf, sessionsBetween } from "./market-session";
+
 export type Freshness = "fresh" | "aging" | "stale" | "unknown";
 
 /**
@@ -24,7 +26,10 @@ export type Freshness = "fresh" | "aging" | "stale" | "unknown";
  * property valuation or stay silent about a two-week-old share price.
  */
 export type FreshnessKind =
-  /** Market prices. Move every weekday; a refresh runs daily. */
+  /**
+   * Market prices, timed by the session they were struck in, not by when
+   * they were fetched: see PRICE_SESSIONS.
+   */
   | "price"
   /** Balances pulled from an institution. Daily refresh. */
   | "linked_balance"
@@ -35,10 +40,20 @@ export type FreshnessKind =
   /** When an institution was last reached at all. */
   | "connection";
 
-/** Hours after which a figure is aging, then stale. */
-const THRESHOLDS: Record<FreshnessKind, { aging: number; stale: number }> = {
-  // A weekend is normal, so a price is only aging after it spans one.
-  price: { aging: 36, stale: 96 },
+/**
+ * How many market sessions a price may fall behind before it is aging, then
+ * stale.
+ *
+ * Counted in sessions, not hours. A mutual fund posts one price a day, after
+ * the close, so at Tuesday noon its newest possible price is Monday's: one
+ * session behind is as current as it can be. A weekend adds no sessions, so a
+ * Friday close is still current on Monday morning, where a count of hours
+ * called it aging.
+ */
+export const PRICE_SESSIONS = { aging: 2, stale: 3 } as const;
+
+/** Hours after which a figure is aging, then stale. Prices use PRICE_SESSIONS. */
+const THRESHOLDS: Record<Exclude<FreshnessKind, "price">, { aging: number; stale: number }> = {
   linked_balance: { aging: 48, stale: 120 },
   // Nobody updates a manual balance daily, and pretending otherwise would
   // make the whole signal noise. A quarter is where it stops being current.
@@ -63,6 +78,12 @@ export function freshnessOf(
   // Never updated is its own state. Calling it "stale" would imply it was
   // once current, and calling it fresh would be a lie.
   if (hours === null) return "unknown";
+  if (kind === "price") {
+    const behind = sessionsBetween(sessionOf(new Date(now - hours * 3_600_000)), sessionOf(new Date(now)));
+    if (behind >= PRICE_SESSIONS.stale) return "stale";
+    if (behind >= PRICE_SESSIONS.aging) return "aging";
+    return "fresh";
+  }
   const t = THRESHOLDS[kind];
   if (hours >= t.stale) return "stale";
   if (hours >= t.aging) return "aging";

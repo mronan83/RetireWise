@@ -6,6 +6,7 @@ import { eq, and } from "drizzle-orm";
 import { getDb } from "../db";
 import { holdings, accounts } from "../db/schema";
 import type { ParsedHolding } from "../utils/csv-parser";
+import { typedPriceUpdate } from "../utils/market-session";
 
 export async function importHoldings(
   ...args: Parameters<typeof importHoldingsImpl>
@@ -126,7 +127,7 @@ async function refreshHoldingsImpl(
           costBasisPerShare: String(parsed.costBasisPerShare),
           currentPrice: String(parsed.currentPrice),
           currentValue: String(parsed.shares * parsed.currentPrice),
-          lastPriceUpdate: new Date(),
+          ...typedPriceUpdate(parsed.currentPrice, match.currentPrice),
           updatedAt: new Date(),
         })
         .where(eq(holdings.id, match.id));

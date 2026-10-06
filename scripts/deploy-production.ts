@@ -225,8 +225,15 @@ async function main() {
   );
   const report = await health.json().catch(() => ({}));
   if (!health.ok || report.status !== "ok") {
+    // Migrations are applied by hand (#6), so the likeliest cause after a
+    // release with a new column is the migration not having been run.
+    const schemaNote =
+      report.checks?.schema === false && typeof report.missingColumns === "number"
+        ? `The database lacks ${report.missingColumns} column(s) this release reads: apply its migration (pnpm db:migrate), or roll back.\n`
+        : "";
     fail(
       `Live, but /api/health says ${report.status ?? health.status}: ${JSON.stringify(report.checks ?? {})}\n` +
+        schemaNote +
         `Roll back with: pnpm deploy:prod ${liveSha ?? "<previous sha>"}`
     );
   }

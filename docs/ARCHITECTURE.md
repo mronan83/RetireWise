@@ -198,7 +198,7 @@ Links to Zillow, Kelley Blue Book, Fidelity, the SSA and the IRS open in the per
 - **Analytics.** `src/lib/utils/financial-analytics.ts` covers distributions, Roth conversions, Social Security claiming, catch-up, income replacement, fees, sequence risk and healthcare costs, and reads the tax table from the database. Withdrawal orders are compared outside the engine (ADR-025).
 - **The assistant.** `/api/chat` resolves the household's model, applies the rate limit when Redis is configured, and streams an answer with `ai` and `@ai-sdk/anthropic`, `@ai-sdk/google` or `@ai-sdk/openai`, calling up to ten tools that read the household's data. The tools use the same engine and net-worth composition as the pages.
 - **Plaid.** `plaid` is the server client and `react-plaid-link` the browser's Link window. Connections are scoped by type: investments for brokerages, transactions with consented liabilities for banks and cards.
-- **Prices.** `yahoo-finance2` in batches of 20, cached for 15 minutes in Redis through `@upstash/redis`; `@upstash/ratelimit` limits the assistant.
+- **Prices.** `yahoo-finance2` in batches of 20, each quote kept with its own time and the previous close, cached for 15 minutes in Redis through `@upstash/redis`; `@upstash/ratelimit` limits the assistant. `src/lib/utils/market-session.ts` places each price in its market session and decides which price a holding keeps (ADR-029).
 - **Imports.** `papaparse` reads holdings CSVs; `src/lib/import` reads bank statements.
 - **Validation and data.** `zod` validates every form and request body; `drizzle-orm` over `postgres` talks to the database.
 - **Billing.** `stripe`, inert until both keys are set; every household is complimentary today.
@@ -281,7 +281,7 @@ sequenceDiagram
 
 1. At 10:00 UTC Vercel Cron calls `/api/cron/refresh` with the cron secret; the route records a run in `cron_runs`.
 2. It takes up to 300 connections that are due, oldest first, three at a time, and stops starting new ones after 230 seconds.
-3. Each connection syncs holdings, balances and investment transactions. Any success resets its failures; three failures in one run count as one failed attempt, which sets the next try further out, until eight failures or an error only the owner can fix sets it aside.
+3. Each connection syncs holdings, balances and investment transactions. Each price keeps the institution's date, and one from an earlier market session never replaces a later one already stored (ADR-029). Any success resets its failures; three failures in one run count as one failed attempt, which sets the next try further out, until eight failures or an error only the owner can fix sets it aside.
 4. Cost basis is derived where transactions prove it, and the run's counts are recorded.
 5. Sync now, from `/api/plaid/sync`, does the same for one household after resolving it from the session, with a two-minute cooldown per connection.
 
@@ -317,7 +317,7 @@ sequenceDiagram
 ### Weekday snapshot
 
 1. At 22:00 UTC on weekdays Vercel Cron calls `/api/cron/snapshot`, which records a run.
-2. For each household with accounts, `src/lib/utils/portfolio-snapshot.ts` refreshes prices, then replaces that day's portfolio, account and holding snapshots, so a second run on one day restates the day instead of adding to it. The daily change is the day's total less the total of the last snapshot from an earlier day.
+2. For each household with accounts, `src/lib/utils/portfolio-snapshot.ts` refreshes prices, each with the time it was struck and the previous close, then replaces that day's portfolio, account and holding snapshots, so a second run on one day restates the day instead of adding to it. The snapshot's change is the day's total less the total of the last snapshot from an earlier day, which alerts and reports read; the dashboard's daily change does not (ADR-029). Mutual funds have not posted by 22:00 UTC, so the snapshot holds them at the day before's price (#80).
 3. It writes the day's net worth, generates alerts and marks goals that have been reached. A household with no investments gets its net worth and nothing else.
 4. Each household runs on its own: an error stops only that household. The run is recorded as ok only when every household was snapshotted, with the number that failed.
 
@@ -334,7 +334,7 @@ sequenceDiagram
   loop Each household, an error stopping only that household
     S->>RD: Cached prices
     S->>YF: Prices not cached
-    S->>DB: Update holdings
+    S->>DB: Update holdings: price, when it was struck, previous close
     alt Investments worth nothing
       S->>DB: Net worth only
     else
@@ -462,7 +462,7 @@ sequenceDiagram
 1. The owner says deploy. `pnpm deploy:prod` refuses any commit not on main, or whose CI is not entirely green.
 2. It reads which commit production actually serves, and stops if it is already live.
 3. It builds that commit through the Vercel API, or follows a build of it already under way, and waits up to 15 minutes.
-4. It waits up to 90 seconds for production to serve the new build, then requires the health check to pass.
+4. It waits up to 90 seconds for production to serve the new build, then requires the health check to pass. The health check fails when the database lacks a column the code reads, and the release then says to apply the migration or roll back.
 5. Only then does it build the published pages, which describe what is now live. Migrations are applied separately (#6).
 
 ```mermaid
@@ -521,7 +521,7 @@ Environment variables, by name only. Values live in Vercel and in each developer
 - **Branch protection.** None on main, so a direct push skips CI (#16). A release still refuses a commit whose CI is not green.
 - **Release.** `scripts/deploy-production.ts` and `scripts/lib/release.ts`, as in the release flow above. Rolling back is a release of an older commit, which rebuilds it (#5), and nothing shows which commit is live (#4).
 - **Published pages.** After a successful release, `pnpm deploy:prod` builds the backlog, requirements trace, technical architecture, data model and How RetireWise Works pages from the released commit, and Claude publishes them to their fixed addresses. The last of these bundles the projection engine with esbuild, a development dependency, so its calculators run the released code in the reader's browser.
-- **Health.** `/api/health` checks the database and reports whether sign-in is configured; `/api/health/freshness` fails when a scheduled job has stopped or data has gone stale. Nothing outside calls either (#2), and errors go only to Vercel's short-lived logs (#8).
+- **Health.** `/api/health` checks the database, that it has every column the code reads (`src/lib/db/schema-check.ts`), and whether sign-in is configured; `/api/health/freshness` fails when a scheduled job has stopped or data has gone stale. Nothing outside calls either (#2), and errors go only to Vercel's short-lived logs (#8).
 - **Runbooks.** `docs/disaster-recovery.md` (daily backups, a four-hour recovery target, never rehearsed: #17), `docs/incident-response.md`, `docs/data-retention.md` and `docs/annual-tax-update.md`.
 
 ## Quality attributes
@@ -546,9 +546,9 @@ One complete export without secrets, a hard delete on erasure, and a privacy pag
 
 ### Correct figures
 
-- Checked by: `scripts/test-one-engine.ts`, `scripts/test-projection-tax.ts`, `scripts/test-rmd.ts`, `scripts/test-analytics.ts`, `scripts/test-net-worth.ts`, `scripts/test-cost-basis.ts`, `scripts/test-performance.ts`
+- Checked by: `scripts/test-one-engine.ts`, `scripts/test-projection-tax.ts`, `scripts/test-rmd.ts`, `scripts/test-analytics.ts`, `scripts/test-net-worth.ts`, `scripts/test-cost-basis.ts`, `scripts/test-performance.ts`, `scripts/test-freshness.ts`
 
-One engine, seeded odds, tax on withdrawals, distributions from the right accounts, each liability counted once, time-weighted returns. Weak: contribution limits are fixed for 2025 (#31), the tax figures predate the July 2025 law (#56), projections ignore the database's tax table (#61), and a debt secured against a deleted asset drops out of net worth (#59).
+One engine, seeded odds, tax on withdrawals, distributions from the right accounts, each liability counted once, time-weighted returns, and each price dated by the market rather than by the fetch. Weak: contribution limits are fixed for 2025 (#31), the tax figures predate the July 2025 law (#56), projections ignore the database's tax table (#61), and a debt secured against a deleted asset drops out of net worth (#59).
 
 ### Availability
 
@@ -625,7 +625,7 @@ With no encryption key set, rotating or leaking the cron secret breaks or expose
 - Backlog: #6, #60
 - Severity: Medium
 
-Migrations are not released with the code that needs them, and generating the next one today would repeat three that already ran.
+Migrations are not released with the code that needs them, and generating the next one today would repeat four that already ran. A release that reaches the database before its migration now fails the health check at once rather than on the first page that reads the new column, but it is still live until it is rolled back.
 
 ### A missing database variable would move production to the old database
 
@@ -655,12 +655,12 @@ Releases run from a Claude session with a broad token, and main has no branch pr
 
 Contribution limits are fixed for 2025, the tax figures predate the July 2025 law, the projection ignores the yearly tax table the analytics read, and required distributions past 95 follow a formula steeper than the IRS table.
 
-### Prices can be older than the figures built on them say
+### The evening snapshot holds mutual funds a day behind
 
-- Backlog: #77, #78
-- Severity: Medium
+- Backlog: #80
+- Severity: Low
 
-A linked holding's price is stamped with the time the bank sync ran, not the date of the price, so an old price reads as fresh. The dashboard's daily change measures today's prices against the weekday-evening snapshot, which runs before most mutual funds post their price, so a fund's move shows a day late while a stock's shows the same day (ADR-028). The projection, the odds and the analytics use today's balances and are unaffected.
+Each price now carries the time it was struck, and the dashboard's daily change credits each move to its own day (ADR-029). The weekday-evening snapshot still runs before most mutual funds post, so it records a fund at the day before's price: the value chart, account returns and the large-move alert see a fund's move a day late. Market sessions are weekdays; an exchange holiday counts as one in which nothing moved. The projection, the odds and the analytics use today's balances and are unaffected.
 
 ### Imports and bank connections can lose, duplicate or strand data
 
@@ -925,12 +925,21 @@ Choices that shaped the system, newest last. A record is never deleted; a later 
 
 ### ADR-028. The daily change is the market's move since the previous close, worked out on the page
 
-- Status: Accepted
+- Status: Superseded by ADR-029
 - Decided: 2026-10-06
 - Context: The owner expects the dashboard's daily change to follow Refresh Prices. It was the weekday-evening snapshot's total less the one before: it held all day, and money paid in counted as gain.
 - Decision: The dashboard works it out at the prices it has just loaded: each position's shares times the change in its price since the previous close, from `src/lib/performance/daily-change.ts`. The previous close is the price each position was recorded at in the last weekday-evening snapshot before the market day, the date in New York with weekends taken back to Friday. Keeping Yahoo's own previous close on each holding was the alternative: exact for priced tickers, but it needs a new column and still leaves employer-plan funds, which Yahoo cannot price, without one.
 - Consequences: Refresh Prices moves the figure and a deposit does not. A position bought since the close adds nothing and is counted on the card. A fund's move shows a day late, because the snapshot is taken before most funds post their price (#78). The evening snapshot still stores a balance change, which alerts and reports read (#71).
 - Evidence: `src/lib/performance/daily-change.ts`, `src/lib/queries/snapshots.ts`, `src/app/(dashboard)/dashboard/page.tsx`, `scripts/test-performance.ts`
+
+### ADR-029. Each price carries its market session, and each move is shown on its own day
+
+- Status: Accepted
+- Decided: 2026-10-06
+- Context: ADR-028 measured every position against the evening snapshot's price. Mutual funds post one price a day, after the close, so the snapshot held a fund at the day before's price and the fund's move was added to the next day (#78). Every price was also dated when it was written, so a bank price days old, or a fund's from the day before, read as current (#77).
+- Decision: A holding stores the time its price was struck (`last_price_update`: the quote's own time from Yahoo, the institution's date from the bank) and the close of the session before it (`previous_close`, a new column: Yahoo reports it; the bank's is carried from the stored price across exactly one session). `src/lib/utils/market-session.ts` places a price in the latest weekday session whose New York open came before it, keeps a price from a later session over one from an earlier (unless the stored one has no previous close, as every row written before this change has, and the new quote brings one), and counts a price's age in sessions. The dashboard credits each position's move to its price's session: the newest session's move is the figure, and the session before, from positions a day behind, is shown beside it. Running the snapshot after funds post was the alternative: it would move the whole snapshot to the next morning, after the bank sync, and still could not date a bank price.
+- Consequences: A fund's move appears on its own day; a stale price reads as stale. The migration adds a column every holdings query names, so it must be applied before the release; the health check now fails when the database lacks a column the code reads, and the release says so. A position bought today counts its whole day's move, as the market's move in what is held now. The evening snapshot still holds funds a day behind (#80), and exchange holidays count as sessions.
+- Evidence: `src/lib/utils/market-session.ts`, `src/lib/performance/daily-change.ts`, `src/lib/utils/price-feed.ts`, `src/lib/plaid/sync.ts`, `src/lib/db/schema-check.ts`, `src/lib/db/migrations/0020_holding_previous_close.sql`, `scripts/test-performance.ts`, `scripts/test-freshness.ts`
 
 ## Change log
 
@@ -939,3 +948,4 @@ Choices that shaped the system, newest last. A record is never deleted; a later 
 - 2026-10-04 · #65 and #68 closed: the engine takes each partner's Social Security with its own start year, and each account's own deferral from records in force; the projection-inputs risk narrowed to the what-ifs (#69); the release builds the trace page from a copy of the released commit, like the pages that read the code (#76) · Claude
 - 2026-10-06 · Weekday snapshot flow: one snapshot per household per day, measured from the previous day, each household on its own, and the run's failures recorded (#49), in `src/lib/utils/portfolio-snapshot.ts`; the what-ifs moved to `src/lib/projections/what-if.ts` (#69); the what-if risk retired and replaced by the risk that prices are older than they say (#77, #78) · Claude
 - 2026-10-06 · ADR-028: the dashboard's daily change is the market's move since the previous close, worked out at the latest prices so Refresh Prices moves it (#79); the pricing risk restated for it · Claude
+- 2026-10-06 · ADR-029 supersedes ADR-028: each price carries the time it was struck and the previous close, and the daily change credits each move to its own session (#77, #78); the health check fails on a missing column and the release says to migrate; the pricing risk narrowed to the evening snapshot (#80) · Claude

@@ -88,7 +88,7 @@ Commit `70fa40e` moved Liabilities from `required_if_supported_products` to `add
 - Blocker: Your decision: where the production database credential lives for the release (see #15)
 - Source: [Delivery review G2](https://claude.ai/artifact/Eo9g6bEnWFi9TBoSPwohPk)
 
-`pnpm db:migrate` runs against whatever database a machine's `.env.local` names. It is not gated, not ordered with the code it serves, and has no down migrations. Production is in sync today: 20 of 20, the last applied on 21 Sep. The dry run should list pending migrations and the release should apply them before switching traffic, under one rule: a migration must work with the code already live.
+`pnpm db:migrate` runs against whatever database a machine's `.env.local` names. It is not gated, not ordered with the code it serves, and has no down migrations. Production had 20 of 20 on 21 Sep. Migration 0020, from PR 12, must be applied before that release; `/api/health` now fails when the database lacks a column the code reads, so a release that goes out first is caught at once. The dry run should list pending migrations and the release should apply them before switching traffic, under one rule: a migration must work with the code already live.
 
 ### 7. Previews have no data of their own
 
@@ -507,7 +507,7 @@ The standard deduction for married couples is $30,000 in `src/lib/tax/table.ts`.
 - Blocker: None
 - Source: Data model review
 
-Drizzle keeps a snapshot of the schema after each migration it generates. Migrations 0017 to 0019 were written by hand, so the latest snapshot is 0016's, and `pnpm db:generate` today writes a migration that recreates `goal_links`, three enums and five columns that already exist; applying it would fail. Regenerate the snapshot from the current schema without keeping the SQL, and check the next generated migration contains only the intended change.
+Drizzle keeps a snapshot of the schema after each migration it generates. Migrations 0017 to 0020 were written by hand, so the latest snapshot is 0016's, and `pnpm db:generate` today writes a migration that recreates `goal_links`, three enums and six columns that already exist; applying it would fail. Regenerate the snapshot from the current schema without keeping the SQL, and check the next generated migration contains only the intended change.
 
 ### 61. Projections ignore the yearly tax table
 
@@ -630,27 +630,27 @@ Each is small; together they are why the assistant and the screens sometimes dif
 
 Plaid security types map "etf" and "mutual fund" to `us_stock` in `src/lib/plaid/sync.ts`, so a bond fund or an international fund in a linked 401(k) counts as US stock in the allocation, the drift alerts and rebalancing. A linked Roth 401(k) becomes a Roth IRA and gets the IRA contribution limit. Classify funds from Plaid's sector or fund category where it is given, ask the owner where it is not, and map Roth 401(k)s to their own type.
 
-### 77. A linked price is stamped as current whatever its date
-
-- Type: Defect
-- Priority: P2
-- Effort: S
-- Severity: Medium
-- Blocker: None
-- Source: Daily change review, 6 Oct, GAP-46
-
-The bank sync writes each holding's `last_price_update` as the moment it ran, not the date of the price the institution reported. Plaid gives that date (`institution_price_as_of`), and for some employer-plan funds it is days old. A stale price therefore reads as fresh on the dashboard and the account cards, and a fund that has not been repriced keeps adding nothing to the daily change without saying why. Store the price's own date and judge freshness by it.
-
-### 78. The daily change mixes days
+### 80. The weekday snapshot records mutual funds a day behind
 
 - Type: Defect
 - Priority: P3
 - Effort: M
 - Severity: Low
 - Blocker: None
-- Source: Daily change review, 6 Oct, GAP-47
+- Source: Fixing #78, 6 Oct, GAP-48
 
-The dashboard's daily change measures today's prices against each position's price in the weekday-evening snapshot, which runs at 22:00 UTC, 6 pm Eastern in summer. Stocks and ETFs have closed by then, but most mutual funds post their price later in the evening, so the snapshot holds the day before's and a fund's move shows a day late. Funds in employer plans that Yahoo cannot price take the bank's morning price, also from the day before. Run the snapshot after funds post, or keep Yahoo's own previous close for each priced holding, and record it under the market day.
+The weekday-evening snapshot runs at 22:00 UTC, 6 pm Eastern in summer, before most mutual funds post their price, so it records each fund at the day before's price under today's date. The dashboard's daily change no longer reads it (#78), but the value chart, the account returns and the large-move alert do, so there a fund's move lands a day late and a day's account return mixes two sessions. Each holding now carries the time its price was struck and its previous close, so the snapshot can record each position under its price's session, or restate the day before once a fund's price posts.
+
+### 81. The goals browser test sometimes finds the goals panel twice
+
+- Type: Tech Debt
+- Priority: P3
+- Effort: S
+- Severity: Low
+- Blocker: None
+- Source: Checking #77 and #78 locally, 6 Oct
+
+`e2e/goals.spec.ts` fails about one run in nine, on main as on the #77/#78 branch (2 of 18 each, Chromium): `getByTestId('goals-panel')` resolves to two elements just after the demo redirect lands on the dashboard. CI retries once, so it has not turned a run red yet, but a retry hides a real failure as easily as a flaky one. Find whether a second, hidden dashboard tree is kept during the redirect or the panel renders twice, and make the test wait for the one visible panel or the page render it once.
 
 ## Notes on sequencing
 
@@ -666,12 +666,28 @@ The dashboard's daily change measures today's prices against each position's pri
 - #54 before #35: the leave action cannot delete "what the member added" until that is recorded.
 - #58 is the next privacy fix: small, and it makes the erasure promise true again. #59, #61 and #62 are small and independent.
 - #60 before the next schema change, or that change's migration will fail.
-- #77 before #78: the daily change can only be judged once each price says how old it is.
+- #77 and #78 are done (6 Oct): each price is dated by the market, and each move is shown on its own day. #80 finishes the job for the evening snapshot.
 - #72 and #73 are both the Analytics page and the withdrawal comparison; do them together, after #61, so every figure uses one tax table and one dollar basis. #71 and #75 change the figures on account cards and the allocation, and #74 collects the small fixes.
 - Q3, Q4, Q5, Q6 and Q9 were answered on 2 Oct, so no traceability item waits on a decision from you; #53 waits on your go-ahead.
 - #55, #29 and #30 are done (2–3 Oct): one tested engine answers everywhere. You answered Q10 on 3 Oct: the landing-page claim stays, and the withdrawal-order comparison stays as it is.
 
 ## Done
+
+### 78. The daily change mixes days
+
+- Type: Defect
+- Closed: 2026-10-06
+- In: PR 12
+
+The daily change measured every position against the evening snapshot's price, which holds a mutual fund's price from the day before, so a fund's move was added to the next day's figure. Each holding now keeps the close of the session before its price's (Yahoo reports it; the bank's comes from the stored price, only across one session), and each position's move is credited to the session its price was struck in. The card shows the latest session's move, the day before's from positions a day behind on its own line, and how many positions it could not count. Proved by `scripts/test-performance.ts`, and the price rules by `scripts/test-freshness.ts`. Needs the `holdings.previous_close` column (migration 0020) applied before release.
+
+### 77. A linked price is stamped as current whatever its date
+
+- Type: Defect
+- Closed: 2026-10-06
+- In: PR 12
+
+A price is now dated when it was struck, not when it was written. The bank's keeps the institution's date (its date and time, or its date at the 4 pm close); Yahoo's keeps the quote's own time, so a mutual fund fetched at noon reads as the day before's; a price typed by hand is dated when typed, and saving a holding with its price unchanged no longer re-dates it. A price from an earlier session never replaces a later one, and a price's freshness counts market days rather than hours. Proved by `scripts/test-freshness.ts` and `scripts/test-cost-basis.ts`.
 
 ### 79. The daily change does not move when prices are refreshed
 

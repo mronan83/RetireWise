@@ -17,6 +17,7 @@ export async function getHoldingsByClerkId(clerkId: string) {
       currentPrice: holdings.currentPrice,
       currentValue: holdings.currentValue,
       lastPriceUpdate: holdings.lastPriceUpdate,
+      previousClose: holdings.previousClose,
       dataSource: holdings.dataSource,
       createdAt: holdings.createdAt,
       updatedAt: holdings.updatedAt,

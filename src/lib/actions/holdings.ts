@@ -7,6 +7,7 @@ import { z } from "zod";
 import { getDb } from "../db";
 import { holdings, accounts } from "../db/schema";
 import { recordAudit } from "../audit";
+import { typedPriceUpdate } from "../utils/market-session";
 
 const holdingSchema = z.object({
   accountId: z.string().uuid(),
@@ -101,7 +102,7 @@ async function updateHoldingImpl(id: string, formData: FormData) {
   // Verify the holding belongs to an account owned by this user
   const db = getDb();
   const holding = await db
-    .select({ accountId: holdings.accountId })
+    .select({ accountId: holdings.accountId, currentPrice: holdings.currentPrice })
     .from(holdings)
     .innerJoin(accounts, eq(holdings.accountId, accounts.id))
     .where(and(eq(holdings.id, id), eq(accounts.clerkId, userId)))
@@ -118,7 +119,7 @@ async function updateHoldingImpl(id: string, formData: FormData) {
       costBasisPerShare: String(parsed.costBasisPerShare),
       currentPrice: String(parsed.currentPrice),
       currentValue: String(currentValue),
-      lastPriceUpdate: new Date(),
+      ...typedPriceUpdate(parsed.currentPrice, holding[0].currentPrice),
       updatedAt: new Date(),
     })
     .where(eq(holdings.id, id));

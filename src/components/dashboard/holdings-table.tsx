@@ -99,7 +99,7 @@ export function HoldingsTable({ holdings }: { holdings: HoldingRow[] }) {
                 <div>{formatCurrency(Number(holding.currentPrice))}</div>
                 {holding.lastPriceUpdate !== undefined && (
                   <div
-                    title={`Price fetched ${absoluteTimestamp(holding.lastPriceUpdate)}`}
+                    title={`Price as of ${absoluteTimestamp(holding.lastPriceUpdate)}`}
                     className={cn(
                       "font-sans text-[11px]",
                       priceTone(freshnessOf(holding.lastPriceUpdate, "price"))

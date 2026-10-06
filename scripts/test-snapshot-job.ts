@@ -2,8 +2,8 @@
  * The weekday-evening snapshot, and the daily change it records.
  *
  * Each snapshot records the portfolio's value and the change since the one
- * before, which alerts and reports read, and each position's price, which the
- * dashboard's daily change measures today's prices against. A second run on
+ * before, which alerts and reports read, and each position's shares and
+ * price, which the period returns read. A second run on
  * the same day used to record a change of nothing and add a second set of
  * rows; and an uncaught error in one household ended the run for every
  * household after it.
@@ -18,7 +18,6 @@ import { withSystemRole } from "../src/lib/db/tenant";
 import { accountSnapshots, accounts, holdingSnapshots, holdings, netWorthSnapshots, portfolioSnapshots } from "../src/lib/db/schema";
 import { snapshotHousehold, snapshotHouseholds } from "../src/lib/utils/portfolio-snapshot";
 import { deleteHouseholdData } from "../src/lib/account/delete";
-import { getPreviousClose } from "../src/lib/queries/snapshots";
 
 let failures = 0;
 function check(label: string, ok: boolean, detail = "") {
@@ -118,16 +117,6 @@ async function main() {
     `${monday.length} rows, ${monday[0]?.totalValue}, ${monday[0]?.dailyChange}`
   );
   check("and the position snapshot is updated too, not left at the first run's shares", Number(position?.shares) === 1100, String(position?.shares));
-
-  // ---- the previous close the dashboard measures today against -------------
-  const tuesdayClose = await system(() => getPreviousClose(A, "2026-01-06"));
-  check(
-    "on Tuesday the previous close is Monday's position snapshot",
-    tuesdayClose?.date === MONDAY && tuesdayClose.positions.length === 1 && tuesdayClose.positions[0].price === 1,
-    JSON.stringify(tuesdayClose)
-  );
-  const mondayClose = await system(() => getPreviousClose(A, MONDAY));
-  check("on Monday there is none yet, since no positions were recorded before it", mondayClose === null, JSON.stringify(mondayClose));
 
   // ---- a household without investments still gets its net worth ------------
   const empty = await system(() => snapshotHousehold(EMPTY, MONDAY));

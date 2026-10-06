@@ -1,77 +1,106 @@
 /**
  * The dashboard's daily change: the market's move in what the household
- * holds now, at the latest prices, since the previous weekday's close.
+ * holds now, credited to the session it happened in.
  *
- * It used to be read from the evening snapshot, as that snapshot's total less
- * the one before, so it moved once each weekday evening and not when prices
- * were refreshed, and money paid in counted as gain. Brokerages show the
- * day's change as each position's shares times the change in its price since
- * the last close, and so does this: refreshing prices moves it, and a deposit
- * does not.
+ * Each position moves by its shares times the change in its price since the
+ * close before that price's session. Refreshing prices moves it, and money
+ * paid in does not.
  *
- * The previous close is the price each position was recorded at in the last
- * weekday-evening snapshot before the market day, so no price history needs
- * to be fetched to work it out.
+ * Prices do not all belong to the same day. An exchange-traded fund refreshed
+ * at noon is today's; a mutual fund posts one price a day, after the close,
+ * so at noon its newest price is yesterday's, and an employer-plan fund the
+ * bank prices arrives the next morning. Measuring every position against one
+ * evening snapshot added a fund's move to the day after it happened. So each
+ * position is placed in the session its price belongs to (sessionOf), and the
+ * dashboard shows the latest session's move with the session before it, from
+ * positions a day behind, beside it rather than inside it.
  */
+import { sessionBefore, sessionOf } from "../utils/market-session";
 
-/** A position as it stands, at its latest price. */
-export type PositionNow = { accountId: string; ticker: string; shares: number; price: number };
-/** A position's price at the previous close. */
-export type PositionAtClose = { accountId: string; ticker: string; price: number };
-
-export type DailyChange = {
-  /** Shares now times the change in price since the previous close, summed. */
-  change: number;
-  /** As a share of the same positions' value at the previous close; null when that is nothing. */
-  changePct: number | null;
-  /** What the positions held now were worth at the previous close. */
-  valueAtClose: number;
-  /** Positions with no price at the previous close, bought since: they add nothing to the change. */
-  newSinceClose: number;
+/** A position at its newest price, with the close before that price's session. */
+export type PricedPosition = {
+  shares: number;
+  price: number;
+  /** The close of the session before the price's; null when not known. */
+  previousClose: number | null;
+  /** When the price was struck. */
+  priceAsOf: Date | string | null;
 };
 
-const key = (p: { accountId: string; ticker: string }) => `${p.accountId}|${p.ticker}`;
+/** One session's move, in the positions priced in it. */
+export type SessionMove = {
+  /** The session, YYYY-MM-DD. */
+  session: string;
+  /** Shares times the change in price since the close before, summed. */
+  change: number;
+  /** As a share of those positions' value at that close; null when that is nothing. */
+  changePct: number | null;
+  valueAtClose: number;
+  positions: number;
+};
 
-/** The day's change in what is held now, since the previous close. */
-export function dailyChange(now: PositionNow[], atClose: PositionAtClose[]): DailyChange {
-  const closing = new Map(atClose.map((p) => [key(p), p.price]));
+export type DailyChange = {
+  /** The newest session any position is priced in: the dashboard's figure. Null when nothing can be measured. */
+  latest: SessionMove | null;
+  /** The session before it, in positions a day behind (mutual funds, until they post). Null when there are none. */
+  dayBehind: SessionMove | null;
+  /** Positions priced longer ago than that, left out rather than shown on a day they did not move. */
+  older: number;
+  /** Positions with no previous close: priced by hand, never refreshed since, or across a gap. */
+  unmeasured: number;
+};
+
+function move(session: string, positions: { shares: number; price: number; previousClose: number }[]): SessionMove {
   let change = 0;
   let valueAtClose = 0;
-  let newSinceClose = 0;
-  for (const p of now) {
-    if (!(p.shares > 0) || !Number.isFinite(p.price) || p.price <= 0) continue;
-    const before = closing.get(key(p));
-    if (before === undefined || !Number.isFinite(before) || before <= 0) {
-      newSinceClose++;
-      continue;
-    }
-    change += p.shares * (p.price - before);
-    valueAtClose += p.shares * before;
+  for (const p of positions) {
+    change += p.shares * (p.price - p.previousClose);
+    valueAtClose += p.shares * p.previousClose;
   }
   return {
+    session,
     change,
     changePct: valueAtClose > 0 ? (change / valueAtClose) * 100 : null,
     valueAtClose,
-    newSinceClose,
+    positions: positions.length,
   };
 }
 
-/**
- * The market day a moment belongs to, as YYYY-MM-DD: the date in New York,
- * or the Friday before on a weekend, so a Saturday shows Friday's move
- * rather than nothing. Market holidays are not known here; on one, the
- * change reads as nothing.
- */
-export function marketDay(now: Date = new Date()): string {
-  const parts = new Intl.DateTimeFormat("en-US", {
-    timeZone: "America/New_York",
-    year: "numeric",
-    month: "2-digit",
-    day: "2-digit",
-    weekday: "short",
-  }).formatToParts(now);
-  const part = (type: string) => parts.find((p) => p.type === type)?.value ?? "";
-  const back = part("weekday") === "Sat" ? 1 : part("weekday") === "Sun" ? 2 : 0;
-  const day = new Date(Date.UTC(Number(part("year")), Number(part("month")) - 1, Number(part("day")) - back));
-  return day.toISOString().slice(0, 10);
+/** The market's move in what is held now, by the session each price belongs to. */
+export function dailyChange(positions: PricedPosition[]): DailyChange {
+  const bySession = new Map<string, { shares: number; price: number; previousClose: number }[]>();
+  let unmeasured = 0;
+  for (const p of positions) {
+    if (!(p.shares > 0) || !Number.isFinite(p.price) || p.price <= 0) continue;
+    const at = p.priceAsOf ? new Date(p.priceAsOf) : null;
+    if (
+      !at ||
+      Number.isNaN(at.getTime()) ||
+      p.previousClose === null ||
+      !Number.isFinite(p.previousClose) ||
+      p.previousClose <= 0
+    ) {
+      unmeasured++;
+      continue;
+    }
+    const session = sessionOf(at);
+    const list = bySession.get(session) ?? [];
+    list.push({ shares: p.shares, price: p.price, previousClose: p.previousClose });
+    bySession.set(session, list);
+  }
+
+  const sessions = [...bySession.keys()].sort();
+  const newest = sessions.at(-1);
+  if (!newest) return { latest: null, dayBehind: null, older: 0, unmeasured };
+  const before = sessionBefore(newest);
+  const behind = bySession.get(before);
+  const older = sessions
+    .filter((s) => s < before)
+    .reduce((n, s) => n + bySession.get(s)!.length, 0);
+  return {
+    latest: move(newest, bySession.get(newest)!),
+    dayBehind: behind ? move(before, behind) : null,
+    older,
+    unmeasured,
+  };
 }
