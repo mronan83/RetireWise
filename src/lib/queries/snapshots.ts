@@ -1,4 +1,4 @@
-import { eq, desc, and, gte, asc } from "drizzle-orm";
+import { eq, desc, and, gte, lt, asc } from "drizzle-orm";
 import { getDb } from "../db";
 import { portfolioSnapshots, accountSnapshots, holdingSnapshots, netWorthSnapshots, netWorthItemHistory } from "../db/schema";
 import { twrSince, timeWeightedReturn, type AccountDay } from "../performance/twr";
@@ -61,6 +61,23 @@ export async function getLatestSnapshot(clerkId: string) {
     .from(portfolioSnapshots)
     .where(eq(portfolioSnapshots.clerkId, clerkId))
     .orderBy(desc(portfolioSnapshots.snapshotDate))
+    .limit(1);
+  return result[0] || null;
+}
+
+/**
+ * The household's latest snapshot from before a date: what a day's change is
+ * measured from. Reading the latest snapshot of all, as the nightly job did,
+ * measured a second run on the same day against the first and recorded a
+ * change of nothing.
+ */
+export async function getSnapshotBefore(clerkId: string, date: string) {
+  const db = getDb();
+  const result = await db
+    .select()
+    .from(portfolioSnapshots)
+    .where(and(eq(portfolioSnapshots.clerkId, clerkId), lt(portfolioSnapshots.snapshotDate, date)))
+    .orderBy(desc(portfolioSnapshots.snapshotDate), desc(portfolioSnapshots.createdAt))
     .limit(1);
   return result[0] || null;
 }

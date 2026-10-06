@@ -218,7 +218,7 @@ Backoff is 15 minutes doubling to a 12-hour cap; eight failures in a row, or an 
 - Source: `docs/USER-GUIDE.md:38`
 - Features: F-14
 - Verified by: `scripts/test-performance.ts`, `scripts/test-cost-basis.ts`, `scripts/test-freshness.ts`
-- Gap: GAP-42
+- Gap: GAP-42, GAP-46
 
 ### FR-ACC-08. Each account page shows and manages its own contributions and holdings
 
@@ -293,7 +293,7 @@ A manually entered basis is never overwritten. Derivation is refused after any s
 - Status: Partial
 - Source: `docs/USER-GUIDE.md:31`; `vercel.json`
 - Features: F-17
-- Gap: GAP-09
+- Gap: GAP-09, GAP-47
 
 ### FR-INV-04. Investment transactions are listed with totals and the period they cover
 
@@ -352,11 +352,10 @@ A debt secured against an asset replaces the loan typed onto that asset; it is n
 ### FR-NW-04. Net worth history is kept daily and charted, in total and per item
 
 - Priority: Should
-- Status: Partial
+- Status: Verified
 - Source: `src/app/(dashboard)/net-worth/net-worth-history-chart.tsx`
 - Features: F-27
-- Verified by: `scripts/test-net-worth.ts`
-- Gap: GAP-22
+- Verified by: `scripts/test-net-worth.ts`, `scripts/test-snapshot-job.ts`
 
 ### FR-PLAN-01. Record the household's profile: ages, retirement targets, salaries, filing status, risk, target allocation and spending
 
@@ -385,11 +384,10 @@ A debt secured against an asset replaces the loan typed onto that asset; it is n
 ### FR-PLAN-04. A year-by-year retirement projection with controls that persist
 
 - Priority: Must
-- Status: Partial
+- Status: Verified
 - Source: `docs/USER-GUIDE.md:66`
 - Features: F-34
 - Verified by: `scripts/test-analytics.ts`, `scripts/test-projection-tax.ts`, `scripts/test-one-engine.ts`
-- Gap: GAP-37
 
 Spending is inflated from today, not from the year retirement starts. Withdrawals never fall below the required minimum distribution. Every screen and the assistant use this one tested engine, including for the odds that savings last (Q9).
 
@@ -406,14 +404,14 @@ The odds are the tested engine itself run against 500 simulated markets: one ret
 ### FR-PLAN-06. Compare what-if scenarios side by side
 
 - Priority: Should
-- Status: Partial
+- Status: Verified
 - Source: `docs/USER-GUIDE.md:73`
 - Features: F-35
-- Gap: GAP-40
+- Verified by: `scripts/test-one-engine.ts`
 
 The six scenarios are a 30% crash, retiring five years earlier, saving 50% more, a 4% return, 5% inflation, and Social Security cut by 25%.
 
-Each scenario is the page's own engine inputs with one thing changed, run against the same 500 markets, so it differs from the base case only by what it changes. The overrides themselves have no check of their own.
+Each scenario is the page's own engine inputs with one thing changed (`src/lib/projections/what-if.ts`), run against the same 500 markets, so it differs from the base case only by what it changes. `scripts/test-one-engine.ts` checks that each one changes what it says.
 
 ### FR-PLAN-07. Required minimum distributions are computed correctly, starting at 73
 
@@ -813,11 +811,10 @@ A check that restates a rule locally, or never triggers the case it names, makes
 ### NFR-OPS-01. Scheduled refresh and snapshots run unattended, record each run, and degrade health when stale
 
 - Priority: Must
-- Status: Partial
-- Enforced by: `src/app/api/cron/refresh/route.ts`, `src/app/api/cron/snapshot/route.ts`, `src/app/api/health/freshness/route.ts`, `vercel.json`
+- Status: Verified
+- Enforced by: `src/app/api/cron/refresh/route.ts`, `src/app/api/cron/snapshot/route.ts`, `src/lib/utils/portfolio-snapshot.ts`, `src/app/api/health/freshness/route.ts`, `vercel.json`
 - Source: `vercel.json`
-- Verified by: `scripts/test-ops.ts`
-- Gap: GAP-22
+- Verified by: `scripts/test-ops.ts`, `scripts/test-snapshot-job.ts`
 
 ### NFR-OPS-02. Someone is told within minutes when production breaks
 
@@ -1092,7 +1089,7 @@ CI fails when `docs/ARCHITECTURE.md` stops naming a dependency, environment vari
 - Requirements: FR-ACC-07, FR-INV-06, NFR-INT-01, NFR-INT-02
 - Code: `src/components/dashboard/account-card.tsx`, `src/lib/performance/twr.ts`, `src/lib/utils/cost-basis.ts`, `src/lib/utils/freshness.ts`, `src/lib/queries/snapshots.ts`
 - Checks: `scripts/test-performance.ts`, `scripts/test-cost-basis.ts`, `scripts/test-freshness.ts`
-- Gap: GAP-42
+- Gap: GAP-42, GAP-46
 
 ### F-15. Holdings list and manual add
 
@@ -1118,7 +1115,7 @@ CI fails when `docs/ARCHITECTURE.md` stops naming a dependency, environment vari
 - Requirements: FR-INV-03
 - Code: `src/components/dashboard/refresh-prices-button.tsx`, `src/app/api/prices/refresh/route.ts`, `src/lib/utils/price-feed.ts`, `src/lib/redis.ts`
 - Checks: none
-- Gap: GAP-09
+- Gap: GAP-09, GAP-47
 
 ### F-18. Transaction history
 
@@ -1203,11 +1200,10 @@ Merges by ticker, but with no date check or review: a position missing from the 
 ### F-27. Net worth history
 
 - Group: Net worth and debts
-- Status: Partial
+- Status: Verified
 - Requirements: FR-NW-04
 - Code: `src/lib/utils/net-worth-snapshot.ts`, `src/lib/utils/record-item-history.ts`, `src/app/(dashboard)/net-worth/net-worth-history-chart.tsx`, `src/app/(dashboard)/net-worth/item-history-chart.tsx`
-- Checks: `scripts/test-net-worth.ts`
-- Gap: GAP-22
+- Checks: `scripts/test-net-worth.ts`, `scripts/test-snapshot-job.ts`
 
 ### F-28. Portfolio dashboard
 
@@ -1266,16 +1262,15 @@ Merges by ticker, but with no date check or review: a position missing from the 
 - Requirements: FR-PLAN-04, FR-PLAN-05, FR-PLAN-09, FR-PLAN-10
 - Code: `src/app/(dashboard)/projections/page.tsx`, `src/app/(dashboard)/projections/interactive-controls.tsx`, `src/lib/utils/projection-scenarios.ts`, `src/lib/utils/glide-path.ts`, `src/lib/projections/build-accounts.ts`, `src/app/api/settings/projection-controls/route.ts`, `src/lib/projections/monte-carlo.ts`, `src/lib/projections/settings.ts`, `src/lib/projections/household.ts`, `src/lib/planning-inputs.ts`, `src/components/planning/missing-inputs.tsx`
 - Checks: `scripts/test-analytics.ts`, `scripts/test-projection-tax.ts`, `scripts/test-one-engine.ts`, `scripts/test-missing-inputs.ts`
-- Gap: GAP-33, GAP-37
+- Gap: GAP-33
 
 ### F-35. What-if scenarios
 
 - Group: Planning
-- Status: Partial
+- Status: Verified
 - Requirements: FR-PLAN-06
-- Code: `src/app/(dashboard)/projections/interactive-controls.tsx`, `src/lib/utils/projection-scenarios.ts`, `src/lib/projections/monte-carlo.ts`
-- Checks: none
-- Gap: GAP-40
+- Code: `src/app/(dashboard)/projections/interactive-controls.tsx`, `src/lib/projections/what-if.ts`, `src/lib/utils/projection-scenarios.ts`, `src/lib/projections/monte-carlo.ts`
+- Checks: `scripts/test-one-engine.ts`
 
 ### F-36. IRS limits and tax reference
 
@@ -1362,9 +1357,8 @@ Built and switched off. Deferred by Q6.
 - Group: Platform
 - Status: Partial
 - Requirements: NFR-OPS-01, NFR-OPS-02
-- Code: `src/app/api/cron/snapshot/route.ts`, `src/app/api/health/route.ts`, `src/app/api/health/freshness/route.ts`, `vercel.json`
-- Checks: none
-- Gap: GAP-22
+- Code: `src/app/api/cron/snapshot/route.ts`, `src/lib/utils/portfolio-snapshot.ts`, `src/app/api/health/route.ts`, `src/app/api/health/freshness/route.ts`, `vercel.json`
+- Checks: `scripts/test-snapshot-job.ts`
 - Backlog: #2, #20
 
 ### F-46. Legal pages
@@ -1662,12 +1656,14 @@ A person who forgets their password cannot get back in. When a signed-out visito
 - Severity: Low
 - Evidence: `src/app/api/cron/snapshot/route.ts:72`
 - Backlog: #49
-- Status: Open
+- Status: Closed 2026-10-06
 
 The shortfalls:
 - A household with no investments gets no net-worth snapshot.
 - A second run on the same day inserts duplicate rows.
 - A run is recorded as ok whatever happened.
+
+Closed by #49: each household's snapshot replaces that day's records and is measured from the last snapshot on an earlier day; one household's error stops only that household and is counted in the run's record; a household with no investments gets its net-worth snapshot. `scripts/test-snapshot-job.ts` runs the job against a database in CI.
 
 ### GAP-23. A release stops on a passing Vercel error before confirming itself
 
@@ -1826,9 +1822,11 @@ Closed by #65: the engine takes each partner's benefit with its own start year. 
 - Severity: Low
 - Evidence: `src/app/(dashboard)/projections/interactive-controls.tsx:1110`, `src/lib/utils/projection-scenarios.ts:303`
 - Backlog: #66
-- Status: Open
+- Status: Closed 2026-10-06
 
 The engine records Social Security in today's dollars; the page's drawdown table shows it beside withdrawals and balances in each year's dollars, and its spending-versus-income card mixes the two outside the engine. The engine's own calculation is right: it inflates Social Security before using it.
+
+Closed by #66: the engine records Social Security and spending in each year's own dollars, with the price level; the drawdown table uses them, and the first-year card reads the engine in today's dollars.
 
 ### GAP-38. Settings records Social Security details no calculation reads
 
@@ -1858,9 +1856,11 @@ Closed by #68: the engine is given each account's own deferral from records in f
 - Severity: Medium
 - Evidence: `src/app/(dashboard)/projections/interactive-controls.tsx:1345`
 - Backlog: #69
-- Status: Open
+- Status: Closed 2026-10-06
 
 "Boost Savings" misses percentage contributions, "Retire Earlier" keeps contributing and leaves Social Security alone, and "Lower Returns" is ignored when the glide path is on.
+
+Closed by #69: the what-ifs change the engine's inputs in `src/lib/projections/what-if.ts`, and `scripts/test-one-engine.ts` checks each one.
 
 ### GAP-41. Required distributions past 95, and not per person
 
@@ -1911,6 +1911,26 @@ The ladder leaves the standard deduction unused below it; the sequence scenarios
 - Status: Open
 
 ETFs and mutual funds from Plaid become US stock whatever they hold, which skews the allocation, the drift alerts and rebalancing, and a Roth 401(k) is mapped to a Roth IRA.
+
+### GAP-46. A linked price is stamped as current whatever its date
+
+- Affects: FR-ACC-07, F-14
+- Severity: Medium
+- Evidence: `src/lib/plaid/sync.ts:400`
+- Backlog: #77
+- Status: Open
+
+Found on 6 Oct while checking the daily change. The bank sync records the time it ran as each holding's price time, not the date of the price the institution reported, so an old price is shown as fresh.
+
+### GAP-47. The daily change mixes days
+
+- Affects: FR-INV-03, F-17
+- Severity: Low
+- Evidence: `vercel.json`, `src/lib/utils/price-feed.ts`
+- Backlog: #78
+- Status: Open
+
+The snapshot runs before most mutual funds post their price, and employer-plan funds keep the bank's morning price, so their part of the daily change is the day before's while stocks' is the day's own.
 
 ## Open questions
 
@@ -2042,6 +2062,7 @@ Only the assistant compares withdrawal orders. Since 3 Oct it does so with the c
 - 2026-10-03 · The technical architecture and data model rewritten as living documents (NFR-DOC-02, F-50): half generated from the code, checked in CI, published after each release. `docs/DATA-FLOW.md` folded into the architecture's key flows; GAP-17 narrowed to the README, user guide and help. Writing them found GAP-31 to GAP-35 (#58, #59, #61–#63) and #60 and #64. NFR-PRIV-01, FR-DATA-02, FR-DATA-03, FR-NW-01, FR-INV-02, F-23, F-25 and F-34 moved from Verified to Partial on that evidence; GAP-11 now also covers the zero basis a file import invents. · Claude
 - 2026-10-04 · How RetireWise works added as a living document (NFR-DOC-03, F-51): every calculation explained, its figures read from the code, its calculators running the production engine from the released commit. Writing it found GAP-36 to GAP-45 (#65–#73, #75) and the small fixes in #74, and added five calculations with no check to #51. FR-PLAN-04, FR-PLAN-07, FR-ACC-07, FR-ANA-01 and FR-AI-04 moved from Verified, and FR-PLAN-03, FR-PLAN-06, FR-ONB-03 and FR-ONB-04 from Implemented, to Partial on that evidence. · Claude
 - 2026-10-04 · GAP-36 and GAP-39 closed by #65 and #68: a couple's Social Security is paid per partner from each one's claim, and contribution records are counted once, from those in force, with pauses that resume. FR-PLAN-02, FR-PLAN-04, F-32 and F-34 stay Partial on their other gaps (GAP-04, GAP-33, GAP-37). The release now checks this page against the released commit, not the working tree (#76). · Claude
+- 2026-10-06 · GAP-22, GAP-37 and GAP-40 closed by #49, #66 and #69. The snapshot job is checked against a database (`scripts/test-snapshot-job.ts`), and the what-ifs and the year's-own-dollars figures in `scripts/test-one-engine.ts`. NFR-OPS-01, FR-NW-04, FR-PLAN-04, FR-PLAN-06, F-27 and F-35 moved to Verified. Checking the daily change opened GAP-46 (#77) and GAP-47 (#78). · Claude
 
 ## Sources
 

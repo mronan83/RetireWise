@@ -232,7 +232,8 @@ function main() {
 
   // ---- the code that produced the trophy is gone --------------------------
   const read = (rel: string) => readFileSync(join(__dirname, "..", rel), "utf8");
-  const cron = read("src/app/api/cron/snapshot/route.ts");
+  // The snapshot job's per-household work, which closes goals, lives here.
+  const cron = read("src/lib/utils/portfolio-snapshot.ts");
   const panel = read("src/components/dashboard/goals-panel.tsx");
 
   check(

@@ -317,9 +317,9 @@ sequenceDiagram
 ### Weekday snapshot
 
 1. At 22:00 UTC on weekdays Vercel Cron calls `/api/cron/snapshot`, which records a run.
-2. For each household with accounts it refreshes prices, then writes portfolio, account and holding snapshots. A household with no investments is skipped (#49).
-3. It writes the day's net worth, generates alerts and marks goals that have been reached.
-4. The run is recorded as successful whatever happened to each household (#49).
+2. For each household with accounts, `src/lib/utils/portfolio-snapshot.ts` refreshes prices, then replaces that day's portfolio, account and holding snapshots, so a second run on one day restates the day instead of adding to it. The daily change is the day's total less the total of the last snapshot from an earlier day.
+3. It writes the day's net worth, generates alerts and marks goals that have been reached. A household with no investments gets its net worth and nothing else.
+4. Each household runs on its own: an error stops only that household. The run is recorded as ok only when every household was snapshotted, with the number that failed.
 
 ```mermaid
 sequenceDiagram
@@ -331,18 +331,19 @@ sequenceDiagram
   participant DB as Postgres, owner role
   C->>S: GET with the cron secret
   S->>DB: Record the run
-  loop Each household
+  loop Each household, an error stopping only that household
     S->>RD: Cached prices
     S->>YF: Prices not cached
     S->>DB: Update holdings
     alt Investments worth nothing
-      S->>S: Skip the household
+      S->>DB: Net worth only
     else
-      S->>DB: Portfolio, account and holding snapshots
+      S->>DB: The last snapshot from an earlier day
+      S->>DB: Replace the day's portfolio, account and holding snapshots
       S->>DB: Net worth, alerts, goals reached
     end
   end
-  S->>DB: Finish the run record
+  S->>DB: Finish the run record, with households that failed
 ```
 
 ### A projection
@@ -654,12 +655,12 @@ Releases run from a Claude session with a broad token, and main has no branch pr
 
 Contribution limits are fixed for 2025, the tax figures predate the July 2025 law, the projection ignores the yearly tax table the analytics read, and required distributions past 95 follow a formula steeper than the IRS table.
 
-### The Projections page's what-ifs miss what they change
+### Prices can be older than the figures built on them say
 
-- Backlog: #69
+- Backlog: #77, #78
 - Severity: Medium
 
-Three what-if scenarios on the Projections page miss what they change, so each misstates its odds for the households it touches. The engine's own rules are tested, including a couple who claim Social Security at different ages and contribution records that are paused, inactive or fixed amounts with employer money (#65 and #68, closed).
+A linked holding's price is stamped with the time the bank sync ran, not the date of the price, so an old price reads as fresh. The weekday snapshot runs before most mutual funds post their price, so the dashboard's daily change mixes the day's move in stocks with the day before's in funds. The projection, the odds and the analytics use today's balances and are unaffected.
 
 ### Imports and bank connections can lose, duplicate or strand data
 
@@ -927,3 +928,4 @@ Choices that shaped the system, newest last. A record is never deleted; a later 
 - 2026-10-03 · Rewritten from the code: principles, system context, frontend, identity and households, server logic, nine key flows, environments, delivery, quality attributes, thirteen risks and twenty-six decision records. The inventory is generated, `pnpm arch:check` keeps the two in step, and the stale data-flow document is replaced by the key flows · Claude
 - 2026-10-04 · ADR-027: the calculations are explained in a living page that runs the production engine; a fourteenth risk for the projection defects that page found (#65, #68, #69), and #70 added to the planning-figures risk · Claude
 - 2026-10-04 · #65 and #68 closed: the engine takes each partner's Social Security with its own start year, and each account's own deferral from records in force; the projection-inputs risk narrowed to the what-ifs (#69); the release builds the trace page from a copy of the released commit, like the pages that read the code (#76) · Claude
+- 2026-10-06 · Weekday snapshot flow: one snapshot per household per day, measured from the previous day, each household on its own, and the run's failures recorded (#49), in `src/lib/utils/portfolio-snapshot.ts`; the what-ifs moved to `src/lib/projections/what-if.ts` (#69); the what-if risk retired and replaced by the risk that prices are older than they say (#77, #78) · Claude

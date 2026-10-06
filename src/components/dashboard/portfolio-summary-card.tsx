@@ -9,6 +9,11 @@ import {
 import { cn } from "@/lib/utils";
 import { LastUpdated } from "@/components/ui/last-updated";
 
+// Snapshot dates are calendar days; read them in UTC so a US time zone
+// does not show the day before.
+const recordingDayFormat = new Intl.DateTimeFormat("en-US", { weekday: "short", month: "short", day: "numeric", timeZone: "UTC" });
+const recordingDay = (date: string) => recordingDayFormat.format(new Date(`${date}T00:00:00Z`));
+
 type Props = {
   totalValue: number;
   selfValue: number;
@@ -20,6 +25,12 @@ type Props = {
   positionsWithoutBasis?: number;
   dailyChange: number;
   dailyChangePct: number;
+  /**
+   * The two recordings the daily change compares, as YYYY-MM-DD. The figure
+   * moves once each weekday evening, not during the day, so the card says
+   * which days it means rather than leaving "daily" to be read as today.
+   */
+  dailyChangeDates?: { latest: string; previous: string | null } | null;
   accountCount: number;
   holdingCount: number;
   /**
@@ -42,6 +53,7 @@ export function PortfolioSummaryCards({
   positionsWithoutBasis = 0,
   dailyChange,
   dailyChangePct,
+  dailyChangeDates = null,
   accountCount,
   holdingCount,
   pricesAsOf,
@@ -134,8 +146,9 @@ export function PortfolioSummaryCards({
 
       <Card>
         <CardHeader className="flex flex-row items-center justify-between pb-2">
-          <CardTitle className="text-sm font-medium text-muted-foreground">
+          <CardTitle className="flex items-center gap-1 text-sm font-medium text-muted-foreground">
             Daily Change
+            <HelpTip text="The portfolio's value at the latest weekday-evening recording, after prices are updated, against the recording before it. It moves once each weekday evening, not during the day, and money paid in or taken out counts as change." />
           </CardTitle>
           {dailyChange >= 0 ? (
             <TrendingUp className="h-4 w-4 text-green-500" />
@@ -159,6 +172,13 @@ export function PortfolioSummaryCards({
             )}
           >
             {formatGainLossPct(dailyChangePct)}
+          </p>
+          <p className="text-xs mt-1 text-muted-foreground">
+            {dailyChangeDates === null
+              ? "Recorded each weekday evening"
+              : dailyChangeDates.previous === null
+                ? `First recorded ${recordingDay(dailyChangeDates.latest)}`
+                : `${recordingDay(dailyChangeDates.latest)} vs ${recordingDay(dailyChangeDates.previous)}`}
           </p>
         </CardContent>
       </Card>

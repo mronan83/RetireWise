@@ -135,7 +135,18 @@ export type DetailedProjection = {
   phases: string[]; // "accumulation" | "retirement"
   totalValues: number[];
   accountProjections: AccountProjection[];
-  ssIncome: number[]; // combined annual SS
+  /**
+   * Social Security a year, in today's dollars, as the SSA quotes it. Every
+   * other money column is in each year's own dollars, so a page that shows
+   * Social Security beside them uses ssIncomeNominal instead.
+   */
+  ssIncome: number[];
+  /** Social Security a year in that year's own dollars: what the engine sets against spending. */
+  ssIncomeNominal: number[];
+  /** Retirement spending in that year's own dollars (0 before retirement). */
+  spendingNominal: number[];
+  /** Prices in each year relative to today: (1 + inflation)^(years from now). Divide by it for today's dollars. */
+  priceLevel: number[];
   /** Gross amount taken from savings each year: spending, the tax on it, and any RMD beyond both. */
   withdrawals: number[];
   /** Federal income tax paid out of each year's withdrawal (0 during accumulation). */
@@ -289,6 +300,9 @@ export function runDetailedProjection(params: {
   const phases: string[] = [];
   const totalValues: number[] = [];
   const ssIncomeArr: number[] = [];
+  const ssNominalArr: number[] = [];
+  const spendingArr: number[] = [];
+  const priceLevelArr: number[] = [];
   const withdrawalsArr: number[] = [];
   const taxesArr: number[] = [];
   const reinvestedArr: number[] = [];
@@ -304,6 +318,11 @@ export function runDetailedProjection(params: {
     ages.push(startAge + y + 1);
     phases.push(isRetirement ? "retirement" : "accumulation");
     ssIncomeArr.push(yearSS);
+    // Year index y ends (y + 1) years from now; see the ages array.
+    const yearPriceLevel = Math.pow(1 + inflationPct / 100, y + 1);
+    priceLevelArr.push(yearPriceLevel);
+    ssNominalArr.push(Math.round(yearSS * yearPriceLevel));
+    spendingArr.push(isRetirement ? Math.round(annualExpenses * yearPriceLevel) : 0);
 
     // Grow each account — rate varies by age when glide path is active
     const age = startAge + y + 1;
@@ -555,6 +574,9 @@ export function runDetailedProjection(params: {
         ? [...accountProjs, reinvestAccount]
         : accountProjs,
     ssIncome: ssIncomeArr,
+    ssIncomeNominal: ssNominalArr,
+    spendingNominal: spendingArr,
+    priceLevel: priceLevelArr,
     withdrawals: withdrawalsArr,
     taxes: taxesArr,
     reinvested: reinvestedArr,

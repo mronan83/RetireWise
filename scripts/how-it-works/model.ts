@@ -33,6 +33,7 @@ export const CALCULATION_MODULES = [
   "src/lib/projections/build-accounts.ts",
   "src/lib/projections/monte-carlo.ts",
   "src/lib/projections/at-retirement.ts",
+  "src/lib/projections/what-if.ts",
   "src/lib/planning-inputs.ts",
   "src/lib/utils/salary-growth.ts",
   "src/lib/utils/contributions.ts",
@@ -48,6 +49,7 @@ export const CALCULATION_MODULES = [
   "src/lib/utils/dividends.ts",
   "src/lib/goals/progress.ts",
   "src/lib/utils/alert-generator.ts",
+  "src/lib/utils/portfolio-snapshot.ts",
   "src/lib/utils/freshness.ts",
   "src/lib/plaid/backoff.ts",
 ];
@@ -174,6 +176,16 @@ export function facts(e: Engine, root = process.cwd()): Record<string, string> {
   if (asFraction.size !== 1 || !asFraction.has(f["analytics.withdrawal"])) delete f["analytics.withdrawal"];
   from("analytics.inflation", [/inflationPct: (\d+(?:\.\d+)?)/g], pct);
   from("analytics.years", [/yearsToProject: (\d+)/g], String);
+  for (const w of e.WHAT_IFS) f[`whatif.${w.id}`] = w.unit === "%" ? `${w.defaultValue}%` : `${w.defaultValue} years`;
+
+  // When the weekday snapshot runs, from the schedule Vercel is given.
+  try {
+    const crons = (JSON.parse(readIf(root, "vercel.json") || "{}").crons ?? []) as { path: string; schedule: string }[];
+    const m = crons.find((c) => c.path === "/api/cron/snapshot")?.schedule.match(/^(\d+) (\d+) \* \* 1-5$/);
+    if (m) f["snapshot.time"] = `${m[2].padStart(2, "0")}:${m[1].padStart(2, "0")} UTC, Monday to Friday`;
+  } catch {
+    // Unreadable or reshaped: the key goes missing and the check says so.
+  }
   const atRet = readIf(root, "src/lib/projections/at-retirement.ts").match(/inflationPct: (\d+(?:\.\d+)?)/);
   if (atRet) f["atRetirement.inflation"] = pct(Number(atRet[1]));
   const run = e.simulate(e.EXAMPLE_INPUTS);
