@@ -12,6 +12,7 @@
  * exclude. Every assertion below is written as the wrong behaviour, so a
  * regression reads as the old number coming back.
  */
+import { dailyChange, marketDay } from "../src/lib/performance/daily-change";
 import {
   addDays,
   flowBetween,
@@ -195,6 +196,55 @@ function main() {
     { date: "2026-01-02", value: 100 },
   ]);
   check("an account starting at zero yields no return, not infinity", zeroStart === null);
+
+  // ---- the dashboard's daily change, at the latest prices ------------------
+  // It was the evening snapshot's total less the one before: it held all day
+  // whatever Refresh Prices fetched, and a deposit counted as gain.
+  const close = [
+    { accountId: "a", ticker: "VTI", price: 300 },
+    { accountId: "a", ticker: "BND", price: 72 },
+    { accountId: "b", ticker: "VTI", price: 300 },
+  ];
+  const day = dailyChange(
+    [
+      { accountId: "a", ticker: "VTI", shares: 100, price: 303 },
+      { accountId: "a", ticker: "BND", shares: 50, price: 71.5 },
+      { accountId: "b", ticker: "VTI", shares: 10, price: 303 },
+    ],
+    close
+  );
+  check(
+    "each position's shares times its move since the close: +$300 − $25 + $30 = +$305",
+    near(day.change, 305) && near(day.valueAtClose, 30_000 + 3_600 + 3_000),
+    `${day.change} on ${day.valueAtClose}`
+  );
+  check("as a share of those positions at the close", near(day.changePct!, (305 / 36_600) * 100), String(day.changePct));
+  const refreshed = dailyChange(
+    [{ accountId: "a", ticker: "VTI", shares: 100, price: 306 }, { accountId: "a", ticker: "BND", shares: 50, price: 71.5 }, { accountId: "b", ticker: "VTI", shares: 10, price: 303 }],
+    close
+  );
+  check("a refresh that moves a price moves the change with it", near(refreshed.change, 605), String(refreshed.change));
+  const deposit = dailyChange(
+    [{ accountId: "a", ticker: "VTI", shares: 110, price: 300 }, { accountId: "a", ticker: "SPAXX", shares: 5_000, price: 1 }],
+    close
+  );
+  check(
+    "money paid in is not a gain: ten more shares and a new cash position at unchanged prices read as nothing",
+    near(deposit.change, 0) && deposit.newSinceClose === 1,
+    `${deposit.change}, ${deposit.newSinceClose} new`
+  );
+  check("nothing to measure from gives no percentage, not infinity", dailyChange([], close).changePct === null);
+  const unpriced = dailyChange([{ accountId: "a", ticker: "VTI", shares: 100, price: 0 }], close);
+  check("a position with no price is left out rather than read as a total loss", near(unpriced.change, 0), String(unpriced.change));
+
+  // The market day, in New York.
+  check("a Tuesday afternoon in New York is Tuesday", marketDay(new Date("2026-10-06T19:00:00Z")) === "2026-10-06");
+  check(
+    "Tuesday 9 pm in New York is still Tuesday, though it is Wednesday in UTC",
+    marketDay(new Date("2026-10-07T01:00:00Z")) === "2026-10-06"
+  );
+  check("a Saturday shows Friday's move", marketDay(new Date("2026-10-10T15:00:00Z")) === "2026-10-09");
+  check("and so does a Sunday", marketDay(new Date("2026-10-11T15:00:00Z")) === "2026-10-09");
 
   console.log(failures === 0 ? "\nALL PASS" : `\n${failures} FAILED`);
   return failures;

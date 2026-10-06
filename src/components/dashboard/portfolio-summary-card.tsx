@@ -26,11 +26,12 @@ type Props = {
   dailyChange: number;
   dailyChangePct: number;
   /**
-   * The two recordings the daily change compares, as YYYY-MM-DD. The figure
-   * moves once each weekday evening, not during the day, so the card says
-   * which days it means rather than leaving "daily" to be read as today.
+   * The previous close the daily change is measured from, as YYYY-MM-DD, or
+   * null before the first weekday-evening snapshot.
    */
-  dailyChangeDates?: { latest: string; previous: string | null } | null;
+  dailyChangeSince?: string | null;
+  /** Positions bought since the previous close, which add nothing to the change. */
+  positionsNewSinceClose?: number;
   accountCount: number;
   holdingCount: number;
   /**
@@ -53,7 +54,8 @@ export function PortfolioSummaryCards({
   positionsWithoutBasis = 0,
   dailyChange,
   dailyChangePct,
-  dailyChangeDates = null,
+  dailyChangeSince = null,
+  positionsNewSinceClose = 0,
   accountCount,
   holdingCount,
   pricesAsOf,
@@ -148,7 +150,7 @@ export function PortfolioSummaryCards({
         <CardHeader className="flex flex-row items-center justify-between pb-2">
           <CardTitle className="flex items-center gap-1 text-sm font-medium text-muted-foreground">
             Daily Change
-            <HelpTip text="The portfolio's value at the latest weekday-evening recording, after prices are updated, against the recording before it. It moves once each weekday evening, not during the day, and money paid in or taken out counts as change." />
+            <HelpTip text="The market's move in what you hold now, since the previous weekday's close: each position's shares times the change in its price. Refresh Prices updates it. Money paid in or taken out is not counted. Mutual funds post one price a day, after the close, so theirs moves the next day." />
           </CardTitle>
           {dailyChange >= 0 ? (
             <TrendingUp className="h-4 w-4 text-green-500" />
@@ -174,11 +176,13 @@ export function PortfolioSummaryCards({
             {formatGainLossPct(dailyChangePct)}
           </p>
           <p className="text-xs mt-1 text-muted-foreground">
-            {dailyChangeDates === null
-              ? "Recorded each weekday evening"
-              : dailyChangeDates.previous === null
-                ? `First recorded ${recordingDay(dailyChangeDates.latest)}`
-                : `${recordingDay(dailyChangeDates.latest)} vs ${recordingDay(dailyChangeDates.previous)}`}
+            {dailyChangeSince === null
+              ? "Starts after the first weekday-evening snapshot"
+              : `Since ${recordingDay(dailyChangeSince)} close${
+                  positionsNewSinceClose > 0
+                    ? ` · ${positionsNewSinceClose} position${positionsNewSinceClose === 1 ? "" : "s"} new since`
+                    : ""
+                }`}
           </p>
         </CardContent>
       </Card>
