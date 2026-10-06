@@ -1,6 +1,7 @@
 import { sql } from "drizzle-orm";
 import { getDb } from "@/lib/db";
 import { withSystemRole } from "@/lib/db/tenant";
+import { missingColumns } from "@/lib/db/schema-check";
 
 /**
  * Unauthenticated liveness check, for an external uptime monitor.
@@ -13,8 +14,14 @@ import { withSystemRole } from "@/lib/db/tenant";
  * project after a 7-day low-activity window, and a paused project does not
  * wake on its own — a few requests a day is enough to prevent it.
  *
- * Deliberately reports booleans and a latency figure only. Error text can
- * carry connection strings and hostnames, and this endpoint is public.
+ * It also reports whether the database has every column the code reads.
+ * Migrations are applied by hand, so a release can arrive before its
+ * migration, and then every page reading that table fails; the release
+ * script reads this and prints the rollback.
+ *
+ * Deliberately reports booleans, counts and a latency figure only. Error
+ * text can carry connection strings and hostnames, and this endpoint is
+ * public, so it says how many columns are missing, not which.
  */
 export const dynamic = "force-dynamic";
 
@@ -43,19 +50,31 @@ async function handleGet() {
     database = false;
   }
 
+  // Null when it could not be checked; the schema then counts as unconfirmed.
+  let missing: number | null = null;
+  if (database) {
+    try {
+      missing = (await missingColumns(getDb())).length;
+    } catch {
+      missing = null;
+    }
+  }
+  const schema = missing === 0;
+
   const authConfigured = Boolean(
     process.env.NEXT_PUBLIC_SUPABASE_URL &&
       (process.env.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY ??
         process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY)
   );
 
-  const healthy = database && authConfigured;
+  const healthy = database && schema && authConfigured;
 
   return Response.json(
     {
       status: healthy ? "ok" : "degraded",
-      checks: { database, authConfigured },
+      checks: { database, schema, authConfigured },
       databaseName,
+      missingColumns: missing,
       latencyMs: Date.now() - startedAt,
       checkedAt: new Date().toISOString(),
     },

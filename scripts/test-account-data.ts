@@ -27,6 +27,7 @@ import {
 } from "../src/lib/db/schema";
 import { buildAccountExport } from "../src/lib/account/export";
 import { deleteHouseholdData } from "../src/lib/account/delete";
+import { declaredColumns, missingColumns } from "../src/lib/db/schema-check";
 import { encryptToken } from "../src/lib/plaid/encryption";
 import { encrypt } from "../src/lib/utils/encryption";
 
@@ -272,6 +273,15 @@ async function main() {
     other.data.accounts.length === 1 && other.data.holdings.length === 1,
     `accounts=${other.data.accounts.length} holdings=${other.data.holdings.length}`
   );
+
+  // ---- the database has every column the code reads ----------------------
+  // Migrations are applied by hand, so a release can reach a database that
+  // lacks a column it reads; /api/health runs this and reports unhealthy.
+  const missing = await missingColumns(base);
+  check("the migrated database has every column the schema declares", missing.length === 0, missing.join(", "));
+  const extra = await missingColumns(base, [...declaredColumns(), { table: "holdings", column: "not_yet_migrated" }]);
+  check("a column the database lacks is reported, by name", extra.length === 1 && extra[0] === "holdings.not_yet_migrated", extra.join(", "));
+  check("the columns the code reads include the new previous close", declaredColumns().some((c) => c.table === "holdings" && c.column === "previous_close"));
 
   await cleanup();
   console.log(failures === 0 ? "\nALL PASS" : `\n${failures} FAILED`);

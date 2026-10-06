@@ -218,7 +218,7 @@ Backoff is 15 minutes doubling to a 12-hour cap; eight failures in a row, or an 
 - Source: `docs/USER-GUIDE.md:38`
 - Features: F-14
 - Verified by: `scripts/test-performance.ts`, `scripts/test-cost-basis.ts`, `scripts/test-freshness.ts`
-- Gap: GAP-42, GAP-46
+- Gap: GAP-42, GAP-48
 
 ### FR-ACC-08. Each account page shows and manages its own contributions and holdings
 
@@ -293,7 +293,9 @@ A manually entered basis is never overwritten. Derivation is refused after any s
 - Status: Partial
 - Source: `docs/USER-GUIDE.md:31`; `vercel.json`
 - Features: F-17
-- Gap: GAP-09, GAP-47
+- Gap: GAP-09
+
+Each price is stored with the time it was struck and the previous session's close, whether it came from Yahoo, the bank or a person, and a price from an earlier session never replaces a later one.
 
 ### FR-INV-04. Investment transactions are listed with totals and the period they cover
 
@@ -322,15 +324,15 @@ An account with no reported dividends shows no figure rather than $0, and the to
 - Features: F-14
 - Verified by: `scripts/test-performance.ts`
 
-### FR-INV-07. The dashboard's daily change is the market's move since the previous close, at the latest prices
+### FR-INV-07. The dashboard's daily change is the market's move since the previous close, at the latest prices, on the day it happened
 
 - Priority: Must
 - Status: Verified
 - Source: The owner, 6 Oct 2026
 - Features: F-28
-- Verified by: `scripts/test-performance.ts`, `scripts/test-snapshot-job.ts`
+- Verified by: `scripts/test-performance.ts`, `scripts/test-freshness.ts`
 
-Refreshing prices moves it. It is each position's shares times the change in its price since the previous weekday's close, so money paid in or taken out is not counted as gain, and the card names the close it is measured from.
+Refreshing prices moves it. It is each position's shares times the change in its price since the close before that price's session, so money paid in or taken out is not counted as gain. Each move is shown on the day it happened: a mutual fund, which posts its price after the close, is shown on the previous day's line until today's posts, not added to today's figure. The card names the day, and says how many positions it could not count.
 
 ### FR-NW-01. Net worth is every asset minus every liability, each counted once
 
@@ -830,9 +832,11 @@ A check that restates a rule locally, or never triggers the case it names, makes
 
 - Priority: Must
 - Status: Partial
-- Enforced by: `src/app/api/health/route.ts`
+- Enforced by: `src/app/api/health/route.ts`, `src/lib/db/schema-check.ts`, `scripts/deploy-production.ts`
 - Source: [Delivery review G3](https://claude.ai/artifact/Eo9g6bEnWFi9TBoSPwohPk)
 - Backlog: #2, #20
+
+The health check also fails when the database lacks a column the code reads, so a release that reaches the database before its migration is reported at once, and the release script says to apply the migration or roll back.
 
 ### NFR-OPS-03. Data can be recovered within the stated targets, and recovery has been rehearsed
 
@@ -1097,9 +1101,9 @@ CI fails when `docs/ARCHITECTURE.md` stops naming a dependency, environment vari
 - Group: Holdings and investments
 - Status: Partial
 - Requirements: FR-ACC-07, FR-INV-06, NFR-INT-01, NFR-INT-02
-- Code: `src/components/dashboard/account-card.tsx`, `src/lib/performance/twr.ts`, `src/lib/utils/cost-basis.ts`, `src/lib/utils/freshness.ts`, `src/lib/queries/snapshots.ts`
+- Code: `src/components/dashboard/account-card.tsx`, `src/lib/performance/twr.ts`, `src/lib/utils/cost-basis.ts`, `src/lib/utils/freshness.ts`, `src/lib/utils/market-session.ts`, `src/lib/queries/snapshots.ts`
 - Checks: `scripts/test-performance.ts`, `scripts/test-cost-basis.ts`, `scripts/test-freshness.ts`
-- Gap: GAP-42, GAP-46
+- Gap: GAP-42, GAP-48
 
 ### F-15. Holdings list and manual add
 
@@ -1123,9 +1127,9 @@ CI fails when `docs/ARCHITECTURE.md` stops naming a dependency, environment vari
 - Group: Holdings and investments
 - Status: Partial
 - Requirements: FR-INV-03
-- Code: `src/components/dashboard/refresh-prices-button.tsx`, `src/app/api/prices/refresh/route.ts`, `src/lib/utils/price-feed.ts`, `src/lib/redis.ts`
-- Checks: none
-- Gap: GAP-09, GAP-47
+- Code: `src/components/dashboard/refresh-prices-button.tsx`, `src/app/api/prices/refresh/route.ts`, `src/lib/utils/price-feed.ts`, `src/lib/utils/market-session.ts`, `src/lib/redis.ts`
+- Checks: `scripts/test-freshness.ts`, `scripts/test-cost-basis.ts`
+- Gap: GAP-09
 
 ### F-18. Transaction history
 
@@ -1220,7 +1224,7 @@ Merges by ticker, but with no date check or review: a position missing from the 
 - Group: Dashboard and guidance
 - Status: Implemented
 - Requirements: FR-ONB-04, FR-HH-03, FR-INV-07
-- Code: `src/app/(dashboard)/dashboard/page.tsx`, `src/components/dashboard/portfolio-summary-card.tsx`, `src/components/dashboard/allocation-chart.tsx`, `src/components/dashboard/performance-chart.tsx`, `src/lib/utils/calculations.ts`, `src/lib/performance/daily-change.ts`
+- Code: `src/app/(dashboard)/dashboard/page.tsx`, `src/components/dashboard/portfolio-summary-card.tsx`, `src/components/dashboard/allocation-chart.tsx`, `src/components/dashboard/performance-chart.tsx`, `src/lib/utils/calculations.ts`, `src/lib/performance/daily-change.ts`, `src/lib/utils/market-session.ts`
 - Checks: none
 
 ### F-29. Alerts
@@ -1367,8 +1371,8 @@ Built and switched off. Deferred by Q6.
 - Group: Platform
 - Status: Partial
 - Requirements: NFR-OPS-01, NFR-OPS-02
-- Code: `src/app/api/cron/snapshot/route.ts`, `src/lib/utils/portfolio-snapshot.ts`, `src/app/api/health/route.ts`, `src/app/api/health/freshness/route.ts`, `vercel.json`
-- Checks: `scripts/test-snapshot-job.ts`
+- Code: `src/app/api/cron/snapshot/route.ts`, `src/lib/utils/portfolio-snapshot.ts`, `src/app/api/health/route.ts`, `src/lib/db/schema-check.ts`, `src/app/api/health/freshness/route.ts`, `vercel.json`
+- Checks: `scripts/test-snapshot-job.ts`, `scripts/test-account-data.ts`
 - Backlog: #2, #20
 
 ### F-46. Legal pages
@@ -1926,21 +1930,31 @@ ETFs and mutual funds from Plaid become US stock whatever they hold, which skews
 
 - Affects: FR-ACC-07, F-14
 - Severity: Medium
-- Evidence: `src/lib/plaid/sync.ts:400`
+- Evidence: `src/lib/plaid/sync.ts`
 - Backlog: #77
-- Status: Open
+- Status: Closed 2026-10-06
 
-Found on 6 Oct while checking the daily change. The bank sync records the time it ran as each holding's price time, not the date of the price the institution reported, so an old price is shown as fresh.
+Found on 6 Oct while checking the daily change. The bank sync recorded the time it ran as each holding's price time, not the date of the price the institution reported, so an old price was shown as fresh. Closed by #77: the bank's price keeps the institution's date, Yahoo's keeps the quote's own time, and a price ages by market days.
 
 ### GAP-47. The daily change mixes days
 
 - Affects: FR-INV-03, F-17
 - Severity: Low
-- Evidence: `vercel.json`, `src/lib/utils/price-feed.ts`, `src/lib/performance/daily-change.ts`
+- Evidence: `src/lib/utils/price-feed.ts`, `src/lib/performance/daily-change.ts`
 - Backlog: #78
+- Status: Closed 2026-10-06
+
+The daily change measured today's prices against each position's price in the evening snapshot. That snapshot runs before most mutual funds post their price, and employer-plan funds take the bank's morning price, so a fund's move showed a day late while a stock's showed the same day. Closed by #78: each holding keeps its previous session's close, and each position's move is credited to its own session.
+
+### GAP-48. The weekday snapshot records mutual funds a day behind
+
+- Affects: FR-ACC-07, F-14
+- Severity: Low
+- Evidence: `vercel.json`, `src/lib/utils/portfolio-snapshot.ts`
+- Backlog: #80
 - Status: Open
 
-The daily change measures today's prices against each position's price in the evening snapshot. That snapshot runs before most mutual funds post their price, and employer-plan funds take the bank's morning price, so a fund's move shows a day late while a stock's shows the same day.
+Found on 6 Oct while fixing #78. The snapshot runs at 22:00 UTC, before most mutual funds post, so it records each fund at the day before's price under today's date. The daily change no longer reads it, but the value chart, the account returns and the large-move alert do, so there a fund's move lands a day late.
 
 ## Open questions
 
@@ -2083,3 +2097,4 @@ Only the assistant compares withdrawal orders. Since 3 Oct it does so with the c
 - `docs/ARCHITECTURE.md`, `docs/DATA-MODEL.md`, `docs/data-retention.md`, `docs/disaster-recovery.md`, `docs/incident-response.md`, `docs/annual-tax-update.md`
 - `docs/BACKLOG.md` and the [delivery review](https://claude.ai/artifact/Eo9g6bEnWFi9TBoSPwohPk)
 - The production database (read-only), 2 Oct 2026: migrations applied, linked-record identifiers
+- 2026-10-06 · GAP-46 and GAP-47 closed by #77 and #78: each price keeps the time it was struck and the previous session's close, freshness counts market days, and the daily change credits each move to its own day. FR-INV-07 restated to say so, verified by `scripts/test-performance.ts` and `scripts/test-freshness.ts`; F-17 now checked by `scripts/test-freshness.ts` and `scripts/test-cost-basis.ts`. The health check fails when the database lacks a column the code reads (NFR-OPS-02, F-45, checked by `scripts/test-account-data.ts`). Fixing #78 opened GAP-48 (#80): the evening snapshot still records funds a day behind. · Claude

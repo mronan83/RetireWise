@@ -320,7 +320,23 @@ export const holdings = pgTable("holdings", {
     precision: 20,
     scale: 2,
   }).notNull(),
+  /**
+   * When the price above was struck, not when it was written. A mutual
+   * fund's price fetched at noon is the previous session's, and a bank's
+   * price can be days old; stamping either with the time of the fetch made
+   * it read as current. updatedAt says when the row was written.
+   */
   lastPriceUpdate: timestamp("last_price_update"),
+  /**
+   * The close of the session before the one `currentPrice` belongs to, so a
+   * position's move can be credited to the day it happened. Null when it is
+   * not known: never priced with one, a price typed by hand, or a gap of
+   * more than one session between the bank's prices.
+   */
+  previousClose: decimal("previous_close", {
+    precision: 20,
+    scale: 4,
+  }),
   dataSource: dataSourceEnum("data_source").notNull().default("manual"),
   createdAt: timestamp("created_at").defaultNow().notNull(),
   updatedAt: timestamp("updated_at").defaultNow().notNull(),

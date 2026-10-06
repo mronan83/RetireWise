@@ -141,6 +141,13 @@
       "when": 1790013195325,
       "tag": "0019_snapshot_gross_basis",
       "breakpoints": true
+    },
+    {
+      "idx": 20,
+      "version": "7",
+      "when": 1790013295325,
+      "tag": "0020_holding_previous_close",
+      "breakpoints": true
     }
   ]
 }

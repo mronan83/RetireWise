@@ -51,33 +51,41 @@ export async function setCachedPrice(
   await redis.set(`price:${ticker}`, price, { ex: PRICE_CACHE_TTL });
 }
 
-export async function getCachedPrices(
+/**
+ * A quote as cached: the price, the moment it was struck (ISO), and the
+ * previous session's close. Kept under its own prefix so an entry written
+ * when only the price was cached is never read as one.
+ */
+export type CachedQuote = { price: number; at: string; previousClose: number | null };
+
+export async function getCachedQuotes(
   tickers: string[]
-): Promise<Map<string, number>> {
+): Promise<Map<string, CachedQuote>> {
   const redis = getRedis();
-  const result = new Map<string, number>();
+  const result = new Map<string, CachedQuote>();
   if (!redis || tickers.length === 0) return result;
 
-  const keys = tickers.map((t) => `price:${t}`);
-  const values = await redis.mget<(number | null)[]>(...keys);
+  const keys = tickers.map((t) => `quote:${t}`);
+  const values = await redis.mget<(CachedQuote | null)[]>(...keys);
 
   for (let i = 0; i < tickers.length; i++) {
-    if (values[i] !== null && values[i] !== undefined) {
-      result.set(tickers[i], values[i]!);
+    const v = values[i];
+    if (v && typeof v === "object" && typeof v.price === "number" && typeof v.at === "string") {
+      result.set(tickers[i], v);
     }
   }
   return result;
 }
 
-export async function setCachedPrices(
-  prices: Map<string, number>
+export async function setCachedQuotes(
+  quotes: Map<string, CachedQuote>
 ): Promise<void> {
   const redis = getRedis();
-  if (!redis || prices.size === 0) return;
+  if (!redis || quotes.size === 0) return;
 
   const pipeline = redis.pipeline();
-  for (const [ticker, price] of prices) {
-    pipeline.set(`price:${ticker}`, price, { ex: PRICE_CACHE_TTL });
+  for (const [ticker, quote] of quotes) {
+    pipeline.set(`quote:${ticker}`, quote, { ex: PRICE_CACHE_TTL });
   }
   await pipeline.exec();
 }

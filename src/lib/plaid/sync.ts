@@ -3,6 +3,7 @@ import type { PlaidApi } from "plaid";
 import { recordAudit } from "@/lib/audit";
 import { getDb } from "@/lib/db";
 import { accounts, cashReserves, debts, holdings } from "@/lib/db/schema";
+import { closeOn, resolvePriceUpdate } from "@/lib/utils/market-session";
 
 type Db = ReturnType<typeof getDb>;
 
@@ -216,7 +217,37 @@ type IncomingHolding = {
   /** null when Plaid did not report cost basis. Never a stand-in figure. */
   costBasisPerShare: number | null;
   currentPrice: number;
+  /** When the institution's price was struck: see plaidPriceTime. */
+  priceAsOf: Date;
 };
+
+/**
+ * When an institution's price was struck.
+ *
+ * It was stamped with the time of the sync, so a price days old read as
+ * current. Plaid gives the price's date (`institution_price_as_of`) and, for
+ * some institutions, a date and time (`institution_price_datetime`), which
+ * may carry a placeholder midnight. In order:
+ *
+ *  1. the date and time, when it has a real time;
+ *  2. the date, as that day's 4 pm close in New York;
+ *  3. the sync's own time, when the institution gave neither.
+ *
+ * Never later than the sync: a close dated today, synced before 4 pm, is
+ * dated now.
+ */
+export function plaidPriceTime(
+  h: { institution_price_as_of?: string | null; institution_price_datetime?: string | null },
+  syncedAt: Date
+): Date {
+  const datetime = h.institution_price_datetime ? new Date(h.institution_price_datetime) : null;
+  const realTime =
+    datetime && !Number.isNaN(datetime.getTime()) && datetime.toISOString().slice(11, 19) !== "00:00:00";
+  const date = h.institution_price_as_of?.match(/^\d{4}-\d{2}-\d{2}/)?.[0] ??
+    (datetime && !Number.isNaN(datetime.getTime()) ? datetime.toISOString().slice(0, 10) : null);
+  const at = realTime ? datetime! : date ? closeOn(date) : syncedAt;
+  return at.getTime() > syncedAt.getTime() ? syncedAt : at;
+}
 
 /**
  * Collapse Plaid's per-lot rows into one position per ticker.
@@ -226,8 +257,16 @@ type IncomingHolding = {
  * and cost basis is averaged across them.
  */
 export function aggregateHoldings(
-  plaidHoldings: { security_id: string; quantity: number; institution_price?: number | null; cost_basis?: number | null }[],
-  securities: Map<string, { ticker_symbol?: string | null; cusip?: string | null; name?: string | null; type?: string | null }>
+  plaidHoldings: {
+    security_id: string;
+    quantity: number;
+    institution_price?: number | null;
+    institution_price_as_of?: string | null;
+    institution_price_datetime?: string | null;
+    cost_basis?: number | null;
+  }[],
+  securities: Map<string, { ticker_symbol?: string | null; cusip?: string | null; name?: string | null; type?: string | null }>,
+  syncedAt: Date = new Date()
 ): IncomingHolding[] {
   const byTicker = new Map<string, IncomingHolding & { totalCost: number | null }>();
 
@@ -239,6 +278,7 @@ export function aggregateHoldings(
       security.ticker_symbol || security.cusip || security.name || "UNKNOWN";
     const shares = ph.quantity ?? 0;
     const currentPrice = ph.institution_price ?? 0;
+    const priceAsOf = plaidPriceTime(ph, syncedAt);
 
     /**
      * No stand-in when Plaid does not report cost basis.
@@ -261,7 +301,10 @@ export function aggregateHoldings(
         existing.totalCost === null || totalCost === null
           ? null
           : existing.totalCost + totalCost;
-      existing.currentPrice = currentPrice || existing.currentPrice;
+      if (currentPrice) {
+        existing.currentPrice = currentPrice;
+        existing.priceAsOf = priceAsOf;
+      }
     } else {
       byTicker.set(ticker, {
         ticker,
@@ -271,6 +314,7 @@ export function aggregateHoldings(
         shares,
         costBasisPerShare: null,
         currentPrice,
+        priceAsOf,
         totalCost,
       });
     }
@@ -285,6 +329,7 @@ export function aggregateHoldings(
     costBasisPerShare:
       h.totalCost === null || !(h.shares > 0) ? null : h.totalCost / h.shares,
     currentPrice: h.currentPrice,
+    priceAsOf: h.priceAsOf,
   }));
 }
 
@@ -389,15 +434,40 @@ async function reconcileHoldings(
      */
     const basis = resolveBasisUpdate(h.costBasisPerShare, match ?? null);
 
+    /**
+     * The price, dated by the institution rather than by this sync, and kept
+     * out when a later one is already stored: the morning sync reports the
+     * day before's close, and Refresh Prices may already have today's.
+     * Shares are the institution's either way, and the value follows them
+     * at whichever price stands.
+     */
+    const price = resolvePriceUpdate(
+      { price: h.currentPrice, at: h.priceAsOf },
+      match
+        ? {
+            price: Number(match.currentPrice),
+            at: match.lastPriceUpdate,
+            previousClose: match.previousClose === null ? null : Number(match.previousClose),
+          }
+        : null
+    );
+    // Null only when a match holds a later price, which then stands.
+    const stands = price ?? {
+      price: Number(match!.currentPrice),
+      at: match!.lastPriceUpdate,
+      previousClose: match!.previousClose === null ? null : Number(match!.previousClose),
+    };
+
     const values = {
       name: h.name,
       plaidSecurityId: h.plaidSecurityId,
       assetClass: h.assetClass,
       shares: String(h.shares),
-      currentPrice: String(h.currentPrice),
-      currentValue: String(h.shares * h.currentPrice),
+      currentPrice: String(stands.price),
+      currentValue: String(h.shares * stands.price),
+      previousClose: stands.previousClose === null ? null : String(stands.previousClose),
       dataSource: "plaid" as const,
-      lastPriceUpdate: new Date(),
+      lastPriceUpdate: stands.at,
       ...basis,
     };
 

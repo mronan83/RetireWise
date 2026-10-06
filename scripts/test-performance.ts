@@ -12,7 +12,8 @@
  * exclude. Every assertion below is written as the wrong behaviour, so a
  * regression reads as the old number coming back.
  */
-import { dailyChange, marketDay } from "../src/lib/performance/daily-change";
+import { dailyChange } from "../src/lib/performance/daily-change";
+import { closeOn } from "../src/lib/utils/market-session";
 import {
   addDays,
   flowBetween,
@@ -197,54 +198,59 @@ function main() {
   ]);
   check("an account starting at zero yields no return, not infinity", zeroStart === null);
 
-  // ---- the dashboard's daily change, at the latest prices ------------------
-  // It was the evening snapshot's total less the one before: it held all day
-  // whatever Refresh Prices fetched, and a deposit counted as gain.
-  const close = [
-    { accountId: "a", ticker: "VTI", price: 300 },
-    { accountId: "a", ticker: "BND", price: 72 },
-    { accountId: "b", ticker: "VTI", price: 300 },
+  // ---- the dashboard's daily change, by the session each price is from ----
+  // It measured every position against one evening snapshot, so a mutual
+  // fund, which posts after the close, had its move added to the next day.
+  const TUE_NOON = "2026-10-06T16:00:00Z"; // an ETF refreshed at noon in New York
+  const MON_NAV = "2026-10-06T12:10:00Z"; // a fund's Monday price, stamped before Tuesday's open
+  const held = [
+    { shares: 100, price: 303, previousClose: 300, priceAsOf: TUE_NOON }, // VTI +$300
+    { shares: 50, price: 71.5, previousClose: 72, priceAsOf: TUE_NOON }, // BND −$25
+    { shares: 10, price: 510, previousClose: 500, priceAsOf: MON_NAV }, // a fund, +$100 on Monday
+    { shares: 10, price: 20, previousClose: 19, priceAsOf: closeOn("2026-10-01") }, // a bank price from last Thursday
+    { shares: 5, price: 10, previousClose: null, priceAsOf: TUE_NOON }, // typed by hand
   ];
-  const day = dailyChange(
-    [
-      { accountId: "a", ticker: "VTI", shares: 100, price: 303 },
-      { accountId: "a", ticker: "BND", shares: 50, price: 71.5 },
-      { accountId: "b", ticker: "VTI", shares: 10, price: 303 },
-    ],
-    close
-  );
+  const day = dailyChange(held);
   check(
-    "each position's shares times its move since the close: +$300 − $25 + $30 = +$305",
-    near(day.change, 305) && near(day.valueAtClose, 30_000 + 3_600 + 3_000),
-    `${day.change} on ${day.valueAtClose}`
+    "Tuesday's figure is the positions priced on Tuesday: +$300 − $25 = +$275",
+    day.latest?.session === "2026-10-06" && near(day.latest.change, 275) && day.latest.positions === 2,
+    JSON.stringify(day.latest)
   );
-  check("as a share of those positions at the close", near(day.changePct!, (305 / 36_600) * 100), String(day.changePct));
-  const refreshed = dailyChange(
-    [{ accountId: "a", ticker: "VTI", shares: 100, price: 306 }, { accountId: "a", ticker: "BND", shares: 50, price: 71.5 }, { accountId: "b", ticker: "VTI", shares: 10, price: 303 }],
-    close
-  );
-  check("a refresh that moves a price moves the change with it", near(refreshed.change, 605), String(refreshed.change));
-  const deposit = dailyChange(
-    [{ accountId: "a", ticker: "VTI", shares: 110, price: 300 }, { accountId: "a", ticker: "SPAXX", shares: 5_000, price: 1 }],
-    close
-  );
+  check("as a share of those positions at Monday's close", near(day.latest!.changePct!, (275 / 33_600) * 100), String(day.latest?.changePct));
   check(
-    "money paid in is not a gain: ten more shares and a new cash position at unchanged prices read as nothing",
-    near(deposit.change, 0) && deposit.newSinceClose === 1,
-    `${deposit.change}, ${deposit.newSinceClose} new`
+    "the fund's move is Monday's, shown beside Tuesday's rather than inside it",
+    day.dayBehind?.session === "2026-10-05" && near(day.dayBehind.change, 100) && day.dayBehind.positions === 1,
+    JSON.stringify(day.dayBehind)
   );
-  check("nothing to measure from gives no percentage, not infinity", dailyChange([], close).changePct === null);
-  const unpriced = dailyChange([{ accountId: "a", ticker: "VTI", shares: 100, price: 0 }], close);
-  check("a position with no price is left out rather than read as a total loss", near(unpriced.change, 0), String(unpriced.change));
+  check("a price from days before is left out, not shown as a day's move", day.older === 1, String(day.older));
+  check("a price with no previous close is counted as not measured", day.unmeasured === 1, String(day.unmeasured));
 
-  // The market day, in New York.
-  check("a Tuesday afternoon in New York is Tuesday", marketDay(new Date("2026-10-06T19:00:00Z")) === "2026-10-06");
-  check(
-    "Tuesday 9 pm in New York is still Tuesday, though it is Wednesday in UTC",
-    marketDay(new Date("2026-10-07T01:00:00Z")) === "2026-10-06"
+  const refreshed = dailyChange(held.map((p, i) => (i === 0 ? { ...p, price: 306 } : p)));
+  check("a refresh that moves a price moves the change with it", near(refreshed.latest!.change, 575), String(refreshed.latest?.change));
+  const posted = dailyChange(
+    held.map((p, i) => (i === 2 ? { ...p, price: 505, previousClose: 510, priceAsOf: "2026-10-07T12:10:00Z" } : p))
   );
-  check("a Saturday shows Friday's move", marketDay(new Date("2026-10-10T15:00:00Z")) === "2026-10-09");
-  check("and so does a Sunday", marketDay(new Date("2026-10-11T15:00:00Z")) === "2026-10-09");
+  check(
+    "once the fund posts Tuesday's price, its move joins Tuesday's: +$275 − $50",
+    near(posted.latest!.change, 225) && posted.latest!.positions === 3 && posted.dayBehind === null,
+    JSON.stringify(posted)
+  );
+  const deposit = dailyChange(held.slice(0, 2).map((p) => ({ ...p, shares: p.shares + 10, price: p.previousClose! })));
+  check("money paid in is not a gain: more shares at unchanged prices read as nothing", near(deposit.latest!.change, 0), String(deposit.latest?.change));
+  const preOpen = dailyChange([
+    { shares: 100, price: 303, previousClose: 300, priceAsOf: closeOn("2026-10-05") },
+    { shares: 10, price: 510, previousClose: 500, priceAsOf: MON_NAV },
+  ]);
+  check(
+    "before Tuesday's open everything is Monday's, the fund included once it has posted",
+    preOpen.latest?.session === "2026-10-05" && near(preOpen.latest.change, 400) && preOpen.dayBehind === null,
+    JSON.stringify(preOpen)
+  );
+  const fresh = dailyChange([{ shares: 5, price: 10, previousClose: null, priceAsOf: TUE_NOON }]);
+  check("with no previous close anywhere there is no figure, not a zero", fresh.latest === null && fresh.unmeasured === 1);
+  check("nothing to measure from gives no percentage, not infinity", dailyChange([{ shares: 1, price: 5, previousClose: 5, priceAsOf: TUE_NOON }]).latest?.changePct !== Infinity);
+  const unpriced = dailyChange([{ shares: 100, price: 0, previousClose: 300, priceAsOf: TUE_NOON }]);
+  check("a position with no price is left out rather than read as a total loss", unpriced.latest === null && unpriced.unmeasured === 0);
 
   console.log(failures === 0 ? "\nALL PASS" : `\n${failures} FAILED`);
   return failures;

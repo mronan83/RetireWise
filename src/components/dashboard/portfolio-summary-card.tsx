@@ -8,11 +8,13 @@ import {
 } from "@/lib/utils/format";
 import { cn } from "@/lib/utils";
 import { LastUpdated } from "@/components/ui/last-updated";
+import type { DailyChange } from "@/lib/performance/daily-change";
 
-// Snapshot dates are calendar days; read them in UTC so a US time zone
-// does not show the day before.
-const recordingDayFormat = new Intl.DateTimeFormat("en-US", { weekday: "short", month: "short", day: "numeric", timeZone: "UTC" });
-const recordingDay = (date: string) => recordingDayFormat.format(new Date(`${date}T00:00:00Z`));
+// Sessions are calendar days; read them in UTC so a US time zone does not
+// show the day before.
+const sessionDayFormat = new Intl.DateTimeFormat("en-US", { weekday: "short", month: "short", day: "numeric", timeZone: "UTC" });
+const sessionDay = (date: string) => sessionDayFormat.format(new Date(`${date}T00:00:00Z`));
+const plural = (n: number, word: string) => `${n} ${word}${n === 1 ? "" : "s"}`;
 
 type Props = {
   totalValue: number;
@@ -23,15 +25,8 @@ type Props = {
   totalGainLossPct: number | null;
   /** How many positions the institution gave no cost basis for. */
   positionsWithoutBasis?: number;
-  dailyChange: number;
-  dailyChangePct: number;
-  /**
-   * The previous close the daily change is measured from, as YYYY-MM-DD, or
-   * null before the first weekday-evening snapshot.
-   */
-  dailyChangeSince?: string | null;
-  /** Positions bought since the previous close, which add nothing to the change. */
-  positionsNewSinceClose?: number;
+  /** The market's move by session; see src/lib/performance/daily-change.ts. */
+  daily: DailyChange;
   accountCount: number;
   holdingCount: number;
   /**
@@ -52,10 +47,7 @@ export function PortfolioSummaryCards({
   totalGainLoss,
   totalGainLossPct,
   positionsWithoutBasis = 0,
-  dailyChange,
-  dailyChangePct,
-  dailyChangeSince = null,
-  positionsNewSinceClose = 0,
+  daily,
   accountCount,
   holdingCount,
   pricesAsOf,
@@ -65,6 +57,9 @@ export function PortfolioSummaryCards({
   // comes out too high — so there is no figure here rather than a flattering
   // one.
   const hasGain = totalGainLoss !== null && totalGainLossPct !== null;
+  const latest = daily.latest;
+  const up = (latest?.change ?? 0) >= 0;
+  const notCounted = daily.older + daily.unmeasured;
   return (
     <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
       <Card>
@@ -150,40 +145,50 @@ export function PortfolioSummaryCards({
         <CardHeader className="flex flex-row items-center justify-between pb-2">
           <CardTitle className="flex items-center gap-1 text-sm font-medium text-muted-foreground">
             Daily Change
-            <HelpTip text="The market's move in what you hold now, since the previous weekday's close: each position's shares times the change in its price. Refresh Prices updates it. Money paid in or taken out is not counted. Mutual funds post one price a day, after the close, so theirs moves the next day." />
+            <HelpTip text="The market's move in what you hold now: each position's shares times the change in its price since the close before. Refresh Prices updates it, and money paid in or taken out is not counted. Each move is shown on the day it happened. Mutual funds post one price a day, after the close, so until theirs posts their latest move is the day before's, shown on its own line." />
           </CardTitle>
-          {dailyChange >= 0 ? (
-            <TrendingUp className="h-4 w-4 text-green-500" />
-          ) : (
-            <TrendingDown className="h-4 w-4 text-red-500" />
-          )}
+          {latest &&
+            (up ? (
+              <TrendingUp className="h-4 w-4 text-green-500" />
+            ) : (
+              <TrendingDown className="h-4 w-4 text-red-500" />
+            ))}
         </CardHeader>
         <CardContent>
-          <div
-            className={cn(
-              "text-2xl font-bold font-mono",
-              dailyChange >= 0 ? "text-green-500" : "text-red-500"
-            )}
-          >
-            {formatGainLoss(dailyChange)}
-          </div>
-          <p
-            className={cn(
-              "text-xs mt-1",
-              dailyChange >= 0 ? "text-green-500" : "text-red-500"
-            )}
-          >
-            {formatGainLossPct(dailyChangePct)}
-          </p>
-          <p className="text-xs mt-1 text-muted-foreground">
-            {dailyChangeSince === null
-              ? "Starts after the first weekday-evening snapshot"
-              : `Since ${recordingDay(dailyChangeSince)} close${
-                  positionsNewSinceClose > 0
-                    ? ` · ${positionsNewSinceClose} position${positionsNewSinceClose === 1 ? "" : "s"} new since`
-                    : ""
-                }`}
-          </p>
+          {latest ? (
+            <>
+              <div className={cn("text-2xl font-bold font-mono", up ? "text-green-500" : "text-red-500")}>
+                {formatGainLoss(latest.change)}
+              </div>
+              <p className={cn("text-xs mt-1", up ? "text-green-500" : "text-red-500")}>
+                {latest.changePct === null ? "" : formatGainLossPct(latest.changePct)}
+              </p>
+              <p className="text-xs mt-1 text-muted-foreground">
+                {sessionDay(latest.session)} · {plural(latest.positions, "position")}
+              </p>
+            </>
+          ) : (
+            <>
+              <div className="text-2xl font-bold font-mono text-muted-foreground">&mdash;</div>
+              <p className="text-xs mt-1 text-muted-foreground">Starts with the next price refresh</p>
+            </>
+          )}
+          {daily.dayBehind && (
+            <p className="text-xs mt-1 text-muted-foreground">
+              {sessionDay(daily.dayBehind.session)}:{" "}
+              <span
+                className={cn("font-mono", daily.dayBehind.change >= 0 ? "text-green-500" : "text-red-500")}
+              >
+                {formatGainLoss(daily.dayBehind.change)}
+              </span>{" "}
+              · {plural(daily.dayBehind.positions, "position")} a day behind
+            </p>
+          )}
+          {latest && notCounted > 0 && (
+            <p className="text-xs mt-1 text-muted-foreground">
+              {plural(notCounted, "position")} not counted: older price or no previous close
+            </p>
+          )}
         </CardContent>
       </Card>
 

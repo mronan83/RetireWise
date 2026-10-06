@@ -570,20 +570,41 @@ A goal measures only what is linked to it, from where it stood when the goal was
 
 ### Daily change
 
-- Code: `src/lib/performance/daily-change.ts` `dailyChange` `marketDay`, `src/lib/queries/snapshots.ts` `getPreviousClose`
-- Checked by: `scripts/test-performance.ts`, `scripts/test-snapshot-job.ts`
-- Shown in: the Dashboard's Daily Change card, with the close it is measured from
+- Code: `src/lib/performance/daily-change.ts` `dailyChange`, `src/lib/utils/market-session.ts` `sessionOf` `sessionBefore`
+- Checked by: `scripts/test-performance.ts`
+- Shown in: the Dashboard's Daily Change card: the latest session's move, the day before's from positions a day behind, and how many positions are not counted
 
 ```formula
-market day     = today in New York, or the Friday before on a weekend
-previous close = each position's price in the last weekday-evening snapshot before the market day
-daily change   = Σ shares now × (latest price − price at the previous close)
-daily change % = daily change ÷ Σ shares now × price at the previous close
+session of a price = the latest weekday whose 9:30 am New York open came at or before the price was struck
+a position's move  = shares now × (its price − the close of the session before its price's)
+daily change       = Σ moves of the positions priced in the newest session any position is priced in
+daily change %     = daily change ÷ Σ shares now × previous close, over the same positions
+a day behind       = the same, for positions priced in the session before that one, shown on its own line
 ```
 
-It is worked out each time the dashboard loads, at the prices it has just read, so Refresh Prices moves it. It is the market's move in what is held now, the way a brokerage shows the day's change: buying ten more shares, or paying cash in, changes no price and so adds nothing, and a position bought since the close is left out and counted on the card. Before the market opens it reads close to nothing, and on a weekend it shows Friday's move.
+It is worked out each time the dashboard loads, at the prices it has just read, so Refresh Prices moves it. It is the market's move in what is held now, the way a brokerage shows the day's change: buying ten more shares, or paying cash in, changes no price and so adds nothing.
 
-Refresh Prices asks Yahoo Finance for anything with a ticker. Funds in employer plans usually have none and keep the price the bank reported that morning. The previous close comes from the weekday-evening snapshot, which runs before most mutual funds post their price, so a fund's move shows a day late (#78).
+Each position's move is credited to the session its price was struck in, not the moment it was fetched. An exchange-traded fund refreshed at noon is that day's. A mutual fund posts one price a day, after the close, and Yahoo stamps it before the next open, so at noon its newest price is the day before's, and its move is shown on that day's line rather than added to today's; once its price for today posts, it joins today's figure. Before the market opens the figure is the previous session's, and on a weekend it is Friday's.
+
+A position is not counted when its price is older than the day before the newest session, rather than being shown on a day it did not move, or when it has no previous close: a price typed by hand, one never refreshed since the previous close was first recorded, or a bank price after a missed sync. The card says how many.
+
+The previous close comes with each price. Yahoo reports it with every quote. The bank does not, so when the bank's price for a new session arrives, the stored price becomes its previous close, but only when that price is from the session just before; across a gap it is left unknown, since one move spanning several sessions is not a day's move.
+
+### When a price was struck
+
+- Code: `src/lib/utils/market-session.ts` `sessionOf` `sessionsBetween` `closeOn` `resolvePriceUpdate` `typedPriceUpdate`, `src/lib/utils/price-feed.ts` `quoteFrom`, `src/lib/plaid/sync.ts` `plaidPriceTime`
+- Checked by: `scripts/test-freshness.ts`, `scripts/test-cost-basis.ts`
+- Shown in: every price's age, the Daily Change card
+
+```formula
+Yahoo's price      = dated by the quote's own time, never later than the fetch
+the bank's price   = dated by the institution: its date and time, or its date at 4 pm in New York, else the sync's time
+a price typed in   = dated when it was typed, with no previous close; saving it unchanged keeps its date
+a new price        = kept out when the stored one is from a later session; within a session the later one wins
+                     (a stored price with no previous close gives way to a quote that brings one)
+```
+
+Every price was dated with the moment it was written, so a fund's price from the day before, or an employer-plan price days old, read as current. Each price now carries the time it was struck, and the previous session's close beside it. Prices reach a holding from Refresh Prices and from the bank's morning sync, and the sync reports the day before's close, so a price from an earlier session never replaces a later one. The exception is a stored price with no previous close, such as every price stored before this change, dated when it was written: Yahoo's quote, which brings its own previous close, replaces it, so the first refresh after the release dates every price Yahoo can quote.
 
 ### Weekday snapshot
 
@@ -593,11 +614,11 @@ Refresh Prices asks Yahoo Finance for anything with a ticker. Funds in employer 
 
 ```formula
 each weekday at {{snapshot.time}}: prices are refreshed, then for each household
-positions      = each holding's shares and price, the next market day's previous close
+positions      = each holding's shares and price, which the account returns read
 total change   = today's total − the total at the last snapshot from an earlier day
 ```
 
-The snapshot is the app's memory of past values: the portfolio's total, each account's value and each position's shares and price, then net worth, alerts and goals. Its total change is a balance change, so money paid in counts; the large-move alert and the reports read it (#71), the dashboard's daily change does not. A second run on the same day replaces that day's records instead of adding to them, and each household is snapshotted on its own, so one household's error cannot stop the others.
+The snapshot is the app's memory of past values: the portfolio's total, each account's value and each position's shares and price, then net worth, alerts and goals. Its total change is a balance change, so money paid in counts; the large-move alert and the reports read it (#71), the dashboard's daily change does not. It runs before most mutual funds post their price, so a fund's price in it is the day before's (#80). A second run on the same day replaces that day's records instead of adding to them, and each household is snapshotted on its own, so one household's error cannot stop the others.
 
 ### Alerts
 
@@ -626,7 +647,7 @@ Alerts are worked out each night after prices are refreshed. The day's move is t
 | A balance entered by hand | {{fresh.manual_balance.aging}} | {{fresh.manual_balance.stale}} |
 | A property's or vehicle's value | {{fresh.valuation.aging}} | {{fresh.valuation.stale}} |
 
-A total is as old as its oldest part: a portfolio is dated by its stalest price, not its newest. Ages read as "3 hours ago", "yesterday" or "over a year ago", with the exact time on hover.
+A price ages by market days, counted from the session it was struck in, not by hours: at noon a mutual fund's newest price is the day before's, and a Friday close is still current on Monday morning. Weekends add none; exchange holidays are not known, so one counts as a day. A total is as old as its oldest part: a portfolio is dated by its stalest price, not its newest. Ages read as "3 hours ago", "yesterday" or "over a year ago", with the exact time on hover.
 
 ### Contribution records
 
@@ -705,7 +726,7 @@ A model is useful because it leaves things out. These are the choices this one m
 - The projection uses the tax figures built into the code, not the yearly table (#61); the contribution limits are fixed for 2025 (#31); and the 2025 tax figures predate the July 2025 law (#56).
 - Analytics sets balances in future dollars beside spending, salary, Social Security, brackets and IRMAA thresholds in today's dollars, and taxes a flat {{analytics.ssTaxed}} of Social Security where the engine uses the IRS worksheet (#72).
 - The Roth ladder leaves the standard deduction unused, the sequence-of-returns paths do not share an average, and two of the four withdrawal orders always agree (#73).
-- A linked holding's price is stamped as current whatever its date (#77), and the daily change shows a mutual or employer-plan fund's move a day late, because its previous close is taken before funds post their prices (#78).
+- The weekday snapshot records a mutual fund at the day before's price, so the value chart and account returns carry funds a day late (#80). Market sessions are weekdays: an exchange holiday counts as a day in which nothing moved.
 - Account returns count reinvested dividends as deposits, read stock splits as losses, and lose the day a ticker is re-spelled (#71).
 - Funds in linked accounts are all classed as US stock, and a linked Roth 401(k) is treated as a Roth IRA (#75).
 - A file import gives a position with no basis a basis of zero, so its whole value counts as gain (#38), and a debt linked to a deleted asset drops out of net worth (#59).
@@ -794,8 +815,13 @@ Every function exported from a calculation module, and what it does. `pnpm how:c
 | `generateAlerts` | The nightly drift, large-move and concentration alerts. |
 | `snapshotHousehold` | One household's weekday snapshot: fresh prices, the day's records replaced, the total change, net worth, alerts and goals. |
 | `snapshotHouseholds` | Snapshots every household, each on its own, and counts those that failed. |
-| `dailyChange` | The day's market move in what is held now: shares times the change in price since the previous close. |
-| `marketDay` | The market day a moment belongs to: the date in New York, or Friday on a weekend. |
+| `dailyChange` | The market's move in what is held now, by the session each price belongs to: the newest session's, and the day before's. |
+| `sessionOf` | The market session a moment belongs to: the latest weekday whose New York open came at or before it. |
+| `sessionsBetween` | How many sessions fall after one session up to another, weekends skipped. |
+| `sessionBefore` | The session before a session: the weekday before, Friday for a Monday. |
+| `closeOn` | 4 pm in New York on a date, the time given to a price that comes with a date only. |
+| `resolvePriceUpdate` | Which price a holding keeps when a new one arrives, and the previous close that goes with it. |
+| `typedPriceUpdate` | Dates a price typed by hand now, without a previous close, unless it is unchanged. |
 | `hoursSince` | Hours since a moment. |
 | `freshnessOf` | Fresh, ageing or stale, for a kind of figure. |
 | `relativeAge` | An age in words: "3 hours ago", "yesterday". |
@@ -814,3 +840,4 @@ Every function exported from a calculation module, and what it does. `pnpm how:c
 - 2026-10-04 · A couple's Social Security is paid per partner from each one's claim (#65), and contribution records are counted once, from those in force, with pauses that resume (#68) · Claude
 - 2026-10-06 · The engine records spending, Social Security and the price level in each year's own dollars (#66); the what-if scenarios explained, each now applied through the engine's inputs (#69); the daily change explained, with its timing and the snapshot fixes (#49); #77 and #78 added to the known limits · Claude
 - 2026-10-06 · The daily change is now the market's move since the previous close, worked out at the latest prices, so Refresh Prices moves it (#79); the weekday snapshot has an entry of its own · Claude
+- 2026-10-06 · Each price carries the time it was struck, and a price's freshness counts market days (#77); the daily change credits each position's move to its own session, with funds a day behind on their own line (#78); "When a price was struck" added; #80 added to the known limits · Claude

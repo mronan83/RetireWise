@@ -52,6 +52,7 @@ export const CALCULATION_MODULES = [
   "src/lib/utils/alert-generator.ts",
   "src/lib/utils/portfolio-snapshot.ts",
   "src/lib/utils/freshness.ts",
+  "src/lib/utils/market-session.ts",
   "src/lib/plaid/backoff.ts",
 ];
 
@@ -118,10 +119,24 @@ export function facts(e: Engine, root = process.cwd()): Record<string, string> {
     return hi;
   };
   const span = (h: number) => (h % 24 === 0 && h >= 72 ? `${h / 24} days` : `${h} hours`);
-  for (const kind of ["price", "linked_balance", "manual_balance", "valuation"] as const) {
+  for (const kind of ["linked_balance", "manual_balance", "valuation"] as const) {
     f[`fresh.${kind}.aging`] = span(firstHour(kind, "aging"));
     f[`fresh.${kind}.stale`] = span(firstHour(kind, "stale"));
   }
+  // A price ages by market sessions, not hours: ask about closes ever further
+  // behind a Friday afternoon in New York (9 Oct 2026), skipping the weekend.
+  const friday = Date.parse("2026-10-09T18:00:00Z");
+  const closes = ["2026-10-08", "2026-10-07", "2026-10-06", "2026-10-05", "2026-10-02", "2026-10-01", "2026-09-30"]
+    .map((d) => `${d}T20:00:00Z`);
+  const behind = (state: string) => {
+    const i = closes.findIndex((c) => e.freshnessOf(c, "price", friday) === state || (state === "aging" && e.freshnessOf(c, "price", friday) === "stale"));
+    return i < 0 ? null : i + 1;
+  };
+  const sessions = (n: number | null) => (n === null ? undefined : `${n} market day${n === 1 ? "" : "s"} behind`);
+  const priceAging = sessions(behind("aging"));
+  const priceStale = sessions(behind("stale"));
+  if (priceAging) f["fresh.price.aging"] = priceAging;
+  if (priceStale) f["fresh.price.stale"] = priceStale;
 
   f["div.window"] = `${e.WINDOW_DAYS} days`;
   f["div.grace"] = `${e.GRACE_DAYS} days`;

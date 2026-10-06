@@ -27,7 +27,8 @@ import {
 } from "../src/lib/utils/cost-basis";
 import { calculateGainLoss, calculatePortfolioSummary } from "../src/lib/utils/calculations";
 import type { Holding } from "../src/lib/types";
-import { aggregateHoldings, resolveBasisUpdate } from "../src/lib/plaid/sync";
+import { aggregateHoldings, plaidPriceTime, resolveBasisUpdate } from "../src/lib/plaid/sync";
+import { closeOn } from "../src/lib/utils/market-session";
 
 let failures = 0;
 function check(label: string, ok: boolean, detail = "") {
@@ -271,6 +272,46 @@ function main() {
     "averaging the lots that have one understates cost and overstates gain"
   );
   check("though the shares from both lots are still counted", mixedLots[0].shares === 15);
+
+  // ---- the bank's price carries its own date -------------------------------
+  // The sync stamped every price with its own time, so a price days old read
+  // as current. Plaid says when the price was struck; that date is kept.
+  const syncedAt = new Date("2026-10-06T10:00:00Z"); // the 6 am sync, Tuesday
+  const dated = aggregateHoldings(
+    [{ security_id: "sec_plt", quantity: 1, institution_price: 34.84, institution_price_as_of: "2026-10-01", cost_basis: null }],
+    securities,
+    syncedAt
+  );
+  check(
+    "a price as of last Thursday is dated Thursday's close, not the sync",
+    dated[0].priceAsOf.toISOString() === closeOn("2026-10-01").toISOString(),
+    dated[0].priceAsOf.toISOString()
+  );
+  check(
+    "a date and a real time are used as given",
+    plaidPriceTime({ institution_price_datetime: "2026-10-05T19:58:00Z" }, syncedAt).toISOString() === "2026-10-05T19:58:00.000Z"
+  );
+  check(
+    "a placeholder midnight is read as that day's close, not the evening before",
+    plaidPriceTime({ institution_price_datetime: "2026-10-05T00:00:00Z" }, syncedAt).toISOString() === closeOn("2026-10-05").toISOString()
+  );
+  check("with no date at all the sync's time stands", plaidPriceTime({}, syncedAt) === syncedAt);
+  check(
+    "a close dated today, synced before 4 pm, is dated no later than the sync",
+    plaidPriceTime({ institution_price_as_of: "2026-10-06" }, syncedAt) === syncedAt
+  );
+  const lotsDated = aggregateHoldings(
+    [
+      { security_id: "sec_voo", quantity: 10, institution_price: 700, institution_price_as_of: "2026-10-02", cost_basis: null },
+      { security_id: "sec_voo", quantity: 5, institution_price: 701.78, institution_price_as_of: "2026-10-05", cost_basis: null },
+    ],
+    securities,
+    syncedAt
+  );
+  check(
+    "lots keep the date of the price the position takes",
+    lotsDated[0].currentPrice === 701.78 && lotsDated[0].priceAsOf.toISOString() === closeOn("2026-10-05").toISOString()
+  );
 
   // ---- who wins when two sources disagree ---------------------------------
   // The precedence rule, stated as the losses it prevents.

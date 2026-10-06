@@ -1,0 +1,17 @@
+-- Credit each position's move to the day it happened.
+--
+-- The daily change measured today's prices against the evening snapshot's.
+-- A mutual fund posts one price a day, after the close, and Yahoo stamps it
+-- the next morning, so the snapshot held the day before's price and a fund's
+-- move landed a day late, inside the next day's figure.
+--
+-- previous_close holds the close of the session before the one
+-- current_price belongs to (Yahoo reports it with every quote; the bank's
+-- price gets it from the stored one). With last_price_update now the time
+-- the price was struck, a position's move is credited to its own session.
+--
+-- Nullable, with no backfill: no past previous close was stored, and the
+-- next price refresh fills it. NULL reads as "not measured", which is true.
+-- Adding a nullable column is safe under the code already live, which never
+-- names it. IF NOT EXISTS lets it be applied ahead of the release.
+ALTER TABLE "holdings" ADD COLUMN IF NOT EXISTS "previous_close" numeric(20, 4);
