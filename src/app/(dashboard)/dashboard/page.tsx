@@ -8,7 +8,8 @@ import { AccountCard } from "@/components/dashboard/account-card";
 import { Skeleton } from "@/components/ui/skeleton";
 import { getAccountsWithFreshness } from "@/lib/queries/accounts";
 import { getHoldingsByClerkId } from "@/lib/queries/holdings";
-import { getSnapshots, getAccountPerformanceMap } from "@/lib/queries/snapshots";
+import { getSnapshots, getAccountPerformanceMap, getPreviousClose } from "@/lib/queries/snapshots";
+import { dailyChange as dayChange, marketDay } from "@/lib/performance/daily-change";
 import { calculatePortfolioSummary, calculateGainLoss } from "@/lib/utils/calculations";
 import { gainLossFor, missingBasisNote, rollupBasis } from "@/lib/utils/cost-basis";
 import { RefreshPricesButton } from "@/components/dashboard/refresh-prices-button";
@@ -52,6 +53,8 @@ async function DashboardContentScoped() {
     db.select().from(vehicles).where(eq(vehicles.clerkId, userId)),
     getAccountPerformanceMap(userId),
   ]);
+  // Prices at the previous close, for the day's change at the latest prices.
+  const previousClose = await getPreviousClose(userId, marketDay());
 
   const holdingsForCalc = holdingsWithAccounts.map((h) => ({
     ...h,
@@ -65,18 +68,20 @@ async function DashboardContentScoped() {
   // describe it as more current than it is.
   const pricesAsOf = oldestOf(holdingsWithAccounts.map((h) => h.lastPriceUpdate));
 
-  const latestSnapshot = snapshots[0];
-  // The recording the daily change was measured from: the latest one on an
-  // earlier day.
-  const previousSnapshot = latestSnapshot
-    ? snapshots.find((s) => s.snapshotDate < latestSnapshot.snapshotDate)
-    : undefined;
-  const dailyChange = latestSnapshot
-    ? Number(latestSnapshot.dailyChange || 0)
-    : 0;
-  const dailyChangePct = latestSnapshot
-    ? Number(latestSnapshot.dailyChangePct || 0)
-    : 0;
+  // The day's change is worked out here, at the prices just loaded, so
+  // Refresh Prices moves it. It was the evening snapshot's figure, which held
+  // all day and counted money paid in as gain.
+  const today = previousClose
+    ? dayChange(
+        holdingsWithAccounts.map((h) => ({
+          accountId: h.accountId,
+          ticker: h.ticker,
+          shares: Number(h.shares),
+          price: Number(h.currentPrice),
+        })),
+        previousClose.positions
+      )
+    : null;
 
   const holdingsTableData = holdingsWithAccounts.map((h) => {
     const gl = calculateGainLoss(h);
@@ -165,13 +170,10 @@ async function DashboardContentScoped() {
         totalGainLoss={summary.totalGainLoss}
         totalGainLossPct={summary.totalGainLossPct}
         positionsWithoutBasis={summary.positionsWithoutBasis}
-        dailyChange={dailyChange}
-        dailyChangePct={dailyChangePct}
-        dailyChangeDates={
-          latestSnapshot
-            ? { latest: latestSnapshot.snapshotDate, previous: previousSnapshot?.snapshotDate ?? null }
-            : null
-        }
+        dailyChange={today?.change ?? 0}
+        dailyChangePct={today?.changePct ?? 0}
+        dailyChangeSince={previousClose?.date ?? null}
+        positionsNewSinceClose={today?.newSinceClose ?? 0}
         accountCount={accountsList.length}
         holdingCount={holdingsWithAccounts.length}
         pricesAsOf={pricesAsOf}

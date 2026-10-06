@@ -660,7 +660,7 @@ Contribution limits are fixed for 2025, the tax figures predate the July 2025 la
 - Backlog: #77, #78
 - Severity: Medium
 
-A linked holding's price is stamped with the time the bank sync ran, not the date of the price, so an old price reads as fresh. The weekday snapshot runs before most mutual funds post their price, so the dashboard's daily change mixes the day's move in stocks with the day before's in funds. The projection, the odds and the analytics use today's balances and are unaffected.
+A linked holding's price is stamped with the time the bank sync ran, not the date of the price, so an old price reads as fresh. The dashboard's daily change measures today's prices against the weekday-evening snapshot, which runs before most mutual funds post their price, so a fund's move shows a day late while a stock's shows the same day (ADR-028). The projection, the odds and the analytics use today's balances and are unaffected.
 
 ### Imports and bank connections can lose, duplicate or strand data
 
@@ -923,9 +923,19 @@ Choices that shaped the system, newest last. A record is never deleted; a later 
 - Consequences: The explanation and the app cannot quote different numbers. Figures that live in page code rather than a function, such as the alert thresholds and the Analytics page's assumptions, are read from the source text, and one written in more than one place is quoted only while every copy agrees, so a half-made change fails the check. Writing it found eleven defects (#65 to #75). The page carries about 36 KB of production code, the engine and the calculators beside it, and esbuild is now a development dependency.
 - Evidence: `scripts/how-it-works/engine-entry.ts`, `scripts/how-it-works/bundle.ts`, `scripts/build-how-it-works.ts`
 
+### ADR-028. The daily change is the market's move since the previous close, worked out on the page
+
+- Status: Accepted
+- Decided: 2026-10-06
+- Context: The owner expects the dashboard's daily change to follow Refresh Prices. It was the weekday-evening snapshot's total less the one before: it held all day, and money paid in counted as gain.
+- Decision: The dashboard works it out at the prices it has just loaded: each position's shares times the change in its price since the previous close, from `src/lib/performance/daily-change.ts`. The previous close is the price each position was recorded at in the last weekday-evening snapshot before the market day, the date in New York with weekends taken back to Friday. Keeping Yahoo's own previous close on each holding was the alternative: exact for priced tickers, but it needs a new column and still leaves employer-plan funds, which Yahoo cannot price, without one.
+- Consequences: Refresh Prices moves the figure and a deposit does not. A position bought since the close adds nothing and is counted on the card. A fund's move shows a day late, because the snapshot is taken before most funds post their price (#78). The evening snapshot still stores a balance change, which alerts and reports read (#71).
+- Evidence: `src/lib/performance/daily-change.ts`, `src/lib/queries/snapshots.ts`, `src/app/(dashboard)/dashboard/page.tsx`, `scripts/test-performance.ts`
+
 ## Change log
 
 - 2026-10-03 · Rewritten from the code: principles, system context, frontend, identity and households, server logic, nine key flows, environments, delivery, quality attributes, thirteen risks and twenty-six decision records. The inventory is generated, `pnpm arch:check` keeps the two in step, and the stale data-flow document is replaced by the key flows · Claude
 - 2026-10-04 · ADR-027: the calculations are explained in a living page that runs the production engine; a fourteenth risk for the projection defects that page found (#65, #68, #69), and #70 added to the planning-figures risk · Claude
 - 2026-10-04 · #65 and #68 closed: the engine takes each partner's Social Security with its own start year, and each account's own deferral from records in force; the projection-inputs risk narrowed to the what-ifs (#69); the release builds the trace page from a copy of the released commit, like the pages that read the code (#76) · Claude
 - 2026-10-06 · Weekday snapshot flow: one snapshot per household per day, measured from the previous day, each household on its own, and the run's failures recorded (#49), in `src/lib/utils/portfolio-snapshot.ts`; the what-ifs moved to `src/lib/projections/what-if.ts` (#69); the what-if risk retired and replaced by the risk that prices are older than they say (#77, #78) · Claude
+- 2026-10-06 · ADR-028: the dashboard's daily change is the market's move since the previous close, worked out at the latest prices so Refresh Prices moves it (#79); the pricing risk restated for it · Claude

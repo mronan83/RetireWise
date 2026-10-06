@@ -322,6 +322,16 @@ An account with no reported dividends shows no figure rather than $0, and the to
 - Features: F-14
 - Verified by: `scripts/test-performance.ts`
 
+### FR-INV-07. The dashboard's daily change is the market's move since the previous close, at the latest prices
+
+- Priority: Must
+- Status: Verified
+- Source: The owner, 6 Oct 2026
+- Features: F-28
+- Verified by: `scripts/test-performance.ts`, `scripts/test-snapshot-job.ts`
+
+Refreshing prices moves it. It is each position's shares times the change in its price since the previous weekday's close, so money paid in or taken out is not counted as gain, and the card names the close it is measured from.
+
 ### FR-NW-01. Net worth is every asset minus every liability, each counted once
 
 - Priority: Must
@@ -1209,8 +1219,8 @@ Merges by ticker, but with no date check or review: a position missing from the 
 
 - Group: Dashboard and guidance
 - Status: Implemented
-- Requirements: FR-ONB-04, FR-HH-03
-- Code: `src/app/(dashboard)/dashboard/page.tsx`, `src/components/dashboard/portfolio-summary-card.tsx`, `src/components/dashboard/allocation-chart.tsx`, `src/components/dashboard/performance-chart.tsx`, `src/lib/utils/calculations.ts`
+- Requirements: FR-ONB-04, FR-HH-03, FR-INV-07
+- Code: `src/app/(dashboard)/dashboard/page.tsx`, `src/components/dashboard/portfolio-summary-card.tsx`, `src/components/dashboard/allocation-chart.tsx`, `src/components/dashboard/performance-chart.tsx`, `src/lib/utils/calculations.ts`, `src/lib/performance/daily-change.ts`
 - Checks: none
 
 ### F-29. Alerts
@@ -1926,11 +1936,11 @@ Found on 6 Oct while checking the daily change. The bank sync records the time i
 
 - Affects: FR-INV-03, F-17
 - Severity: Low
-- Evidence: `vercel.json`, `src/lib/utils/price-feed.ts`
+- Evidence: `vercel.json`, `src/lib/utils/price-feed.ts`, `src/lib/performance/daily-change.ts`
 - Backlog: #78
 - Status: Open
 
-The snapshot runs before most mutual funds post their price, and employer-plan funds keep the bank's morning price, so their part of the daily change is the day before's while stocks' is the day's own.
+The daily change measures today's prices against each position's price in the evening snapshot. That snapshot runs before most mutual funds post their price, and employer-plan funds take the bank's morning price, so a fund's move shows a day late while a stock's shows the same day.
 
 ## Open questions
 
@@ -2063,6 +2073,7 @@ Only the assistant compares withdrawal orders. Since 3 Oct it does so with the c
 - 2026-10-04 · How RetireWise works added as a living document (NFR-DOC-03, F-51): every calculation explained, its figures read from the code, its calculators running the production engine from the released commit. Writing it found GAP-36 to GAP-45 (#65–#73, #75) and the small fixes in #74, and added five calculations with no check to #51. FR-PLAN-04, FR-PLAN-07, FR-ACC-07, FR-ANA-01 and FR-AI-04 moved from Verified, and FR-PLAN-03, FR-PLAN-06, FR-ONB-03 and FR-ONB-04 from Implemented, to Partial on that evidence. · Claude
 - 2026-10-04 · GAP-36 and GAP-39 closed by #65 and #68: a couple's Social Security is paid per partner from each one's claim, and contribution records are counted once, from those in force, with pauses that resume. FR-PLAN-02, FR-PLAN-04, F-32 and F-34 stay Partial on their other gaps (GAP-04, GAP-33, GAP-37). The release now checks this page against the released commit, not the working tree (#76). · Claude
 - 2026-10-06 · GAP-22, GAP-37 and GAP-40 closed by #49, #66 and #69. The snapshot job is checked against a database (`scripts/test-snapshot-job.ts`), and the what-ifs and the year's-own-dollars figures in `scripts/test-one-engine.ts`. NFR-OPS-01, FR-NW-04, FR-PLAN-04, FR-PLAN-06, F-27 and F-35 moved to Verified. Checking the daily change opened GAP-46 (#77) and GAP-47 (#78). · Claude
+- 2026-10-06 · FR-INV-07 added from the owner: the dashboard's daily change is the market's move since the previous close at the latest prices, so Refresh Prices moves it (#79). Verified by `scripts/test-performance.ts` and `scripts/test-snapshot-job.ts`. GAP-47 restated for the live figure. · Claude
 
 ## Sources
 

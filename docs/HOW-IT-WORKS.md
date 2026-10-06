@@ -570,19 +570,34 @@ A goal measures only what is linked to it, from where it stood when the goal was
 
 ### Daily change
 
-- Code: `src/lib/utils/portfolio-snapshot.ts` `snapshotHousehold` `snapshotHouseholds`, `src/lib/queries/snapshots.ts` `getSnapshotBefore`
-- Checked by: `scripts/test-snapshot-job.ts`
-- Shown in: the Dashboard's Daily Change card, with the two days it compares
+- Code: `src/lib/performance/daily-change.ts` `dailyChange` `marketDay`, `src/lib/queries/snapshots.ts` `getPreviousClose`
+- Checked by: `scripts/test-performance.ts`, `scripts/test-snapshot-job.ts`
+- Shown in: the Dashboard's Daily Change card, with the close it is measured from
 
 ```formula
-each weekday at {{snapshot.time}}: prices are refreshed, then
-daily change   = today's total − the total at the last snapshot from an earlier day
-daily change % = daily change ÷ that earlier total
+market day     = today in New York, or the Friday before on a weekend
+previous close = each position's price in the last weekday-evening snapshot before the market day
+daily change   = Σ shares now × (latest price − price at the previous close)
+daily change % = daily change ÷ Σ shares now × price at the previous close
 ```
 
-The dashboard's daily change is not a running figure. It moves once each weekday evening, when the snapshot is taken, and holds until the next one, so during the day it is the previous evening's change and on a weekend it is Friday's. The total above it uses live holdings and moves when prices or balances do. Both are balance figures: money paid in or taken out counts as change, unlike an account's time-weighted return.
+It is worked out each time the dashboard loads, at the prices it has just read, so Refresh Prices moves it. It is the market's move in what is held now, the way a brokerage shows the day's change: buying ten more shares, or paying cash in, changes no price and so adds nothing, and a position bought since the close is left out and counted on the card. Before the market opens it reads close to nothing, and on a weekend it shows Friday's move.
 
-Prices for anything with a ticker come from Yahoo Finance at the time of the snapshot. Funds in employer plans usually have none, so they keep the price the bank last reported. A second run on the same day replaces that day's snapshot instead of adding to it, and each household is snapshotted on its own, so one household's error cannot stop the others.
+Refresh Prices asks Yahoo Finance for anything with a ticker. Funds in employer plans usually have none and keep the price the bank reported that morning. The previous close comes from the weekday-evening snapshot, which runs before most mutual funds post their price, so a fund's move shows a day late (#78).
+
+### Weekday snapshot
+
+- Code: `src/lib/utils/portfolio-snapshot.ts` `snapshotHousehold` `snapshotHouseholds`, `src/lib/queries/snapshots.ts` `getSnapshotBefore`
+- Checked by: `scripts/test-snapshot-job.ts`
+- Shown in: the Dashboard's value chart; the account cards' returns; alerts and reports
+
+```formula
+each weekday at {{snapshot.time}}: prices are refreshed, then for each household
+positions      = each holding's shares and price, the next market day's previous close
+total change   = today's total − the total at the last snapshot from an earlier day
+```
+
+The snapshot is the app's memory of past values: the portfolio's total, each account's value and each position's shares and price, then net worth, alerts and goals. Its total change is a balance change, so money paid in counts; the large-move alert and the reports read it (#71), the dashboard's daily change does not. A second run on the same day replaces that day's records instead of adding to them, and each household is snapshotted on its own, so one household's error cannot stop the others.
 
 ### Alerts
 
@@ -690,7 +705,7 @@ A model is useful because it leaves things out. These are the choices this one m
 - The projection uses the tax figures built into the code, not the yearly table (#61); the contribution limits are fixed for 2025 (#31); and the 2025 tax figures predate the July 2025 law (#56).
 - Analytics sets balances in future dollars beside spending, salary, Social Security, brackets and IRMAA thresholds in today's dollars, and taxes a flat {{analytics.ssTaxed}} of Social Security where the engine uses the IRS worksheet (#72).
 - The Roth ladder leaves the standard deduction unused, the sequence-of-returns paths do not share an average, and two of the four withdrawal orders always agree (#73).
-- A linked holding's price is stamped as current whatever its date (#77), and the daily change mixes the day's move in stocks with the day before's in mutual and employer-plan funds, which post their prices later (#78).
+- A linked holding's price is stamped as current whatever its date (#77), and the daily change shows a mutual or employer-plan fund's move a day late, because its previous close is taken before funds post their prices (#78).
 - Account returns count reinvested dividends as deposits, read stock splits as losses, and lose the day a ticker is re-spelled (#71).
 - Funds in linked accounts are all classed as US stock, and a linked Roth 401(k) is treated as a Roth IRA (#75).
 - A file import gives a position with no basis a basis of zero, so its whole value counts as gain (#38), and a debt linked to a deleted asset drops out of net worth (#59).
@@ -777,8 +792,10 @@ Every function exported from a calculation module, and what it does. `pnpm how:c
 | `validateBasis` | Refuses a goal with nothing linked, or one already at or past its target. |
 | `shouldClose` | Whether a met goal should close; only its check calls it. |
 | `generateAlerts` | The nightly drift, large-move and concentration alerts. |
-| `snapshotHousehold` | One household's weekday snapshot: fresh prices, the day's records replaced, the daily change, net worth, alerts and goals. |
+| `snapshotHousehold` | One household's weekday snapshot: fresh prices, the day's records replaced, the total change, net worth, alerts and goals. |
 | `snapshotHouseholds` | Snapshots every household, each on its own, and counts those that failed. |
+| `dailyChange` | The day's market move in what is held now: shares times the change in price since the previous close. |
+| `marketDay` | The market day a moment belongs to: the date in New York, or Friday on a weekend. |
 | `hoursSince` | Hours since a moment. |
 | `freshnessOf` | Fresh, ageing or stale, for a kind of figure. |
 | `relativeAge` | An age in words: "3 hours ago", "yesterday". |
@@ -796,3 +813,4 @@ Every function exported from a calculation module, and what it does. `pnpm how:c
 - 2026-10-04 · Published as the How RetireWise Works artifact ahead of the next release, at the owner's request; its calculators run the code in production at 3d88a37 · Claude
 - 2026-10-04 · A couple's Social Security is paid per partner from each one's claim (#65), and contribution records are counted once, from those in force, with pauses that resume (#68) · Claude
 - 2026-10-06 · The engine records spending, Social Security and the price level in each year's own dollars (#66); the what-if scenarios explained, each now applied through the engine's inputs (#69); the daily change explained, with its timing and the snapshot fixes (#49); #77 and #78 added to the known limits · Claude
+- 2026-10-06 · The daily change is now the market's move since the previous close, worked out at the latest prices, so Refresh Prices moves it (#79); the weekday snapshot has an entry of its own · Claude

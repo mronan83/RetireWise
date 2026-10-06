@@ -44,6 +44,7 @@ export const CALCULATION_MODULES = [
   "src/lib/tax/load.ts",
   "src/lib/net-worth/compose.ts",
   "src/lib/performance/twr.ts",
+  "src/lib/performance/daily-change.ts",
   "src/lib/utils/cost-basis.ts",
   "src/lib/utils/calculations.ts",
   "src/lib/utils/dividends.ts",

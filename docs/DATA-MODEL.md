@@ -272,7 +272,7 @@ One row per item a goal is measured over (an investment account, debt, cash rese
 One row per household per weekday: total investment value, the split between partners, allocation, top holdings and the change since the previous snapshot. The dashboard's value chart and its daily change read this.
 
 - `snapshot_date`: The UTC date. Not unique in the schema; the snapshot job replaces a household's rows for the day before writing, so a second run on one day restates it. Days written before 6 Oct 2026 can still hold two rows.
-- `daily_change`: The total less the total of the household's last snapshot from an earlier day: a balance change, so money paid in or taken out counts (#71). `daily_change_pct` is it as a share of that earlier total.
+- `daily_change`: The total less the total of the household's last snapshot from an earlier day: a balance change, so money paid in or taken out counts (#71). `daily_change_pct` is it as a share of that earlier total. Alerts and reports read it; the dashboard's daily change does not, and works out the market's move from `holding_snapshots` instead.
 - `ytd_return_pct`: Nothing writes it.
 
 ### account_snapshots
@@ -288,7 +288,7 @@ One row per investment account per weekday: value, cost basis and gain. Period r
 
 - Written by: the snapshot job, `src/lib/utils/portfolio-snapshot.ts`; erasure
 
-One row per position per account per weekday: shares, price and value. Share counts let a day's change be split into market movement and money paid in, which a time-weighted return needs.
+One row per position per account per weekday: shares, price and value. Share counts let a day's change be split into market movement and money paid in, which a time-weighted return needs. The last day's prices before the market day are the previous close the dashboard's daily change is measured from.
 
 - `account_id`: No foreign key.
 - `ticker`: Part of the unique key with the account and day; a later run that day updates the row with its shares, price and value.
@@ -736,3 +736,4 @@ The database checks need a migrated Postgres; CI starts one for the "Mobile layo
 - 2026-10-03 · Declared `debts_secured_by_idx` in the schema, which migration 0018 had created without it; corrected the schema comment on `net_worth_item_history`, which had value and secondary value the wrong way round; opened GAP-31, GAP-32 and #60 from defects found while writing this · Claude
 - 2026-10-04 · `social_security_benefits`: said which fields the projection reads and which it ignores (GAP-38), found while writing How RetireWise works · Claude
 - 2026-10-06 · The snapshot tables are written by `src/lib/utils/portfolio-snapshot.ts`, one set per household per day, with the daily change measured from the previous day (#49); `daily_change` explained; `cron_runs` records failed households · Claude
+- 2026-10-06 · `holding_snapshots` prices are the previous close for the dashboard's daily change, which no longer reads `portfolio_snapshots.daily_change` (#79) · Claude

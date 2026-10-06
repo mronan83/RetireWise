@@ -82,6 +82,27 @@ export async function getSnapshotBefore(clerkId: string, date: string) {
   return result[0] || null;
 }
 
+/**
+ * The household's positions at the previous close: the latest weekday-evening
+ * snapshot of its positions from before the given market day. The dashboard's
+ * daily change measures today's prices against these.
+ */
+export async function getPreviousClose(clerkId: string, marketDay: string) {
+  const db = getDb();
+  const [latest] = await db
+    .select({ date: holdingSnapshots.snapshotDate })
+    .from(holdingSnapshots)
+    .where(and(eq(holdingSnapshots.clerkId, clerkId), lt(holdingSnapshots.snapshotDate, marketDay)))
+    .orderBy(desc(holdingSnapshots.snapshotDate))
+    .limit(1);
+  if (!latest) return null;
+  const positions = await db
+    .select({ accountId: holdingSnapshots.accountId, ticker: holdingSnapshots.ticker, price: holdingSnapshots.price })
+    .from(holdingSnapshots)
+    .where(and(eq(holdingSnapshots.clerkId, clerkId), eq(holdingSnapshots.snapshotDate, latest.date)));
+  return { date: latest.date, positions: positions.map((p) => ({ ...p, price: Number(p.price) })) };
+}
+
 export async function getSnapshotsSince(clerkId: string, sinceDate: string) {
   const db = getDb();
   return db

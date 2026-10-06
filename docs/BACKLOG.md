@@ -584,7 +584,7 @@ The Social Security form saves a cost-of-living assumption, a planned claiming a
 - Blocker: None
 - Source: How RetireWise works review, GAP-42
 
-`flowBetween()` in `src/lib/performance/twr.ts` infers money in and out from changes in share counts. A reinvested dividend therefore counts as a deposit, so the return is price-only; a stock split looks like a large deposit and wrecks that day; a ticker Plaid re-spells loses the day's move. The 3-, 5- and 10-year figures on account cards are cumulative, not annualised, and are not labelled so. The daily change, the large-move alert and the benchmark comparison are balance changes rather than returns. Use recorded transactions for flows where they exist, handle splits, and label or annualise long periods.
+`flowBetween()` in `src/lib/performance/twr.ts` infers money in and out from changes in share counts. A reinvested dividend therefore counts as a deposit, so the return is price-only; a stock split looks like a large deposit and wrecks that day; a ticker Plaid re-spells loses the day's move. The 3-, 5- and 10-year figures on account cards are cumulative, not annualised, and are not labelled so. The large-move alert, the daily change in the reports and the benchmark comparison are balance changes rather than returns; the dashboard's daily change has been a market move since #79. Use recorded transactions for flows where they exist, handle splits, and label or annualise long periods.
 
 ### 72. Analytics mixes today's and future dollars, and taxes Social Security its own way
 
@@ -650,7 +650,7 @@ The bank sync writes each holding's `last_price_update` as the moment it ran, no
 - Blocker: None
 - Source: Daily change review, 6 Oct, GAP-47
 
-The snapshot behind the daily change runs at 22:00 UTC, 6 pm Eastern in summer. Stocks and ETFs have closed by then, but most mutual funds post their price later in the evening, so their part of the change is the day before's. Funds in employer plans that Yahoo cannot price keep the bank's morning price, also from the day before. The change is also a balance change, so money paid in counts as gain (#71). Run the snapshot after funds post, record it under the market day, and say on the card what it measures.
+The dashboard's daily change measures today's prices against each position's price in the weekday-evening snapshot, which runs at 22:00 UTC, 6 pm Eastern in summer. Stocks and ETFs have closed by then, but most mutual funds post their price later in the evening, so the snapshot holds the day before's and a fund's move shows a day late. Funds in employer plans that Yahoo cannot price take the bank's morning price, also from the day before. Run the snapshot after funds post, or keep Yahoo's own previous close for each priced holding, and record it under the market day.
 
 ## Notes on sequencing
 
@@ -672,6 +672,14 @@ The snapshot behind the daily change runs at 22:00 UTC, 6 pm Eastern in summer. 
 - #55, #29 and #30 are done (2–3 Oct): one tested engine answers everywhere. You answered Q10 on 3 Oct: the landing-page claim stays, and the withdrawal-order comparison stays as it is.
 
 ## Done
+
+### 79. The daily change does not move when prices are refreshed
+
+- Type: Gap
+- Closed: 2026-10-06
+- In: PR 11
+
+Raised by the owner on 6 Oct: the daily change should follow Refresh Prices. It was the weekday-evening snapshot's total less the one before, so it held all day and counted money paid in as gain. It is now worked out on the dashboard at the prices just loaded: each position's shares times the change in its price since the previous close, the price recorded for it in the last weekday-evening snapshot before the market day. Refresh Prices moves it, a deposit does not, and the card says which close it is measured from. A weekend shows Friday's move. Proved by `scripts/test-performance.ts`, and the previous-close lookup by `scripts/test-snapshot-job.ts`.
 
 ### 69. Three what-if scenarios do not do what they say
 
