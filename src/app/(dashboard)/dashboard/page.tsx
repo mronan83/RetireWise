@@ -66,6 +66,11 @@ async function DashboardContentScoped() {
   const pricesAsOf = oldestOf(holdingsWithAccounts.map((h) => h.lastPriceUpdate));
 
   const latestSnapshot = snapshots[0];
+  // The recording the daily change was measured from: the latest one on an
+  // earlier day.
+  const previousSnapshot = latestSnapshot
+    ? snapshots.find((s) => s.snapshotDate < latestSnapshot.snapshotDate)
+    : undefined;
   const dailyChange = latestSnapshot
     ? Number(latestSnapshot.dailyChange || 0)
     : 0;
@@ -162,6 +167,11 @@ async function DashboardContentScoped() {
         positionsWithoutBasis={summary.positionsWithoutBasis}
         dailyChange={dailyChange}
         dailyChangePct={dailyChangePct}
+        dailyChangeDates={
+          latestSnapshot
+            ? { latest: latestSnapshot.snapshotDate, previous: previousSnapshot?.snapshotDate ?? null }
+            : null
+        }
         accountCount={accountsList.length}
         holdingCount={holdingsWithAccounts.length}
         pricesAsOf={pricesAsOf}

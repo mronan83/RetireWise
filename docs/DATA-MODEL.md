@@ -249,7 +249,7 @@ One row per person in a household: estimated monthly benefit at 62, at full reti
 
 ### goals
 
-- Written by: `src/lib/actions/goals.ts`; the snapshot job `src/app/api/cron/snapshot/route.ts` (closure); `scripts/seed-demo.ts`; erasure
+- Written by: `src/lib/actions/goals.ts`; the snapshot job, `src/lib/utils/portfolio-snapshot.ts` (closure); `scripts/seed-demo.ts`; erasure
 
 One row per goal: a target amount, whether to build up to it or pay down to it, an optional target date, and the date its starting point was fixed. Progress is worked out when read, from `goal_links` and the current value of each linked item; it is not stored.
 
@@ -267,16 +267,17 @@ One row per item a goal is measured over (an investment account, debt, cash rese
 
 ### portfolio_snapshots
 
-- Written by: the snapshot job `src/app/api/cron/snapshot/route.ts`; `scripts/seed-demo.ts`; erasure
+- Written by: the snapshot job, `src/lib/utils/portfolio-snapshot.ts`; `scripts/seed-demo.ts`; erasure
 
-One row per household per weekday: total investment value, the split between partners, allocation, top holdings and the change since the previous snapshot. The dashboard's value chart reads this.
+One row per household per weekday: total investment value, the split between partners, allocation, top holdings and the change since the previous snapshot. The dashboard's value chart and its daily change read this.
 
-- `snapshot_date`: The UTC date. Not unique per household, so a second run on one day adds a second row (GAP-22).
+- `snapshot_date`: The UTC date. Not unique in the schema; the snapshot job replaces a household's rows for the day before writing, so a second run on one day restates it. Days written before 6 Oct 2026 can still hold two rows.
+- `daily_change`: The total less the total of the household's last snapshot from an earlier day: a balance change, so money paid in or taken out counts (#71). `daily_change_pct` is it as a share of that earlier total.
 - `ytd_return_pct`: Nothing writes it.
 
 ### account_snapshots
 
-- Written by: the snapshot job `src/app/api/cron/snapshot/route.ts`; erasure, by current account
+- Written by: the snapshot job, `src/lib/utils/portfolio-snapshot.ts`, which replaces the household's rows for the day; erasure, by current account
 
 One row per investment account per weekday: value, cost basis and gain. Period returns on each account card read this.
 
@@ -285,12 +286,12 @@ One row per investment account per weekday: value, cost basis and gain. Period r
 
 ### holding_snapshots
 
-- Written by: the snapshot job `src/app/api/cron/snapshot/route.ts`; erasure
+- Written by: the snapshot job, `src/lib/utils/portfolio-snapshot.ts`; erasure
 
 One row per position per account per weekday: shares, price and value. Share counts let a day's change be split into market movement and money paid in, which a time-weighted return needs.
 
 - `account_id`: No foreign key.
-- `ticker`: Part of the unique key with the account and day; the first write of a day wins.
+- `ticker`: Part of the unique key with the account and day; a later run that day updates the row with its shares, price and value.
 
 ### net_worth_snapshots
 
@@ -385,7 +386,7 @@ The request role may add and read rows but never change or delete them (#46).
 - Written by: `src/app/api/cron/snapshot/route.ts` and `src/app/api/cron/refresh/route.ts`
 - Read by: `src/app/api/health/freshness/route.ts`
 
-One row per scheduled job run, with when it started and finished, whether it succeeded, how many households it processed and how many failed. The freshness check reads it to tell a job that ran and found nothing to do from one that stopped running. Only the system role can reach it.
+One row per scheduled job run, with when it started and finished, whether it succeeded, how many households it processed and how many failed. The snapshot job counts as succeeded only when every household was snapshotted. The freshness check reads it to tell a job that ran and found nothing to do from one that stopped running. Only the system role can reach it.
 
 - `ok`: The weekday snapshot always records true, even when a household failed (GAP-22).
 - `finished_at`: Null when a run was killed partway.
@@ -734,3 +735,4 @@ The database checks need a migrated Postgres; CI starts one for the "Mobile layo
 - 2026-10-03 · First version: 30 tables in eight domains, 22 enums, 19 business rules, derived data and the security model; the page is generated from the schema and migrations with this document, and `pnpm datamodel:check` keeps them in step · Claude
 - 2026-10-03 · Declared `debts_secured_by_idx` in the schema, which migration 0018 had created without it; corrected the schema comment on `net_worth_item_history`, which had value and secondary value the wrong way round; opened GAP-31, GAP-32 and #60 from defects found while writing this · Claude
 - 2026-10-04 · `social_security_benefits`: said which fields the projection reads and which it ignores (GAP-38), found while writing How RetireWise works · Claude
+- 2026-10-06 · The snapshot tables are written by `src/lib/utils/portfolio-snapshot.ts`, one set per household per day, with the daily change measured from the previous day (#49); `daily_change` explained; `cron_runs` records failed households · Claude

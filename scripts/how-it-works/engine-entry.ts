@@ -26,6 +26,7 @@ export {
 } from "../../src/lib/utils/projection-scenarios";
 export { DEFAULT_SEED, runProjectionMonteCarlo, seededRandom } from "../../src/lib/projections/monte-carlo";
 export { controlsFromSaved, projectionInputs } from "../../src/lib/projections/settings";
+export { WHAT_IFS, whatIfParams } from "../../src/lib/projections/what-if";
 export { PROJECTION_YEARS } from "../../src/lib/projections/build-accounts";
 export {
   RMD_START_AGE,
@@ -211,7 +212,6 @@ export function simulate(i: PlaygroundInputs) {
   const projection = runDetailedProjection(inputs.params);
   const odds = runProjectionMonteCarlo(inputs.params, { volatilityPct: inputs.volatilityPct });
   const depletedAt = projection.totalValues.findIndex((v, y) => projection.phases[y] === "retirement" && v <= 0);
-  const priceLevel = (y: number) => Math.pow(1 + inputs.params.inflationPct / 100, y + 1);
   return {
     household,
     controls,
@@ -221,15 +221,11 @@ export function simulate(i: PlaygroundInputs) {
     /** Age the money runs out, or null when it lasts. */
     depletionAge: depletedAt === -1 ? null : projection.ages[depletedAt],
     balanceAtRetirement: inputs.yearsToRetirement > 0 ? projection.totalValues[inputs.yearsToRetirement - 1] : household.accounts.reduce((s, a) => s + a.value, 0),
-    /**
-     * Social Security in the year's own dollars, as the engine uses it to fund
-     * spending. The engine reports it in today's dollars (`ssIncome`), beside
-     * withdrawals and taxes in each year's dollars, so it is restated here.
-     */
-    ssNominal: projection.ssIncome.map((s, y) => (projection.phases[y] === "retirement" ? Math.round(s * priceLevel(y)) : 0)),
+    /** Social Security in each retirement year's own dollars, as the engine uses it to fund spending. */
+    ssNominal: projection.ssIncomeNominal.map((s, y) => (projection.phases[y] === "retirement" ? s : 0)),
     /** Retirement spending in each year's dollars: today's spending, inflated. */
-    spendingNominal: projection.phases.map((ph, y) => (ph === "retirement" ? Math.round(inputs.params.annualExpenses * priceLevel(y)) : 0)),
-    priceLevel: projection.years.map((y) => priceLevel(y)),
+    spendingNominal: projection.spendingNominal,
+    priceLevel: projection.priceLevel,
   };
 }
 

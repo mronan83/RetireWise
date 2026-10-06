@@ -37,6 +37,7 @@ import {
   type DetailedProjectionParams,
 } from "@/lib/utils/projection-scenarios";
 import { runProjectionMonteCarlo } from "@/lib/projections/monte-carlo";
+import { WHAT_IFS, whatIfParams, type WhatIfId } from "@/lib/projections/what-if";
 import {
   controlsFromSaved,
   projectionInputs,
@@ -197,7 +198,7 @@ export function InteractiveProjections({
   );
   const {
     scenario, glidePath: glidePathConfig, selfSSMonthly, spouseSSMonthly,
-    combinedSSAnnual, yearsToRetirement,
+    yearsToRetirement,
   } = inputs;
 
   // Spouse retires at a different age — calculate what your age is when they retire
@@ -227,20 +228,29 @@ export function InteractiveProjections({
   const portfolioAtRetirement = projection.totalValues[yearsToRetirement - 1] || 0;
   const portfolioAt80 = projection.totalValues[80 - currentAge - 1] || 0;
   const portfolioAt90 = projection.totalValues[90 - currentAge - 1] || 0;
-  // Calculate year-1 withdrawal using the same method as the projection engine
-  const year1Expenses = monthlySpending * 12;
-  const year1SS = combinedSSAnnual;
-  const expenseBased = Math.max(0, year1Expenses - year1SS);
-  const rateBased = portfolioAtRetirement * (withdrawalRatePct / 100);
-  let annualFromPortfolio: number;
-  if (withdrawalMethod === "expense") annualFromPortfolio = expenseBased;
-  else if (withdrawalMethod === "rate") annualFromPortfolio = rateBased;
-  else annualFromPortfolio = Math.max(expenseBased, rateBased);
-  if (maxWithdrawalAmount && maxWithdrawalAmount > 0) {
-    annualFromPortfolio = Math.min(annualFromPortfolio, maxWithdrawalAmount);
-  }
-  const monthlyFromPortfolio = Math.round(annualFromPortfolio / 12);
-  const totalMonthlyRetirementIncome = monthlyFromPortfolio + selfSSMonthly + spouseSSMonthly;
+  // The first year of retirement, read from the engine and restated in
+  // today's dollars so it compares with the spending entered above. The page
+  // used to estimate this itself, setting Social Security in today's dollars
+  // against a withdrawal from the balance at retirement in future dollars,
+  // and with the default method its surplus was zero by construction.
+  const firstRetirementYear = yearsToRetirement < projection.years.length ? yearsToRetirement : -1;
+  const inTodaysDollars = (v: number) =>
+    firstRetirementYear >= 0 ? v / projection.priceLevel[firstRetirementYear] : 0;
+  const monthlySS = firstRetirementYear >= 0
+    ? Math.round(inTodaysDollars(projection.ssIncomeNominal[firstRetirementYear]) / 12)
+    : 0;
+  // What savings pay towards spending: the withdrawal less its tax and less
+  // any required distribution that was reinvested rather than spent.
+  const monthlyFromPortfolio = firstRetirementYear >= 0
+    ? Math.round(
+        inTodaysDollars(
+          projection.withdrawals[firstRetirementYear] -
+            projection.taxes[firstRetirementYear] -
+            projection.reinvested[firstRetirementYear]
+        ) / 12
+      )
+    : 0;
+  const monthlyIncome = monthlyFromPortfolio + monthlySS;
   const withdrawalLabel = withdrawalMethod === "expense" ? "expense-based"
     : withdrawalMethod === "rate" ? `${withdrawalRatePct}% rate` : "higher-of-both";
 
@@ -727,27 +737,31 @@ export function InteractiveProjections({
         </Card>
         <Card>
           <CardHeader className="pb-2">
-            <CardTitle className="text-xs text-muted-foreground">Monthly Spending vs Income</CardTitle>
+            <CardTitle className="text-xs text-muted-foreground flex items-center gap-1">First Year of Retirement <HelpTip text="The engine's first retirement year, in today's dollars so it compares with your spending: Social Security plus what savings pay after federal tax." /></CardTitle>
           </CardHeader>
           <CardContent>
             <p className="text-xs text-muted-foreground">
               Spending: <span className="font-mono text-foreground"><Money value={monthlySpending} /></span>/mo
             </p>
             <p className="text-xs text-muted-foreground">
-              Income: <span className="font-mono text-foreground"><Money value={monthlyFromPortfolio + selfSSMonthly + spouseSSMonthly} /></span>/mo
+              Income: <span className="font-mono text-foreground"><Money value={monthlyIncome} /></span>/mo
             </p>
-            {/* The split between portfolio and Social Security is detail, not
+            {/* The split between savings and Social Security is detail, not
                 headline — it stays out of the way until there is room. */}
             <p className="mt-1 hidden text-xs sm:block">
-              ({formatCurrency(monthlyFromPortfolio)} {withdrawalLabel} + {formatCurrency(selfSSMonthly + spouseSSMonthly)} SS)
+              {`(${formatCurrency(monthlyFromPortfolio)} from savings after tax + ${formatCurrency(monthlySS)} Social Security, today's dollars)`}
             </p>
-            {monthlyFromPortfolio + selfSSMonthly + spouseSSMonthly >= monthlySpending ? (
+            {monthlyIncome >= monthlySpending ? (
               <p className="text-xs text-green-500 font-medium mt-1">
-                +<Money value={monthlyFromPortfolio + selfSSMonthly + spouseSSMonthly - monthlySpending} /> surplus
+                {monthlyIncome > monthlySpending ? (
+                  <>+<Money value={monthlyIncome - monthlySpending} /> surplus</>
+                ) : (
+                  "Spending covered"
+                )}
               </p>
             ) : (
               <p className="text-xs text-red-500 font-medium mt-1">
-                -<Money value={monthlySpending - monthlyFromPortfolio - selfSSMonthly - spouseSSMonthly} /> shortfall
+                -<Money value={monthlySpending - monthlyIncome} /> shortfall
               </p>
             )}
           </CardContent>
@@ -1107,7 +1121,7 @@ export function InteractiveProjections({
                             )}
                           </TableCell>
                           <TableCell className="text-right font-mono text-xs text-green-500">
-                            +{formatCurrency(projection.ssIncome[i])}
+                            +{formatCurrency(projection.ssIncomeNominal[i])}
                           </TableCell>
                           {projection.accountProjections.map((ap) => (
                             <TableCell key={ap.name} className="text-right font-mono text-xs">
@@ -1233,130 +1247,24 @@ type ScenarioResult = {
   paramValue: number;
 };
 
-const SCENARIO_DEFS = [
-  {
-    id: "market_crash",
-    name: "Market Crash",
-    description: "What if the market drops suddenly?",
-    paramLabel: "Drop",
-    defaultValue: 30,
-    unit: "%",
-  },
-  {
-    id: "early_retire",
-    name: "Retire Earlier",
-    description: "What if you retire sooner?",
-    paramLabel: "Years earlier",
-    defaultValue: 5,
-    unit: "yrs",
-  },
-  {
-    id: "boost_savings",
-    name: "Boost Savings",
-    description: "What if you increase contributions?",
-    paramLabel: "Increase",
-    defaultValue: 50,
-    unit: "%",
-  },
-  {
-    id: "lower_returns",
-    name: "Lower Returns",
-    description: "What if the market underperforms?",
-    paramLabel: "Return",
-    defaultValue: 4,
-    unit: "%",
-  },
-  {
-    id: "high_inflation",
-    name: "High Inflation",
-    description: "What if inflation stays elevated?",
-    paramLabel: "Inflation",
-    defaultValue: 5,
-    unit: "%",
-  },
-  {
-    id: "reduced_ss",
-    name: "Reduced Social Security",
-    description: "What if SS benefits are cut?",
-    paramLabel: "Cut by",
-    defaultValue: 25,
-    unit: "%",
-  },
-] as const;
 
 function ScenarioAnalysis(props: ScenarioAnalysisProps) {
   const [results, setResults] = useState<Map<string, ScenarioResult>>(new Map());
   const [paramValues, setParamValues] = useState<Record<string, number>>(
-    Object.fromEntries(SCENARIO_DEFS.map((s) => [s.id, s.defaultValue]))
+    Object.fromEntries(WHAT_IFS.map((s) => [s.id, s.defaultValue]))
   );
 
-  function runProjection(overrides: {
-    accountsOverride?: DetailedProjectionParams["accounts"];
-    yearsToRetirementOverride?: number;
-    retirementYearsOverride?: number;
-    returnPctOverride?: number;
-    inflationPctOverride?: number;
-    ssMultiplier?: number;
-    contributionsMultiplier?: number;
-  }) {
-    const base = props.baseParams;
-    const contribMult = overrides.contributionsMultiplier || 1;
-    const params: DetailedProjectionParams = {
-      ...base,
-      accounts: (overrides.accountsOverride || base.accounts).map((a) => ({
-        ...a,
-        annualContribution: Math.round(a.annualContribution * contribMult),
-      })),
-      totalAnnualContributions: base.totalAnnualContributions * contribMult,
-      yearsToRetirement: overrides.yearsToRetirementOverride ?? base.yearsToRetirement,
-      yearsInRetirement: overrides.retirementYearsOverride ?? base.yearsInRetirement,
-      returnPct: overrides.returnPctOverride ?? base.returnPct,
-      inflationPct: overrides.inflationPctOverride ?? base.inflationPct,
-      socialSecurity: base.socialSecurity.map((b) => ({ ...b, annual: b.annual * (overrides.ssMultiplier ?? 1) })),
-    };
-
+  function runScenario(scenarioId: WhatIfId) {
+    const value = paramValues[scenarioId];
+    const params = whatIfParams(props.baseParams, scenarioId, value);
     const proj = runDetailedProjection(params);
     // Same engine, same seeded markets as the page's own odds, so a scenario
     // differs from the base case only by what the scenario changes.
     const odds = runProjectionMonteCarlo(params, { volatilityPct: props.volatilityPct, simulations: 500 });
-
-    return {
+    const result = {
       portfolioAtRetirement: proj.totalValues[params.yearsToRetirement - 1] || 0,
       successRate: odds.successRate,
     };
-  }
-
-  function runScenario(scenarioId: string) {
-    const value = paramValues[scenarioId];
-    let result: { portfolioAtRetirement: number; successRate: number };
-
-    switch (scenarioId) {
-      case "market_crash":
-        result = runProjection({
-          accountsOverride: props.baseParams.accounts.map((a) => ({ ...a, value: a.value * (1 - value / 100) })),
-        });
-        break;
-      case "early_retire":
-        result = runProjection({
-          yearsToRetirementOverride: Math.max(0, props.baseParams.yearsToRetirement - value),
-          retirementYearsOverride: props.baseParams.yearsInRetirement + value,
-        });
-        break;
-      case "boost_savings":
-        result = runProjection({ contributionsMultiplier: 1 + value / 100 });
-        break;
-      case "lower_returns":
-        result = runProjection({ returnPctOverride: value });
-        break;
-      case "high_inflation":
-        result = runProjection({ inflationPctOverride: value });
-        break;
-      case "reduced_ss":
-        result = runProjection({ ssMultiplier: 1 - value / 100 });
-        break;
-      default:
-        return;
-    }
 
     setResults((prev) => {
       const next = new Map(prev);
@@ -1366,7 +1274,7 @@ function ScenarioAnalysis(props: ScenarioAnalysisProps) {
   }
 
   function runAll() {
-    for (const s of SCENARIO_DEFS) runScenario(s.id);
+    for (const s of WHAT_IFS) runScenario(s.id);
   }
 
   return (
@@ -1412,7 +1320,7 @@ function ScenarioAnalysis(props: ScenarioAnalysisProps) {
         </div>
 
         <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
-          {SCENARIO_DEFS.map((s) => {
+          {WHAT_IFS.map((s) => {
             const result = results.get(s.id);
             const diff = result ? result.portfolioAtRetirement - props.basePortfolioAtRetirement : null;
             const diffPct = diff !== null && props.basePortfolioAtRetirement > 0

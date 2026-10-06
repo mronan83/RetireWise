@@ -10,13 +10,15 @@
  * run against simulated markets, and the page and the assistant build their
  * inputs with the same functions.
  */
-import { runDetailedProjection, adjustSSBenefit } from "../src/lib/utils/projection-scenarios";
+import { runDetailedProjection, adjustSSBenefit, type DetailedProjectionParams } from "../src/lib/utils/projection-scenarios";
 import { calculateSSBreakEven, calculateRMD, estimateTaxMFJ } from "../src/lib/utils/financial-analytics";
 import { runProjectionMonteCarlo, seededRandom } from "../src/lib/projections/monte-carlo";
 import { controlsFromSaved, projectionInputs, type ProjectionHousehold } from "../src/lib/projections/settings";
 import { calculateWithdrawalStrategies } from "../src/lib/utils/withdrawal-strategies";
 import { balancesAtRetirement } from "../src/lib/projections/at-retirement";
 import { buildProjectionAccounts } from "../src/lib/projections/build-accounts";
+import { whatIfParams } from "../src/lib/projections/what-if";
+import { getDefaultGlidePathConfig } from "../src/lib/utils/glide-path";
 
 let failures = 0;
 function check(label: string, ok: boolean, detail = "") {
@@ -87,6 +89,35 @@ function main() {
     near(ss[15], bothClaimed),
     `${Math.round(ss[15])}, expected ${Math.round(bothClaimed)}`
   );
+  // ---- every money column in the year's own dollars (#66) -----------------
+  // Social Security was recorded only in today's dollars, and the Projections
+  // page printed it beside withdrawals and balances in future dollars.
+  const couplesYears = runDetailedProjection(staggered.params);
+  const level = couplesYears.priceLevel;
+  check(
+    "the price level is today's prices grown by inflation, one year per row",
+    near(level[0], 1 + staggered.params.inflationPct / 100, 1e-9) &&
+      near(level[9], Math.pow(1 + staggered.params.inflationPct / 100, 10), 1e-9)
+  );
+  check(
+    "Social Security in the year's own dollars is today's figure times that year's price level",
+    couplesYears.ssIncome.every((v, y) => near(couplesYears.ssIncomeNominal[y], v * level[y], 1)),
+    `${couplesYears.ssIncomeNominal[15]} vs ${Math.round(couplesYears.ssIncome[15] * level[15])}`
+  );
+  const firstRetired = staggered.yearsToRetirement;
+  check(
+    "spending is recorded in retirement only, inflated from today",
+    couplesYears.spendingNominal[firstRetired - 1] === 0 &&
+      near(couplesYears.spendingNominal[firstRetired], staggered.params.annualExpenses * level[firstRetired], 1)
+  );
+  const spendable = (y: number) =>
+    (couplesYears.withdrawals[y] - couplesYears.taxes[y] - couplesYears.reinvested[y] + couplesYears.ssIncomeNominal[y]) / level[y];
+  check(
+    "what pays for the first retirement year, after tax and in today's dollars, is the spending entered",
+    near(spendable(firstRetired), staggered.params.annualExpenses, 2),
+    `${Math.round(spendable(firstRetired))} vs ${staggered.params.annualExpenses}`
+  );
+
   check(
     "each partner's claim is reported with its own start",
     staggered.selfSSStartYear === 7 && staggered.spouseSSStartYear === 15 && staggered.ssStartYear === 7,
@@ -219,6 +250,61 @@ function main() {
     shared.atRetirement.total < annuity * 0.97,
     `${Math.round(shared.atRetirement.total)} vs annuity ${Math.round(annuity)}`
   );
+
+  // ---- the what-if scenarios (#69) ---------------------------------------
+  // Each changes one thing in the engine's inputs. Three missed what they
+  // changed while they lived inside the page.
+  const pct = {
+    ...account("401k", "401k", "tax_deferred", 100_000), isActivelyContributing: true,
+    contributionMethod: "percent_of_salary", contributionPct: 10, salary: 100_000,
+    employerMatchRate: 0.5, employerMatchMaxPct: 6, ownerCurrentAge: 40,
+  };
+  const fixedAmount = { ...account("Roth 401k", "401k", "tax_free", 50_000, 10_000), ownerCurrentAge: 40 };
+  const partners = { ...account("Partner 401k", "401k", "tax_deferred", 80_000, 8_000), owner: "spouse", ownerRetirementYear: 20, ownerCurrentAge: 40 };
+  const household69: DetailedProjectionParams = {
+    accounts: [pct, fixedAmount, partners, account("Brokerage", "brokerage", "taxable", 200_000)],
+    totalAnnualContributions: 31_000, yearsToRetirement: 20, yearsInRetirement: 30, startAge: 40,
+    returnPct: 7, inflationPct: 3, annualExpenses: 60_000, socialSecurity: [{ annual: 30_000, startYear: 27 }],
+  };
+  const run = (p: DetailedProjectionParams) => runDetailedProjection(p);
+  const perAccount = (p: DetailedProjectionParams, name: string, y: number) =>
+    run(p).accountProjections.find((a) => a.name === name)!.contributionPerYear[y];
+
+  const boosted = whatIfParams(household69, "boost_savings", 50);
+  check(
+    "Boost Savings raises a deferral set as a share of pay, and the match on it: $13,000 becomes $18,000",
+    perAccount(household69, "401k", 0) === 13_000 && perAccount(boosted, "401k", 0) === 18_000,
+    `${perAccount(household69, "401k", 0)} → ${perAccount(boosted, "401k", 0)}`
+  );
+  check("and a deferral set as an amount: $10,000 becomes $15,000", perAccount(boosted, "Roth 401k", 0) === 15_000, String(perAccount(boosted, "Roth 401k", 0)));
+
+  const sooner = whatIfParams(household69, "early_retire", 5);
+  const soonerRun = run(sooner);
+  check(
+    "Retire Earlier starts withdrawals five years sooner and still ends at the same age",
+    run(household69).withdrawals[15] === 0 && soonerRun.withdrawals[15] > 0 && soonerRun.ages.length === run(household69).ages.length
+  );
+  check(
+    "and your contributions stop then, not at the old date",
+    perAccount(sooner, "401k", 14) > 0 && perAccount(sooner, "401k", 15) === 0 && perAccount(sooner, "Roth 401k", 15) === 0
+  );
+  check("while a partner who keeps working keeps contributing", perAccount(sooner, "Partner 401k", 17) === 8_000, String(perAccount(sooner, "Partner 401k", 17)));
+
+  const gliding = { ...household69, glidePath: { ...getDefaultGlidePathConfig(40, 60, "moderate"), enabled: true } };
+  const lower = whatIfParams(gliding, "lower_returns", 4);
+  const flat4 = run({ ...household69, returnPct: 4 });
+  check(
+    "Lower Returns applies with the glide path on: the same as markets returning 4% a year",
+    run(lower).totalValues.at(-1) === flat4.totalValues.at(-1) && run(gliding).totalValues.at(-1) !== flat4.totalValues.at(-1),
+    `${run(lower).totalValues.at(-1)} vs ${flat4.totalValues.at(-1)}`
+  );
+
+  const cut = run(whatIfParams(household69, "reduced_ss", 25));
+  check("Reduced Social Security cuts every benefit from its start: $30,000 becomes $22,500", cut.ssIncome[27] === 22_500 && cut.ssIncome[26] === 0, String(cut.ssIncome[27]));
+  const crash = whatIfParams(household69, "market_crash", 30);
+  check("Market Crash takes the same share off every account today", crash.accounts.every((a, i) => near(a.value, household69.accounts[i].value * 0.7, 1e-6)));
+  const hot = run(whatIfParams(household69, "high_inflation", 5));
+  check("High Inflation raises spending at that rate", near(hot.spendingNominal[20], 60_000 * Math.pow(1.05, 21), 1), String(hot.spendingNominal[20]));
 
   console.log(failures === 0 ? "\nALL PASS" : `\n${failures} FAILED`);
   return failures;

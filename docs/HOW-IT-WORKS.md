@@ -150,7 +150,7 @@ From {{rmd.start}}, the tax-deferred balance must pay out at least its required 
 
 - Code: `src/lib/utils/projection-scenarios.ts` `runDetailedProjection`
 
-Each year records the age, the phase, every account's balance, the total, the contributions, the withdrawal, its federal tax, the required distribution, anything reinvested, and the tax-deferred balance. Social Security is recorded in today's dollars, unlike every other column; the calculators on this page restate it in the year's own dollars, as the engine uses it.
+Each year records the age, the phase, every account's balance, the total, the contributions, the withdrawal, its federal tax, the required distribution, anything reinvested, the tax-deferred balance, the spending, Social Security and the year's price level. Money is in each year's own dollars; Social Security is also kept in today's dollars, as the SSA quotes it, and dividing any figure by the price level restates it in today's dollars. The Projections page's "First Year of Retirement" card does that, setting what savings pay after tax plus Social Security against the spending entered.
 
 Take any year of the example household apart. Every line is the engine's own result for that year; market growth is the difference that makes the year balance.
 
@@ -287,6 +287,25 @@ The example household under each market scenario:
 ```widget
 monte-carlo
 ```
+
+### What-if scenarios
+
+- Code: `src/lib/projections/what-if.ts` `whatIfParams`
+- Checked by: `scripts/test-one-engine.ts`
+- Shown in: the Projections page's scenario analysis
+
+Each what-if is the household's own engine inputs with one thing changed, run against the same simulated markets as the base case, so it differs from the base case only by what it says it changes.
+
+| What-if | What changes in the engine's inputs |
+|---|---|
+| Market crash, {{whatif.market_crash}} | Every account loses that share today. |
+| Retire earlier, {{whatif.early_retire}} | Your contributions stop and withdrawals start that much sooner; the plan ends at the same age. A working partner keeps contributing, and Social Security stays at the claiming ages chosen on the page. |
+| Boost savings, {{whatif.boost_savings}} | Your own deferral rises by that share, as a percentage of pay or as an amount. The engine works out the larger match and applies the IRS limit, so a boost can be partly capped. |
+| Lower returns, {{whatif.lower_returns}} | Markets return that every year. The glide path is set aside, since it would replace the return with each age's own. |
+| High inflation, {{whatif.high_inflation}} | Spending, Social Security and the tax brackets rise at that rate. |
+| Reduced Social Security, {{whatif.reduced_ss}} | Every benefit is cut by that share from the day it starts. |
+
+Retiring earlier usually lowers a Social Security benefit too, since it is based on years of earnings; the app has no earnings record, so it does not model that.
 
 ## Retirement analytics
 
@@ -549,6 +568,22 @@ met      = now has reached the target
 
 A goal measures only what is linked to it, from where it stood when the goal was set. Progress is not capped, so passing a target reads above 100% and borrowing more than is repaid reads below zero. A linked item that has since been deleted leaves both the start and the present. A goal that is met is closed, and stays closed.
 
+### Daily change
+
+- Code: `src/lib/utils/portfolio-snapshot.ts` `snapshotHousehold` `snapshotHouseholds`, `src/lib/queries/snapshots.ts` `getSnapshotBefore`
+- Checked by: `scripts/test-snapshot-job.ts`
+- Shown in: the Dashboard's Daily Change card, with the two days it compares
+
+```formula
+each weekday at {{snapshot.time}}: prices are refreshed, then
+daily change   = today's total − the total at the last snapshot from an earlier day
+daily change % = daily change ÷ that earlier total
+```
+
+The dashboard's daily change is not a running figure. It moves once each weekday evening, when the snapshot is taken, and holds until the next one, so during the day it is the previous evening's change and on a weekend it is Friday's. The total above it uses live holdings and moves when prices or balances do. Both are balance figures: money paid in or taken out counts as change, unlike an account's time-weighted return.
+
+Prices for anything with a ticker come from Yahoo Finance at the time of the snapshot. Funds in employer plans usually have none, so they keep the price the bank last reported. A second run on the same day replaces that day's snapshot instead of adding to it, and each household is snapshotted on its own, so one household's error cannot stop the others.
+
 ### Alerts
 
 - Code: `src/lib/utils/alert-generator.ts` `generateAlerts`
@@ -650,13 +685,12 @@ A model is useful because it leaves things out. These are the choices this one m
 
 ### Where it is known to be wrong
 
-- The Projections page shows Social Security in today's dollars next to future dollars, and its spending-versus-income card is not the engine (#66). This page shows it as the engine uses it.
 - The Social Security form's cost-of-living, planned-claiming-age and spousal fields are never used (#67).
-- Three what-if scenarios on the Projections page miss what they change (#69).
 - Required distributions follow the IRS table to 95 and a steeper formula after it, and are taken on both partners' combined balance from 73 for everyone (#70).
 - The projection uses the tax figures built into the code, not the yearly table (#61); the contribution limits are fixed for 2025 (#31); and the 2025 tax figures predate the July 2025 law (#56).
 - Analytics sets balances in future dollars beside spending, salary, Social Security, brackets and IRMAA thresholds in today's dollars, and taxes a flat {{analytics.ssTaxed}} of Social Security where the engine uses the IRS worksheet (#72).
 - The Roth ladder leaves the standard deduction unused, the sequence-of-returns paths do not share an average, and two of the four withdrawal orders always agree (#73).
+- A linked holding's price is stamped as current whatever its date (#77), and the daily change mixes the day's move in stocks with the day before's in mutual and employer-plan funds, which post their prices later (#78).
 - Account returns count reinvested dividends as deposits, read stock splits as losses, and lose the day a ticker is re-spelled (#71).
 - Funds in linked accounts are all classed as US stock, and a linked Roth 401(k) is treated as a Roth IRA (#75).
 - A file import gives a position with no basis a basis of zero, so its whole value counts as gain (#38), and a debt linked to a deleted asset drops out of net worth (#59).
@@ -679,6 +713,7 @@ Every function exported from a calculation module, and what it does. `pnpm how:c
 | `runProjectionMonteCarlo` | Runs the engine against many simulated markets: the odds and the percentile bands. |
 | `seededRandom` | A repeatable random-number generator, so the same household always gets the same odds. |
 | `balancesAtRetirement` | Today's balances by tax bucket, and the engine's balances at retirement, for Analytics. |
+| `whatIfParams` | A household's engine inputs with one what-if scenario applied. |
 | `missingPlanningInputs` | Which of age, retirement age and spending a calculation needs and has not been given. |
 | `givenMonthlySpending` | The monthly spending the household gave, on the Projections page or in Settings, or none. |
 | `describeMissing` | The sentence that asks for missing planning inputs instead of assuming them. |
@@ -742,6 +777,8 @@ Every function exported from a calculation module, and what it does. `pnpm how:c
 | `validateBasis` | Refuses a goal with nothing linked, or one already at or past its target. |
 | `shouldClose` | Whether a met goal should close; only its check calls it. |
 | `generateAlerts` | The nightly drift, large-move and concentration alerts. |
+| `snapshotHousehold` | One household's weekday snapshot: fresh prices, the day's records replaced, the daily change, net worth, alerts and goals. |
+| `snapshotHouseholds` | Snapshots every household, each on its own, and counts those that failed. |
 | `hoursSince` | Hours since a moment. |
 | `freshnessOf` | Fresh, ageing or stale, for a kind of figure. |
 | `relativeAge` | An age in words: "3 hours ago", "yesterday". |
@@ -758,3 +795,4 @@ Every function exported from a calculation module, and what it does. `pnpm how:c
 - 2026-10-04 · First version · Claude
 - 2026-10-04 · Published as the How RetireWise Works artifact ahead of the next release, at the owner's request; its calculators run the code in production at 3d88a37 · Claude
 - 2026-10-04 · A couple's Social Security is paid per partner from each one's claim (#65), and contribution records are counted once, from those in force, with pauses that resume (#68) · Claude
+- 2026-10-06 · The engine records spending, Social Security and the price level in each year's own dollars (#66); the what-if scenarios explained, each now applied through the engine's inputs (#69); the daily change explained, with its timing and the snapshot fixes (#49); #77 and #78 added to the known limits · Claude

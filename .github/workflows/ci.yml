@@ -235,6 +235,12 @@ jobs:
       - name: Check export and deletion
         run: pnpm test:account-data
 
+      # The dashboard's daily change: measured from the previous day's
+      # snapshot, one snapshot a day however often the job runs, and one
+      # household's failure stopping only that household.
+      - name: Check the daily snapshot
+        run: pnpm test:snapshot-job
+
       # The setup checklist exists to stop a projection being believed before
       # its inputs exist, so what it gates is worth asserting.
       - name: Check the setup checklist

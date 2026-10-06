@@ -24,6 +24,7 @@
     "test:ops": "tsx scripts/test-ops.ts",
     "test:account-data": "tsx scripts/test-account-data.ts",
     "test:onboarding": "tsx scripts/test-onboarding.ts",
+    "test:snapshot-job": "tsx scripts/test-snapshot-job.ts",
     "check:routes": "tsx scripts/check-protected-routes.ts",
     "test:freshness": "tsx scripts/test-freshness.ts",
     "test:rmd": "tsx scripts/test-rmd.ts",

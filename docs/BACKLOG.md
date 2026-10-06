@@ -422,17 +422,6 @@ Quote and escape every field.
 
 Someone who forgets their password cannot get back in. The redirect to sign-in carries the page you asked for in `next` (`src/proxy.ts`), but the sign-in form and action ignore it and always land on the dashboard. The email-link callback does honour `next`. The reset email goes through Supabase Auth, which is already configured.
 
-### 49. The weekday snapshot skips households and can double-count a day
-
-- Type: Defect
-- Priority: P3
-- Effort: S
-- Severity: Low
-- Blocker: None
-- Source: Requirements traceability, GAP-22
-
-A household with no investments gets no net-worth snapshot, because the loop continues before it. A second run on one day inserts duplicate rows, and every run is recorded as ok. Upsert by day and record real outcomes.
-
 ### 51. Some checks prove less than their names say
 
 - Type: Tech Debt
@@ -564,17 +553,6 @@ Rows a person entered before redeeming an invite stay under their own id; once t
 
 `next.config.ts` and `vercel.json` set no headers, so pages can be framed and nothing limits where scripts load from. Add a Content-Security-Policy that allows Plaid Link, and the standard framing, referrer and content-type headers, checked in the browser tests.
 
-### 66. The Projections page shows Social Security in today's dollars beside future dollars
-
-- Type: Defect
-- Priority: P2
-- Effort: S
-- Severity: Low
-- Blocker: None
-- Source: How RetireWise works review, GAP-37
-
-The engine records Social Security in today's dollars and everything else in each year's dollars. The drawdown table on the Projections page prints it raw next to withdrawals and balances, so late in retirement it looks about half its real size. The "Monthly Spending vs Income" card mixes the two as well and is not the engine at all. The assistant already converts it. Record it in the year's dollars in the engine, or convert it on the page, and make the card read the engine.
-
 ### 67. Settings asks for Social Security details that no calculation uses
 
 - Type: Gap
@@ -585,17 +563,6 @@ The engine records Social Security in today's dollars and everything else in eac
 - Source: How RetireWise works review, GAP-38
 
 The Social Security form saves a cost-of-living assumption, a planned claiming age, spousal benefits and more, but the projection reads only the benefit at full retirement age and the full retirement age itself. The cost-of-living increase is the market scenario's inflation, and the claiming age is the Projections page's control. Either use the fields or stop asking for them, and say on the form which figures the projection uses.
-
-### 69. Three what-if scenarios do not do what they say
-
-- Type: Defect
-- Priority: P2
-- Effort: S
-- Severity: Medium
-- Blocker: None
-- Source: How RetireWise works review, GAP-40
-
-On the Projections page, "Boost Savings" changes nothing for a contribution set as a percentage of salary; "Retire Earlier" starts withdrawals five years sooner but keeps contributing and leaves Social Security where it was; "Lower Returns" changes nothing when the glide path is on. Apply each override through the engine's inputs so it reaches every account and age, and give the overrides a check of their own.
 
 ### 70. Required distributions: past 95, per person, and from 75 for people born from 1960
 
@@ -663,6 +630,28 @@ Each is small; together they are why the assistant and the screens sometimes dif
 
 Plaid security types map "etf" and "mutual fund" to `us_stock` in `src/lib/plaid/sync.ts`, so a bond fund or an international fund in a linked 401(k) counts as US stock in the allocation, the drift alerts and rebalancing. A linked Roth 401(k) becomes a Roth IRA and gets the IRA contribution limit. Classify funds from Plaid's sector or fund category where it is given, ask the owner where it is not, and map Roth 401(k)s to their own type.
 
+### 77. A linked price is stamped as current whatever its date
+
+- Type: Defect
+- Priority: P2
+- Effort: S
+- Severity: Medium
+- Blocker: None
+- Source: Daily change review, 6 Oct, GAP-46
+
+The bank sync writes each holding's `last_price_update` as the moment it ran, not the date of the price the institution reported. Plaid gives that date (`institution_price_as_of`), and for some employer-plan funds it is days old. A stale price therefore reads as fresh on the dashboard and the account cards, and a fund that has not been repriced keeps adding nothing to the daily change without saying why. Store the price's own date and judge freshness by it.
+
+### 78. The daily change mixes days
+
+- Type: Defect
+- Priority: P3
+- Effort: M
+- Severity: Low
+- Blocker: None
+- Source: Daily change review, 6 Oct, GAP-47
+
+The snapshot behind the daily change runs at 22:00 UTC, 6 pm Eastern in summer. Stocks and ETFs have closed by then, but most mutual funds post their price later in the evening, so their part of the change is the day before's. Funds in employer plans that Yahoo cannot price keep the bank's morning price, also from the day before. The change is also a balance change, so money paid in counts as gain (#71). Run the snapshot after funds post, record it under the market day, and say on the card what it measures.
+
 ## Notes on sequencing
 
 - Do #1 before #7: previews should lose production's data before they get data of their own.
@@ -677,12 +666,36 @@ Plaid security types map "etf" and "mutual fund" to `us_stock` in `src/lib/plaid
 - #54 before #35: the leave action cannot delete "what the member added" until that is recorded.
 - #58 is the next privacy fix: small, and it makes the erasure promise true again. #59, #61 and #62 are small and independent.
 - #60 before the next schema change, or that change's migration will fail.
-- #66 and #69 are next on the Projections page: with #65 and #68 done, the engine's answer is right, and what remains is how the page shows it and what its what-ifs change.
+- #77 before #78: the daily change can only be judged once each price says how old it is.
 - #72 and #73 are both the Analytics page and the withdrawal comparison; do them together, after #61, so every figure uses one tax table and one dollar basis. #71 and #75 change the figures on account cards and the allocation, and #74 collects the small fixes.
 - Q3, Q4, Q5, Q6 and Q9 were answered on 2 Oct, so no traceability item waits on a decision from you; #53 waits on your go-ahead.
 - #55, #29 and #30 are done (2–3 Oct): one tested engine answers everywhere. You answered Q10 on 3 Oct: the landing-page claim stays, and the withdrawal-order comparison stays as it is.
 
 ## Done
+
+### 69. Three what-if scenarios do not do what they say
+
+- Type: Defect
+- Closed: 2026-10-06
+- In: PR 10
+
+The what-ifs now live in `src/lib/projections/what-if.ts` and change the engine's inputs directly. Boost Savings raises a deferral set as a share of pay as well as one set as an amount, and the engine works out the larger match and the IRS cap. Retire Earlier stops your contributions at the new date as well as starting withdrawals, while a working partner keeps contributing. Lower Returns applies with the glide path on. Proved by `scripts/test-one-engine.ts`.
+
+### 66. The Projections page shows Social Security in today's dollars beside future dollars
+
+- Type: Defect
+- Closed: 2026-10-06
+- In: PR 10
+
+The engine now records Social Security and spending in each year's own dollars, with the year's price level, beside Social Security in today's dollars. The drawdown table shows the year's own dollars. The spending-versus-income card is now "First Year of Retirement" and reads the engine: what savings pay after tax, plus Social Security, restated in today's dollars against the spending entered. With the default method it used to show a surplus of exactly zero, every time. Proved by `scripts/test-one-engine.ts`.
+
+### 49. The weekday snapshot skips households and can double-count a day
+
+- Type: Defect
+- Closed: 2026-10-06
+- In: PR 10
+
+Found again on 6 Oct while checking why the dashboard's daily change looked still. The snapshot measured a second run on the same day against the first, recording a change of nothing, and added a second set of rows. Now each household's snapshot replaces that day's records and is measured from the last snapshot on an earlier day. One household's error stops only that household and is counted in the run's record, and a household with no investments gets its net-worth snapshot. The dashboard card names the two days it compares. Proved by `scripts/test-snapshot-job.ts`, which runs against a database in CI.
 
 ### 76. The release checks its trace page against the working tree, not the released commit
 
