@@ -1,8 +1,14 @@
 name: CI
 
+# Pull requests and main only. CI used to run on every push to every branch
+# as well, so one change was checked on its branch, again on its pull request
+# and again on main, and resetting a working branch to main re-checked a
+# commit main had already passed: about 40% of the Actions minutes spent.
+# A branch is checked once it has a pull request; main is checked because
+# the release refuses a commit whose checks on main are not green.
 on:
   push:
-    branches: ["**"]
+    branches: [main]
   pull_request:
 
 concurrency:
@@ -205,9 +211,22 @@ jobs:
       - run: pnpm install --frozen-lockfile
 
       # WebKit is the engine the reported bug appeared on, so it is not
-      # optional here. --with-deps pulls the system libraries it needs.
+      # optional here. The browsers are cached by Playwright's version, so
+      # only the system libraries they need are installed on a cache hit.
+      - name: Playwright version
+        id: playwright
+        run: echo "version=$(node -p "require('@playwright/test/package.json').version")" >> "$GITHUB_OUTPUT"
+      - uses: actions/cache@v4
+        id: browsers
+        with:
+          path: ~/.cache/ms-playwright
+          key: playwright-${{ runner.os }}-${{ steps.playwright.outputs.version }}-webkit-chromium
       - name: Install browsers
+        if: steps.browsers.outputs.cache-hit != 'true'
         run: pnpm exec playwright install --with-deps webkit chromium
+      - name: Install browser system libraries
+        if: steps.browsers.outputs.cache-hit == 'true'
+        run: pnpm exec playwright install-deps webkit chromium
 
       - name: Create the schema
         run: pnpm db:migrate:ci
@@ -247,6 +266,15 @@ jobs:
       # its inputs exist, so what it gates is worth asserting.
       - name: Check the setup checklist
         run: pnpm test:onboarding
+
+      # Next keeps compiled output between builds here; a warm cache rebuilds
+      # only what changed.
+      - uses: actions/cache@v4
+        with:
+          path: .next/cache
+          key: next-${{ runner.os }}-${{ hashFiles('pnpm-lock.yaml') }}-${{ github.sha }}
+          restore-keys: |
+            next-${{ runner.os }}-${{ hashFiles('pnpm-lock.yaml') }}-
 
       - name: Build
         run: pnpm build

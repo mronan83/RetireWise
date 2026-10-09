@@ -45,7 +45,7 @@ Done item fields
 - Blocker: Your action: sign up for any uptime monitor
 - Source: [Delivery review G3](https://claude.ai/artifact/Eo9g6bEnWFi9TBoSPwohPk)
 
-`/api/health` was written for an external monitor, after the app was down for 92 days without anyone noticing, and nothing calls it. Point a monitor at `https://retirewise-iota.vercel.app/api/health` and alert your phone after two failed checks.
+`/api/health` was written for an external monitor, after the app was down for 92 days without anyone noticing, and nothing calls it. Better Stack was tried and dropped on 7 Oct (inconsistent service, unclear pricing), and the owner chose to run without an outside monitor for now. Point a monitor at `https://retirewise-iota.vercel.app/api/health` and alert your phone after two failed checks.
 
 ### 3. The store-card fix is live but not confirmed
 
@@ -650,7 +650,7 @@ The weekday-evening snapshot runs at 22:00 UTC, 6 pm Eastern in summer, before m
 - Blocker: None
 - Source: Checking #77 and #78 locally, 6 Oct
 
-`e2e/goals.spec.ts` fails about one run in nine, on main as on the #77/#78 branch (2 of 18 each, Chromium): `getByTestId('goals-panel')` resolves to two elements just after the demo redirect lands on the dashboard. CI retries once, so it has not turned a run red yet, but a retry hides a real failure as easily as a flaky one. Find whether a second, hidden dashboard tree is kept during the redirect or the panel renders twice, and make the test wait for the one visible panel or the page render it once.
+`e2e/goals.spec.ts` fails about one run in nine, on main as on the #77/#78 branch (2 of 18 each, Chromium): `getByTestId('goals-panel')` resolves to two elements just after the demo redirect lands on the dashboard. A second test flakes the same way: on WebKit, `e2e/mobile-overlays.spec.ts` measured the navigation sheet 40px off the left edge on PR 12's first run and passed on the re-run, likely measured before its slide-in animation attached. CI retries once, so it has not turned a run red yet, but a retry hides a real failure as easily as a flaky one. Find whether a second, hidden dashboard tree is kept during the redirect or the panel renders twice, and make the test wait for the one visible panel or the page render it once.
 
 ## Notes on sequencing
 
