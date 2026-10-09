@@ -132,7 +132,7 @@ flowchart LR
 | NHTSA vPIC | App to NHTSA | A VIN out, make, model and year back | `src/lib/actions/vehicles.ts` |
 | Upstash Redis | Both ways, optional | Price cache and the chat rate limit | `src/lib/redis.ts` |
 | Stripe | Both ways, dormant | Checkout, the customer portal and a signed webhook, inert until both keys are set | `src/lib/billing/stripe.ts` |
-| GitHub | Source and CI | CI on every push; the release reads a commit's check results | `.github/workflows/ci.yml` |
+| GitHub | Source and CI | CI on pull requests and on main; the release reads a commit's check results | `.github/workflows/ci.yml` |
 
 Links to Zillow, Kelley Blue Book, Fidelity, the SSA and the IRS open in the person's own browser; the server sends those sites nothing.
 
@@ -517,7 +517,7 @@ Environment variables, by name only. Values live in Vercel and in each developer
 
 ## Delivery, quality and operations
 
-- **CI.** `.github/workflows/ci.yml` runs on every push and pull request in two jobs. "Lint and types" runs lint, the type check, the static guards (tenant scope, protected routes), the document checks (backlog, requirements, architecture, data model, how it works, each with a rule that a pull request updates them) and every check of pure logic. "Mobile layout" starts Postgres, migrates and seeds it, runs the database checks (isolation, invites, export and erasure, onboarding), builds the app and runs the browser tests on three phones.
+- **CI.** `.github/workflows/ci.yml` runs on pull requests and on pushes to main, in two jobs (ADR-030). Pushes to other branches run nothing until they have a pull request. "Lint and types" runs lint, the type check, the static guards (tenant scope, protected routes), the document checks (backlog, requirements, architecture, data model, how it works, each with a rule that a pull request updates them) and every check of pure logic. "Mobile layout" starts Postgres, migrates and seeds it, runs the database checks (isolation, invites, export and erasure, onboarding), builds the app and runs the browser tests on three phones. The Playwright browsers and Next's build cache are cached between runs.
 - **Branch protection.** None on main, so a direct push skips CI (#16). A release still refuses a commit whose CI is not green.
 - **Release.** `scripts/deploy-production.ts` and `scripts/lib/release.ts`, as in the release flow above. Rolling back is a release of an older commit, which rebuilds it (#5), and nothing shows which commit is live (#4).
 - **Published pages.** After a successful release, `pnpm deploy:prod` builds the backlog, requirements trace, technical architecture, data model and How RetireWise Works pages from the released commit, and Claude publishes them to their fixed addresses. The last of these bundles the projection engine with esbuild, a development dependency, so its calculators run the released code in the reader's browser.
@@ -730,7 +730,7 @@ Choices that shaped the system, newest last. A record is never deleted; a later 
 - Status: Accepted
 - Decided: 2026-09-19
 - Context: Layout bugs appeared on iOS, and the household uses the app on phones.
-- Decision: Playwright on two iPhones and a Pixel, against a production build and a real Postgres, on every push.
+- Decision: Playwright on two iPhones and a Pixel, against a production build and a real Postgres, on every push (narrowed to pull requests and main by ADR-030).
 - Consequences: Phone regressions fail CI. Desktop and assistive technology are not covered.
 - Evidence: `playwright.config.ts`, `e2e/mobile-layout.spec.ts`, `e2e/mobile-overlays.spec.ts`
 
@@ -941,6 +941,15 @@ Choices that shaped the system, newest last. A record is never deleted; a later 
 - Consequences: A fund's move appears on its own day; a stale price reads as stale. The migration adds a column every holdings query names, so it must be applied before the release; the health check now fails when the database lacks a column the code reads, and the release says so. A position bought today counts its whole day's move, as the market's move in what is held now. The evening snapshot still holds funds a day behind (#80), and exchange holidays count as sessions.
 - Evidence: `src/lib/utils/market-session.ts`, `src/lib/performance/daily-change.ts`, `src/lib/utils/price-feed.ts`, `src/lib/plaid/sync.ts`, `src/lib/db/schema-check.ts`, `src/lib/db/migrations/0020_holding_previous_close.sql`, `scripts/test-performance.ts`, `scripts/test-freshness.ts`
 
+### ADR-030. CI runs on pull requests and main, not on every branch push
+
+- Status: Accepted
+- Decided: 2026-10-09
+- Context: The owner was running out of GitHub Actions minutes. From 1 September to 9 October RetireWise used about 1,121 billed minutes, on pace for about 1,700 in October, against 2,000 a month on GitHub Free shared by every private repository. The browser job was 78% of it. CI ran on every push to every branch, so one change was checked on its branch, again on its pull request and again on main, and resetting the working branch to main after a merge re-checked a commit main had already passed (21 runs).
+- Decision: Run CI on pull requests and on pushes to main only. Cache the Playwright browsers by Playwright's version and Next's build cache by lockfile. Keep the browser suite on every pull request and on main; skipping it for documentation-only changes was not done, because the release requires every check to pass on the main commit.
+- Consequences: Work on a branch is not checked by CI until its pull request opens, so Claude runs the checks locally before opening one, as it already does. The release gate is unchanged. Expected saving is roughly half the minutes; the cache's effect is measured on the first runs.
+- Evidence: `.github/workflows/ci.yml`
+
 ## Change log
 
 - 2026-10-03 · Rewritten from the code: principles, system context, frontend, identity and households, server logic, nine key flows, environments, delivery, quality attributes, thirteen risks and twenty-six decision records. The inventory is generated, `pnpm arch:check` keeps the two in step, and the stale data-flow document is replaced by the key flows · Claude
@@ -949,3 +958,4 @@ Choices that shaped the system, newest last. A record is never deleted; a later 
 - 2026-10-06 · Weekday snapshot flow: one snapshot per household per day, measured from the previous day, each household on its own, and the run's failures recorded (#49), in `src/lib/utils/portfolio-snapshot.ts`; the what-ifs moved to `src/lib/projections/what-if.ts` (#69); the what-if risk retired and replaced by the risk that prices are older than they say (#77, #78) · Claude
 - 2026-10-06 · ADR-028: the dashboard's daily change is the market's move since the previous close, worked out at the latest prices so Refresh Prices moves it (#79); the pricing risk restated for it · Claude
 - 2026-10-06 · ADR-029 supersedes ADR-028: each price carries the time it was struck and the previous close, and the daily change credits each move to its own session (#77, #78); the health check fails on a missing column and the release says to migrate; the pricing risk narrowed to the evening snapshot (#80) · Claude
+- 2026-10-09 · ADR-030: CI runs on pull requests and main only, with the browsers and Next's build cache cached, to cut GitHub Actions minutes · Claude
