@@ -144,6 +144,7 @@ Links to Zillow, Kelley Blue Book, Fidelity, the SSA and the IRS open in the per
 - **Components.** `src/components/ui` holds shadcn components (`shadcn`, `@base-ui/react`, `class-variance-authority`, `clsx`, `tailwind-merge`) and app primitives for money, freshness and the tax year. Charts use `recharts`; icons `lucide-react`; themes `next-themes`; animation helpers `tw-animate-css`. Small hooks live in `src/lib/hooks`, and the `cn()` class helper in `src/lib/utils.ts`.
 - **Chat.** The assistant panel uses `@ai-sdk/react` and streams from `/api/chat`. `src/lib/agents` holds only its message type; the agent itself is configured in the route.
 - **Phones first.** Layouts use the dynamic viewport height and safe-area insets, inputs are 16px so iOS does not zoom, and pinch zoom stays on. CI checks the layout on two iPhones and a Pixel.
+- **Refresh.** Installed on a home screen the app has no browser chrome, so `src/components/app/app-refresh.tsx` adds a refresh button to the header and pull-to-refresh on touch screens. Both call `router.refresh()`, which reads the page's server data again, and send an event the alert bell listens for, since it loads its own data (ADR-031).
 - **Unused.** `nuqs`, `react-rnd`, `re-resizable` and `cmdk` are installed but nothing reaches them (#52).
 
 ## Identity, households and authority
@@ -950,6 +951,15 @@ Choices that shaped the system, newest last. A record is never deleted; a later 
 - Consequences: Work on a branch is not checked by CI until its pull request opens, so Claude runs the checks locally before opening one, as it already does. The release gate is unchanged. Expected saving is roughly half the minutes; the cache's effect is measured on the first runs.
 - Evidence: `.github/workflows/ci.yml`
 
+### ADR-031. Refreshing re-reads the page's data; it does not reload the app or fetch prices
+
+- Status: Accepted
+- Decided: 2026-10-23
+- Context: The owner asked for pull-to-refresh and a refresh button. The installed app runs standalone, with no browser reload and no native pull-to-refresh.
+- Decision: Both call `router.refresh()`, which re-renders the page's server components with fresh data and keeps what is on screen (scroll, open panels, typed input) instead of reloading the whole app. Components that load their own data listen for one window event. Market prices are not fetched: that costs Yahoo calls and has its own button. The pull is written by hand on touch events rather than with a library: it is about 60 lines, and it ignores pulls that start below the top of the page or inside a dialog or sheet.
+- Consequences: A refresh is quick and loses nothing on screen. A new release reaches the open app only on its next full load. The browser's own pull-to-refresh is held off while pulling, so a browser tab does not refresh twice.
+- Evidence: `src/components/app/app-refresh.tsx`, `src/lib/utils/pull-to-refresh.ts`, `e2e/refresh.spec.ts`, `scripts/test-refresh.ts`
+
 ## Change log
 
 - 2026-10-03 · Rewritten from the code: principles, system context, frontend, identity and households, server logic, nine key flows, environments, delivery, quality attributes, thirteen risks and twenty-six decision records. The inventory is generated, `pnpm arch:check` keeps the two in step, and the stale data-flow document is replaced by the key flows · Claude
@@ -959,3 +969,4 @@ Choices that shaped the system, newest last. A record is never deleted; a later 
 - 2026-10-06 · ADR-028: the dashboard's daily change is the market's move since the previous close, worked out at the latest prices so Refresh Prices moves it (#79); the pricing risk restated for it · Claude
 - 2026-10-06 · ADR-029 supersedes ADR-028: each price carries the time it was struck and the previous close, and the daily change credits each move to its own session (#77, #78); the health check fails on a missing column and the release says to migrate; the pricing risk narrowed to the evening snapshot (#80) · Claude
 - 2026-10-09 · ADR-030: CI runs on pull requests and main only, with the browsers and Next's build cache cached, to cut GitHub Actions minutes · Claude
+- 2026-10-23 · ADR-031: refresh by button or pull re-reads the page's data; `src/components/app` added for the app-wide controls · Claude

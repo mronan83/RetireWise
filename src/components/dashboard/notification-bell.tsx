@@ -6,6 +6,7 @@ import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { buttonVariants } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
+import { APP_REFRESH_EVENT } from "@/components/app/app-refresh";
 
 type Alert = {
   id: string;
@@ -35,6 +36,12 @@ export function NotificationBell() {
 
   const [reloadToken, setReloadToken] = useState(0);
   const reload = useCallback(() => setReloadToken((n) => n + 1), []);
+
+  // Refreshing the app reloads the bell too; it fetches its own alerts.
+  useEffect(() => {
+    window.addEventListener(APP_REFRESH_EVENT, reload);
+    return () => window.removeEventListener(APP_REFRESH_EVENT, reload);
+  }, [reload]);
 
   useEffect(() => {
     const controller = new AbortController();

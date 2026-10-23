@@ -4,6 +4,7 @@ import { SidebarNav } from "@/components/dashboard/sidebar-nav";
 import { DashboardHeader } from "@/components/dashboard/header";
 import { ChatPanel } from "@/components/ai/chat-panel";
 import { DemoBanner } from "@/components/dashboard/demo-banner";
+import { PullToRefresh } from "@/components/app/app-refresh";
 
 export default async function DashboardLayout({
   children,
@@ -30,7 +31,7 @@ export default async function DashboardLayout({
               container anchors to that container instead of the viewport — so
               anything meant to stay on screen silently scrolls away. */}
           <main className="safe-inset-bottom flex-1 overflow-x-clip p-3 sm:p-4 lg:p-6">
-            {children}
+            <PullToRefresh>{children}</PullToRefresh>
           </main>
         </div>
         {!isDemo && <ChatPanel />}

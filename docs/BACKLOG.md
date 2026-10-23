@@ -641,7 +641,7 @@ Plaid security types map "etf" and "mutual fund" to `us_stock` in `src/lib/plaid
 
 The weekday-evening snapshot runs at 22:00 UTC, 6 pm Eastern in summer, before most mutual funds post their price, so it records each fund at the day before's price under today's date. The dashboard's daily change no longer reads it (#78), but the value chart, the account returns and the large-move alert do, so there a fund's move lands a day late and a day's account return mixes two sessions. Each holding now carries the time its price was struck and its previous close, so the snapshot can record each position under its price's session, or restate the day before once a fund's price posts.
 
-### 81. The goals browser test sometimes finds the goals panel twice
+### 81. A browser test measures the navigation sheet mid-animation
 
 - Type: Tech Debt
 - Priority: P3
@@ -650,7 +650,18 @@ The weekday-evening snapshot runs at 22:00 UTC, 6 pm Eastern in summer, before m
 - Blocker: None
 - Source: Checking #77 and #78 locally, 6 Oct
 
-`e2e/goals.spec.ts` fails about one run in nine, on main as on the #77/#78 branch (2 of 18 each, Chromium): `getByTestId('goals-panel')` resolves to two elements just after the demo redirect lands on the dashboard. A second test flakes the same way: on WebKit, `e2e/mobile-overlays.spec.ts` measured the navigation sheet 40px off the left edge on PR 12's first run and passed on the re-run, likely measured before its slide-in animation attached. CI retries once, so it has not turned a run red yet, but a retry hides a real failure as easily as a flaky one. Find whether a second, hidden dashboard tree is kept during the redirect or the panel renders twice, and make the test wait for the one visible panel or the page render it once.
+The goals half was fixed on 23 Oct: while the dashboard streams in, React stages the finished section in a hidden `<div id="S:…">` before moving it into place, so the panel briefly exists twice, and the test now reads only the visible one (30 of 30 runs passed). It used to fail about one run in nine. A second test flakes the same way: on WebKit, `e2e/mobile-overlays.spec.ts` measured the navigation sheet 40px off the left edge on PR 12's first run and passed on the re-run, likely measured before its slide-in animation attached. CI retries once, so it has not turned a run red yet, but a retry hides a real failure as easily as a flaky one. What remains is the navigation sheet: make the overlay helper wait until the sheet's slide-in has started before it waits for animations to finish.
+
+### 82. Push notifications
+
+- Type: Gap
+- Priority: P2
+- Effort: L
+- Severity: Medium
+- Blocker: Your decision: Q11, which events and who receives them
+- Source: The owner, 23 Oct, FR-ONB-06
+
+Web push through a service worker, so it works on the installed app without an app store. What it needs: a service worker; the `web-push` library; a `push_subscriptions` table (one row per person and device, row-level security, a migration you apply); a Notifications section in Settings to turn it on per device and choose the kinds; and sending from the weekday snapshot and the bank refresh, each event once. It also needs three environment variables in Vercel, holding a key pair you generate with one command and add. On iPhone it reaches only the app added to the home screen, iOS 16.4 or later.
 
 ## Notes on sequencing
 
