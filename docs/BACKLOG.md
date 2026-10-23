@@ -88,7 +88,7 @@ Commit `70fa40e` moved Liabilities from `required_if_supported_products` to `add
 - Blocker: Your decision: where the production database credential lives for the release (see #15)
 - Source: [Delivery review G2](https://claude.ai/artifact/Eo9g6bEnWFi9TBoSPwohPk)
 
-`pnpm db:migrate` runs against whatever database a machine's `.env.local` names. It is not gated, not ordered with the code it serves, and has no down migrations. Production had 20 of 20 on 21 Sep. Migration 0020, from PR 12, must be applied before that release; `/api/health` now fails when the database lacks a column the code reads, so a release that goes out first is caught at once. The dry run should list pending migrations and the release should apply them before switching traffic, under one rule: a migration must work with the code already live.
+`pnpm db:migrate` runs against whatever database a machine's `.env.local` names. It is not gated, not ordered with the code it serves, and has no down migrations. Production had 20 of 20 on 21 Sep. Migrations 0020 (PR 12) and 0021 (PR 14) are each applied before their release; `/api/health` now fails when the database lacks a column the code reads, so a release that goes out first is caught at once. The dry run should list pending migrations and the release should apply them before switching traffic, under one rule: a migration must work with the code already live.
 
 ### 7. Previews have no data of their own
 
@@ -507,7 +507,7 @@ The standard deduction for married couples is $30,000 in `src/lib/tax/table.ts`.
 - Blocker: None
 - Source: Data model review
 
-Drizzle keeps a snapshot of the schema after each migration it generates. Migrations 0017 to 0020 were written by hand, so the latest snapshot is 0016's, and `pnpm db:generate` today writes a migration that recreates `goal_links`, three enums and six columns that already exist; applying it would fail. Regenerate the snapshot from the current schema without keeping the SQL, and check the next generated migration contains only the intended change.
+Drizzle keeps a snapshot of the schema after each migration it generates. Migrations 0017 to 0021 were written by hand, so the latest snapshot is 0016's, and `pnpm db:generate` today writes a migration that recreates `goal_links`, three enums and six columns and two tables that already exist; applying it would fail. Regenerate the snapshot from the current schema without keeping the SQL, and check the next generated migration contains only the intended change.
 
 ### 61. Projections ignore the yearly tax table
 
@@ -652,16 +652,16 @@ The weekday-evening snapshot runs at 22:00 UTC, 6 pm Eastern in summer, before m
 
 The goals half was fixed on 23 Oct: while the dashboard streams in, React stages the finished section in a hidden `<div id="S:…">` before moving it into place, so the panel briefly exists twice, and the test now reads only the visible one (30 of 30 runs passed). It used to fail about one run in nine. A second test flakes the same way: on WebKit, `e2e/mobile-overlays.spec.ts` measured the navigation sheet 40px off the left edge on PR 12's first run and passed on the re-run, likely measured before its slide-in animation attached. CI retries once, so it has not turned a run red yet, but a retry hides a real failure as easily as a flaky one. What remains is the navigation sheet: make the overlay helper wait until the sheet's slide-in has started before it waits for animations to finish.
 
-### 82. Push notifications
+### 83. Turn push notifications on
 
-- Type: Gap
+- Type: Ops
 - Priority: P2
-- Effort: L
+- Effort: S
 - Severity: Medium
-- Blocker: Your decision: Q11, which events and who receives them
-- Source: The owner, 23 Oct, FR-ONB-06
+- Blocker: Your action: generate the key pair, add three settings in Vercel and apply migration 0021
+- Source: #82, GAP-49
 
-Web push through a service worker, so it works on the installed app without an app store. What it needs: a service worker; the `web-push` library; a `push_subscriptions` table (one row per person and device, row-level security, a migration you apply); a Notifications section in Settings to turn it on per device and choose the kinds; and sending from the weekday snapshot and the bank refresh, each event once. It also needs three environment variables in Vercel, holding a key pair you generate with one command and add. On iPhone it reaches only the app added to the home screen, iOS 16.4 or later.
+Notifications are built (#82) and send nothing until RetireWise has a key pair. Generate one with `npx web-push generate-vapid-keys`; in Vercel set `NEXT_PUBLIC_VAPID_PUBLIC_KEY` and `VAPID_PRIVATE_KEY` from it, and `OPERATOR_EMAIL` to the email you sign in with; apply migration 0021; release. Then turn notifications on in Settings on your installed iPhone app and send a test. Once one arrives, FR-ONB-06 can move to Verified.
 
 ## Notes on sequencing
 
@@ -683,6 +683,14 @@ Web push through a service worker, so it works on the installed app without an a
 - #55, #29 and #30 are done (2–3 Oct): one tested engine answers everywhere. You answered Q10 on 3 Oct: the landing-page claim stays, and the withdrawal-order comparison stays as it is.
 
 ## Done
+
+### 82. Push notifications
+
+- Type: Gap
+- Closed: 2026-10-23
+- In: PR 14
+
+Web push, as the owner answered Q11: seven kinds, chosen per device in Settings, each event once, no amounts. A service worker that only shows pushes; `web-push` with a key pair; `push_subscriptions` and `notification_log` (migration 0021). Events are found where they happen: the bank refresh (reconnect needed, the job failing, yearly deadlines), the transaction sync (withdrawals of $1,000 or more), the weekday snapshot (critical alerts, goals reached, a household failing) and invite redemption. Proved by `scripts/test-notifications.ts` and `scripts/test-notification-delivery.ts`. Sends nothing until #83.
 
 ### 78. The daily change mixes days
 

@@ -84,6 +84,13 @@ export default function PrivacyPage() {
           configured. It holds no financial data.
         </li>
         <li>
+          <strong>Your device&apos;s push service</strong> (Apple, Google or Mozilla,
+          depending on the device) — only if you turn notifications on. It carries the
+          notification&apos;s short message, encrypted so only your device can read it.
+          Messages say what happened, such as &ldquo;a goal is reached&rdquo;, and never
+          include an amount.
+        </li>
+        <li>
           <strong>Yahoo Finance</strong> — the ticker symbols you hold are sent, from
           RetireWise&apos;s server, to fetch their prices. No amounts, names or account
           details go with them.

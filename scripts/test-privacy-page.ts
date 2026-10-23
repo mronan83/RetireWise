@@ -30,6 +30,7 @@ const SENDING_LIBRARIES: Record<string, string> = {
   "@ai-sdk/openai": "AI provider",
   "@supabase/supabase-js": "Supabase",
   "@supabase/ssr": "Supabase",
+  "web-push": "push service",
 };
 
 /** Hosts the code calls directly, and the name the page must use. */

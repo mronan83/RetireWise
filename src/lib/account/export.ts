@@ -5,6 +5,8 @@ import {
   accounts,
   aiAnalyses,
   alerts,
+  notificationLog,
+  pushSubscriptions,
   auditLog,
   cashReserves,
   contributions,
@@ -99,6 +101,8 @@ export async function buildAccountExport(clerkId: string): Promise<AccountExport
     goalLinkRows,
     holdingSnapshotRows,
     joinAttempts,
+    devices,
+    notified,
   ] = await Promise.all([
     db.select().from(userPreferences).where(eq(userPreferences.clerkId, clerkId)),
     db.select().from(contributions).where(eq(contributions.clerkId, clerkId)),
@@ -128,6 +132,8 @@ export async function buildAccountExport(clerkId: string): Promise<AccountExport
     // Row level security shows a person only their own attempts to join a
     // household, which is exactly the set that belongs in their export.
     db.select().from(householdJoinAttempts),
+    db.select().from(pushSubscriptions).where(eq(pushSubscriptions.clerkId, clerkId)),
+    db.select().from(notificationLog).where(eq(notificationLog.clerkId, clerkId)),
   ]);
 
   const householdRow = membership[0] ?? null;
@@ -152,6 +158,16 @@ export async function buildAccountExport(clerkId: string): Promise<AccountExport
     delete copy.anthropicApiKey;
     delete copy.googleApiKey;
     delete copy.openaiApiKey;
+    return copy;
+  });
+
+  // A device's push address and keys are what a message is encrypted to:
+  // useless in a file, and a way to reach the device if one leaked.
+  const safeDevices = devices.map((d) => {
+    const copy: Record<string, unknown> = { ...d };
+    delete copy.endpoint;
+    delete copy.p256dh;
+    delete copy.auth;
     return copy;
   });
 
@@ -197,6 +213,8 @@ export async function buildAccountExport(clerkId: string): Promise<AccountExport
       subscription,
       auditLog: audit,
       householdJoinAttempts: joinAttempts,
+      pushSubscriptions: safeDevices,
+      notificationLog: notified,
       // Only this household's invitations are visible under row level
       // security, and only their last four characters were ever stored.
       householdInvites: invites.map((i) => {

@@ -27,7 +27,7 @@ export async function generateAlerts(clerkId: string) {
   }[] = [];
 
   const totalValue = holdings.reduce((s, h) => s + Number(h.currentValue), 0);
-  if (totalValue === 0) return;
+  if (totalValue === 0) return [];
 
   // 1. Allocation drift check
   const allocation = calculateAllocation(holdings);
@@ -106,5 +106,6 @@ export async function generateAlerts(clerkId: string) {
     );
   }
 
-  return newAlerts.length;
+  // The alerts this run raised, so the snapshot can notify the critical ones.
+  return newAlerts;
 }

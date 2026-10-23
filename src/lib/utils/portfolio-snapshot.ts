@@ -6,6 +6,8 @@ import { gainLossFor, rollupBasis } from "./cost-basis";
 import { getSnapshotBefore } from "../queries/snapshots";
 import { updateAllPrices } from "./price-feed";
 import { generateAlerts } from "./alert-generator";
+import { notifySafely } from "../notifications/send";
+import { messages } from "../notifications/kinds";
 import { snapshotNetWorth } from "./net-worth-snapshot";
 import { findGoalsToClose } from "../queries/goals";
 
@@ -188,7 +190,12 @@ export async function snapshotHousehold(
 
   // Step 4: Generate alerts based on fresh data
   try {
-    await generateAlerts(clerkId);
+    // A critical alert notifies once per kind per day; the alert itself is
+    // replaced daily, so the day is what makes it a new event.
+    for (const a of await generateAlerts(clerkId)) {
+      if (a.severity !== "critical") continue;
+      await notifySafely({ clerkId, kind: "alerts", eventKey: `${a.type}:${today}`, message: messages.alert(a.type) });
+    }
   } catch (e) {
     console.error(`Alert generation failed for ${clerkId}:`, e);
   }
@@ -213,6 +220,7 @@ export async function snapshotHousehold(
         .update(goalsTable)
         .set({ closedAt: new Date(), updatedAt: new Date() })
         .where(eq(goalsTable.id, goal.id));
+      await notifySafely({ clerkId, kind: "goals", eventKey: goal.id, message: messages.goal(goal.name) });
     }
   } catch (e) {
     console.error(`Goal close check failed for ${clerkId}:`, e);

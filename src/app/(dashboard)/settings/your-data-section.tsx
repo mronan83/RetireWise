@@ -17,6 +17,8 @@ const LABELS: Record<string, string> = {
   contributions: "Contributions",
   goals: "Goals",
   alerts: "Alerts",
+  pushSubscriptions: "Devices with notifications on",
+  notificationLog: "Notifications sent",
   aiAnalyses: "Saved AI analyses",
   cashReserves: "Cash accounts",
   debts: "Debts",

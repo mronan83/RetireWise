@@ -108,6 +108,11 @@ jobs:
       # nothing. The gesture itself is driven in e2e/refresh.spec.ts.
       - run: pnpm exec tsx scripts/test-refresh.ts
 
+      # What RetireWise notifies about and when (Q11): who may choose which
+      # kind, the $1,000 withdrawal rule, the yearly deadlines, and that no
+      # message carries an amount.
+      - run: pnpm exec tsx scripts/test-notifications.ts
+
       # Required minimum distributions, and the row the headline figures read
       # — which was the retirement-age row, labelled as age 73.
       - run: pnpm exec tsx scripts/test-rmd.ts
@@ -265,6 +270,12 @@ jobs:
       # household's failure stopping only that household.
       - name: Check the daily snapshot
         run: pnpm test:snapshot-job
+
+      # Push notifications: each event once, to the household's devices that
+      # chose it, a dropped device removed, and a phone that moves household
+      # leaving the first. The push service is replaced by a recorder.
+      - name: Check notification delivery
+        run: pnpm test:notification-delivery
 
       # The setup checklist exists to stop a projection being believed before
       # its inputs exist, so what it gates is worth asserting.

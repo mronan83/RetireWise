@@ -18,6 +18,7 @@ import { HouseholdSharing } from "./household-sharing";
 import { IrsLimitsSection } from "./irs-limits-section";
 import { PlanSection } from "./plan-section";
 import { YourDataSection } from "./your-data-section";
+import { NotificationsSection } from "./notifications-section";
 
 export default async function SettingsPage() {
   return withHousehold(() => SettingsPageContent());
@@ -155,6 +156,13 @@ async function SettingsPageContent() {
             spouseAge={currentPrefs?.spouseCurrentAge}
           />
         </div>
+      </CollapsibleSection>
+
+      <CollapsibleSection
+        title="Notifications"
+        summary="Push notifications on this device"
+      >
+        <NotificationsSection />
       </CollapsibleSection>
 
       <CollapsibleSection

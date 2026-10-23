@@ -50,9 +50,9 @@ What the household tells RetireWise about itself (ages, salaries, contributions,
 
 ### History and insights
 
-- Tables: portfolio_snapshots, account_snapshots, holding_snapshots, net_worth_snapshots, net_worth_item_history, alerts, ai_analyses
+- Tables: portfolio_snapshots, account_snapshots, holding_snapshots, net_worth_snapshots, net_worth_item_history, alerts, ai_analyses, push_subscriptions, notification_log
 
-Rows computed from the tables above, mostly by the weekday snapshot job: daily snapshots, per-item value history and alerts. These are the only record of past values; holdings and balances keep only their current state.
+Rows computed from the tables above, mostly by the weekday snapshot job: daily snapshots, per-item value history and alerts, and the devices that receive push notifications with the record of what was sent. These are the only record of past values; holdings and balances keep only their current state.
 
 ### Tax and contribution reference
 
@@ -323,9 +323,28 @@ The writes from the manual actions are not awaited, so a failure there is silent
 
 - Written by: `generateAlerts()` in `src/lib/utils/alert-generator.ts`, from the snapshot job; `src/app/api/alerts/dismiss/route.ts` and `src/app/api/alerts/dismiss-all/route.ts`; erasure
 
-One row per portfolio alert: allocation drift, a large daily move or a concentrated holding, with a severity. Generation replaces any undismissed alert of the same type, so at most one is active per type. Nothing shows them today (GAP-25).
+One row per portfolio alert: allocation drift, a large daily move or a concentrated holding, with a severity. Generation replaces any undismissed alert of the same type, so at most one is active per type. The notification bell shows them, and a critical one is also pushed to devices that chose critical alerts; the separate alerts panel is unused (GAP-25).
 
 - `type`: Only three of the six `alert_type` values are ever generated.
+
+### push_subscriptions
+
+- Written by: `saveDevice()`, `setDeviceKinds()` and `removeDevice()` in `src/lib/notifications/devices.ts`, from `src/app/api/notifications/route.ts`; `notify()` in `src/lib/notifications/send.ts` removes a device the push service has dropped; erasure
+
+One row per person per device that turned push notifications on (FR-ONB-06).
+
+- `account_id`: The person, not the household. The application touches only the signed-in person's rows, so a partner never sees or changes another's devices; row-level security is by household, so a household's erasure removes every member's.
+- `endpoint`: The device's push address at Apple, Google or Mozilla. Unique: a phone signed in to another household takes its row over. With `p256dh` and `auth`, it is what a message is encrypted to, and none of the three is exported.
+- `kinds`: The kinds this device receives, from `NOTIFICATION_KINDS` in `src/lib/notifications/kinds.ts`. `jobs` only for the operator named by `OPERATOR_EMAIL`.
+
+### notification_log
+
+- Written by: `notify()` in `src/lib/notifications/send.ts`; erasure
+
+One row per event notified: the kind, the event and how many devices it reached. The message is not stored.
+
+- `clerk_id`: The household, or `operator` for a failed scheduled job, which goes to the operator in whatever household they are.
+- `event_key`: What makes an event the same event: a goal's id, an invite's id, a Plaid transaction's id, a connection and day, an alert type and day, or a deadline and year.
 
 ### ai_analyses
 
@@ -583,6 +602,13 @@ A sync never replaces a manual basis, and Plaid's silence leaves an existing bas
 
 `last_price_update` is when the price was struck. A price from an earlier market session is kept out when one from a later session is stored, so the bank's morning price, the day before's close, cannot overwrite a refresh; a stored price with no previous close, as every row written before 6 Oct 2026 has, gives way to a quote that brings one. `previous_close` belongs to the session just before the price's, or is null: the bank's price takes the stored one only across exactly one session. A price typed in has none, and saving a holding with its price unchanged leaves both alone. The database would accept any combination.
 
+### Each event notifies once
+
+- Enforced by: the unique index `notification_log_event_idx` on household, kind and event; `notify()` in `src/lib/notifications/send.ts` logs an event before sending it
+- Verified by: `scripts/test-notification-delivery.ts`
+
+A job that finds the same event twice, or two runs overlapping, send it once. An event found while no key pair is configured is not logged, so it can still notify once keys are added. A failed delivery is not retried.
+
 ### A Plaid transaction is stored once
 
 - Enforced by: the unique index on `transactions.plaid_transaction_id`, with the insert skipping a row it has seen
@@ -728,7 +754,7 @@ sequenceDiagram
 ## Verification
 
 - **Check this document:** `pnpm datamodel:check`, in CI. It fails when a table or enum is undescribed or in no domain, a note names a column that does not exist, a named file is missing, the schema and migrations declare different indexes, or a household table has no row-level security policy.
-- **Change the schema:** edit `src/lib/db/schema.ts`, run `pnpm db:generate`, and review the SQL it writes. Policies and grants are written by hand in the migration, since the schema declares neither. Until the stored snapshot is repaired, `pnpm db:generate` also re-emits migrations 0017 to 0020, which must be deleted from its output (#60).
+- **Change the schema:** edit `src/lib/db/schema.ts`, run `pnpm db:generate`, and review the SQL it writes. Policies and grants are written by hand in the migration, since the schema declares neither. Until the stored snapshot is repaired, `pnpm db:generate` also re-emits migrations 0017 to 0021, which must be deleted from its output (#60).
 - **Apply migrations:** `pnpm db:migrate` locally, `pnpm db:migrate:ci` in CI. Production migrations are applied separately; `pnpm deploy:prod` does not run them (`docs/disaster-recovery.md`). A release whose columns the database lacks fails `/api/health`, which compares the schema with the database through `src/lib/db/schema-check.ts`.
 - **Seed the demo household:** `pnpm db:seed-demo`.
 - **Isolation:** `pnpm test:rls` proves that statements under `withTenant` run as `app_user` and see only their own household, that holdings are scoped through accounts, and that the role does not outlive its transaction.
@@ -747,3 +773,4 @@ The database checks need a migrated Postgres; CI starts one for the "Mobile layo
 - 2026-10-06 · The snapshot tables are written by `src/lib/utils/portfolio-snapshot.ts`, one set per household per day, with the daily change measured from the previous day (#49); `daily_change` explained; `cron_runs` records failed households · Claude
 - 2026-10-06 · `holding_snapshots` prices are the previous close for the dashboard's daily change, which no longer reads `portfolio_snapshots.daily_change` (#79) · Claude
 - 2026-10-06 · `holdings.previous_close` added by migration 0020, and `last_price_update` is now when the price was struck (#77, #78); a rule for which price a holding keeps; `holding_snapshots` no longer supplies the daily change's previous close, and holds funds a day behind (GAP-48); the health check compares the schema with the database · Claude
+- 2026-10-23 · `push_subscriptions` and `notification_log` added by migration 0021 for push notifications (FR-ONB-06), with the rule that each event notifies once; `alerts` corrected: the bell shows them · Claude

@@ -16,6 +16,9 @@ import {
   plaidErrorCode,
 } from "@/lib/plaid/backoff";
 import { withSystemRole } from "@/lib/db/tenant";
+import { OPERATOR, notifySafely } from "@/lib/notifications/send";
+import { messages } from "@/lib/notifications/kinds";
+import { sendDeadlineReminders } from "@/lib/notifications/deadline-job";
 
 /**
  * Vercel's ceiling for this function. The budget below stops well short of it,
@@ -39,7 +42,20 @@ const CONCURRENCY = 3;
 const MAX_ITEMS_PER_RUN = 300;
 
 export async function GET(request: Request) {
-  return withSystemRole("iterates every household's Plaid items", () => handleGet(request));
+  return withSystemRole("iterates every household's Plaid items", async () => {
+    try {
+      return await handleGet(request);
+    } catch (e) {
+      // A run that died tells the operator; one that never started cannot.
+      await notifySafely({
+        clerkId: OPERATOR,
+        kind: "jobs",
+        eventKey: `plaid_refresh:crash:${new Date().toISOString().slice(0, 10)}`,
+        message: messages.job("bank refresh"),
+      });
+      throw e;
+    }
+  });
 }
 
 async function handleGet(request: Request) {
@@ -141,7 +157,17 @@ async function handleGet(request: Request) {
       const code = plaidErrorCode(e);
       const message = code ?? (e instanceof Error ? e.message : String(e));
 
-      if (terminal) deadLettered.push(item.institutionName);
+      if (terminal) {
+        deadLettered.push(item.institutionName);
+        // Due items are never already waiting on a person, so this is the
+        // moment the connection stopped: tell the household once.
+        await notifySafely({
+          clerkId: item.clerkId,
+          kind: "reconnect",
+          eventKey: `${item.id}:${new Date().toISOString().slice(0, 10)}`,
+          message: messages.reconnect(item.institutionName),
+        });
+      }
 
       await db
         .update(plaidItems)
@@ -223,6 +249,19 @@ async function handleGet(request: Request) {
       detail: { due: due.length, skipped, deadLettered, costBasis: basisByHousehold },
     })
     .where(eq(cronRuns.id, run.id));
+
+  const today = new Date().toISOString().slice(0, 10);
+  // One bank failing is routine, and has its own notice; nothing refreshing
+  // at all is the job failing.
+  if (due.length > 0 && refreshed === 0) {
+    await notifySafely({ clerkId: OPERATOR, kind: "jobs", eventKey: `plaid_refresh:${today}`, message: messages.job("bank refresh") });
+  }
+  // Daily, so the yearly deadline reminders ride on this job.
+  try {
+    await sendDeadlineReminders(today);
+  } catch (e) {
+    console.error("Deadline reminders failed:", e);
+  }
 
   if (refreshed > 0) {
     revalidatePath("/dashboard");
