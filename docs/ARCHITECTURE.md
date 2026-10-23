@@ -131,6 +131,7 @@ flowchart LR
 | Yahoo Finance | App to Yahoo | Ticker symbols out, prices back | `src/lib/utils/price-feed.ts` |
 | NHTSA vPIC | App to NHTSA | A VIN out, make, model and year back | `src/lib/actions/vehicles.ts` |
 | Upstash Redis | Both ways, optional | Price cache and the chat rate limit | `src/lib/redis.ts` |
+| Push services (Apple, Google, Mozilla) | App to the device's push service | A notification's short message, encrypted to the device, only for people who turned notifications on; never an amount. Signed with the app's key pair through `web-push` | `src/lib/notifications/send.ts` |
 | Stripe | Both ways, dormant | Checkout, the customer portal and a signed webhook, inert until both keys are set | `src/lib/billing/stripe.ts` |
 | GitHub | Source and CI | CI on pull requests and on main; the release reads a commit's check results | `.github/workflows/ci.yml` |
 
@@ -144,6 +145,8 @@ Links to Zillow, Kelley Blue Book, Fidelity, the SSA and the IRS open in the per
 - **Components.** `src/components/ui` holds shadcn components (`shadcn`, `@base-ui/react`, `class-variance-authority`, `clsx`, `tailwind-merge`) and app primitives for money, freshness and the tax year. Charts use `recharts`; icons `lucide-react`; themes `next-themes`; animation helpers `tw-animate-css`. Small hooks live in `src/lib/hooks`, and the `cn()` class helper in `src/lib/utils.ts`.
 - **Chat.** The assistant panel uses `@ai-sdk/react` and streams from `/api/chat`. `src/lib/agents` holds only its message type; the agent itself is configured in the route.
 - **Phones first.** Layouts use the dynamic viewport height and safe-area insets, inputs are 16px so iOS does not zoom, and pinch zoom stays on. CI checks the layout on two iPhones and a Pixel.
+- **Notifications.** `public/sw.js` is a service worker that only shows pushes and opens the app when one is tapped; it caches nothing. Settings turns notifications on per device from a tap, which iOS requires, and on iPhone only for the app added to the Home Screen (ADR-032).
+- **Refresh.** Installed on a home screen the app has no browser chrome, so `src/components/app/app-refresh.tsx` adds a refresh button to the header and pull-to-refresh on touch screens. Both call `router.refresh()`, which reads the page's server data again, and send an event the alert bell listens for, since it loads its own data (ADR-031).
 - **Unused.** `nuqs`, `react-rnd`, `re-resizable` and `cmdk` are installed but nothing reaches them (#52).
 
 ## Identity, households and authority
@@ -180,6 +183,7 @@ Links to Zillow, Kelley Blue Book, Fidelity, the SSA and the IRS open in the per
 | `src/lib/planning-inputs.ts` | The three inputs a projection cannot run without |
 | `src/lib/tax` | The tax table: shape, figures built into the code, seed rows and the loader |
 | `src/lib/net-worth` | Loading and composing net worth, each liability once |
+| `src/lib/notifications` | Push notifications: the seven kinds and their rules, a person's devices, and sending each event once |
 | `src/lib/goals` | Goal progress over linked items |
 | `src/lib/performance` | Time-weighted return from daily share counts |
 | `src/lib/import` | OFX and QFX statements |
@@ -193,7 +197,7 @@ Links to Zillow, Kelley Blue Book, Fidelity, the SSA and the IRS open in the per
 | `src/lib/onboarding.ts` | The setup checklist |
 | `src/lib/constants.ts`, `src/lib/constants-net-worth.ts`, `src/lib/types.ts` | Labels, contribution limits for 2025 (#31), and shared types |
 
-- **API groups.** `/api/account` exports and erases; `/api/alerts` lists and dismisses; `/api/billing` is dormant checkout, portal, status and webhook; `/api/chat` is the assistant; `/api/cron` holds the two scheduled jobs; `/api/export` writes the CSVs and the portfolio report; `/api/health` holds the liveness and freshness checks; `/api/household` creates, invites and joins; `/api/irs-limits` refreshes the shared tax and limit tables; `/api/plaid` links, syncs and receives webhooks; `/api/prices` refreshes prices; `/api/report` writes the AI report and infographic; `/api/settings` saves the AI provider and projection controls.
+- **API groups.** `/api/account` exports and erases; `/api/alerts` lists and dismisses; `/api/billing` is dormant checkout, portal, status and webhook; `/api/chat` is the assistant; `/api/cron` holds the two scheduled jobs; `/api/export` writes the CSVs and the portfolio report; `/api/health` holds the liveness and freshness checks; `/api/household` creates, invites and joins; `/api/irs-limits` refreshes the shared tax and limit tables; `/api/notifications` turns push notifications on or off for a device and sends it a test; `/api/plaid` links, syncs and receives webhooks; `/api/prices` refreshes prices; `/api/report` writes the AI report and infographic; `/api/settings` saves the AI provider and projection controls.
 - **The engine.** `runDetailedProjection` in `src/lib/utils/projection-scenarios.ts` projects each account year by year: contributions, employer money, pauses, catch-up, Social Security, federal tax on withdrawals, and required minimum distributions from tax-deferred accounts only. The Projections page and the assistant never pass it the tax table from the database, so they use the figures built into the code (#61).
 - **Analytics.** `src/lib/utils/financial-analytics.ts` covers distributions, Roth conversions, Social Security claiming, catch-up, income replacement, fees, sequence risk and healthcare costs, and reads the tax table from the database. Withdrawal orders are compared outside the engine (ADR-025).
 - **The assistant.** `/api/chat` resolves the household's model, applies the rate limit when Redis is configured, and streams an answer with `ai` and `@ai-sdk/anthropic`, `@ai-sdk/google` or `@ai-sdk/openai`, calling up to ten tools that read the household's data. The tools use the same engine and net-worth composition as the pages.
@@ -457,6 +461,30 @@ sequenceDiagram
   HJ-->>M: Joined
 ```
 
+### A notification
+
+1. An event is found where it happens: the bank refresh (a connection needing a person, nothing refreshing at all, the yearly deadlines), the transaction sync (a withdrawal of $1,000 or more in the last week), the weekday snapshot (a critical alert, a goal reached, a household failing), and redeeming an invite (someone joined).
+2. `notify()` logs it under a unique key. If the key is already there it stops: each event notifies once.
+3. It reads the household's devices that chose that kind (for a failed job, the operator's devices anywhere) and sends each the message, encrypted and signed with the app's key pair, through the device's push service.
+4. A device the service reports gone is deleted. A failed delivery is not retried. Nothing about a notification can fail the job that found the event.
+
+```mermaid
+sequenceDiagram
+  autonumber
+  participant J as A job or an invite
+  participant N as notify()
+  participant DB as Postgres, owner role
+  participant PS as Push service
+  participant D as Device
+  J->>N: Event, kind, key, message
+  N->>DB: Log the event, unless already logged
+  N->>DB: Devices in the household that chose this kind
+  N->>PS: Encrypted message, signed
+  PS->>D: Notification
+  D->>D: Tapped: open the page it names
+  N->>DB: Remove devices reported gone
+```
+
 ### A release
 
 1. The owner says deploy. `pnpm deploy:prod` refuses any commit not on main, or whose CI is not entirely green.
@@ -512,6 +540,7 @@ Environment variables, by name only. Values live in Vercel and in each developer
 | AI | `AI_GATEWAY_ENABLED`, `AI_GATEWAY_API_KEY` | Off; households bring their own keys, which are stored sealed in the database |
 | Redis | `KV_REST_API_URL`, `KV_REST_API_TOKEN`, `UPSTASH_REDIS_REST_URL`, `UPSTASH_REDIS_REST_TOKEN` | Either pair; optional |
 | Billing, dormant | `STRIPE_SECRET_KEY`, `STRIPE_WEBHOOK_SECRET`, `STRIPE_PRICE_PLUS_MONTHLY`, `NEXT_PUBLIC_APP_URL`, `VERCEL_PROJECT_PRODUCTION_URL` | Billing switches on only when both Stripe keys are set; the last is set by Vercel |
+| Push notifications | `NEXT_PUBLIC_VAPID_PUBLIC_KEY`, `VAPID_PRIVATE_KEY`, `OPERATOR_EMAIL` | The key pair that signs every push; without both keys notifications are off. The email names the one person told when a scheduled job fails |
 | Release | `VERCEL_TOKEN`, `GITHUB_TOKEN`, `GH_TOKEN` | Read by `pnpm deploy:prod` |
 | Tests | `CI`, `PORT`, `E2E_BASE_URL` | Read by `playwright.config.ts` |
 
@@ -625,7 +654,7 @@ With no encryption key set, rotating or leaking the cron secret breaks or expose
 - Backlog: #6, #60
 - Severity: Medium
 
-Migrations are not released with the code that needs them, and generating the next one today would repeat four that already ran. A release that reaches the database before its migration now fails the health check at once rather than on the first page that reads the new column, but it is still live until it is rolled back.
+Migrations are not released with the code that needs them, and generating the next one today would repeat five that already ran. A release that reaches the database before its migration now fails the health check at once rather than on the first page that reads the new column, but it is still live until it is rolled back.
 
 ### A missing database variable would move production to the old database
 
@@ -950,6 +979,24 @@ Choices that shaped the system, newest last. A record is never deleted; a later 
 - Consequences: Work on a branch is not checked by CI until its pull request opens, so Claude runs the checks locally before opening one, as it already does. The release gate is unchanged. Expected saving is roughly half the minutes; the cache's effect is measured on the first runs.
 - Evidence: `.github/workflows/ci.yml`
 
+### ADR-031. Refreshing re-reads the page's data; it does not reload the app or fetch prices
+
+- Status: Accepted
+- Decided: 2026-10-23
+- Context: The owner asked for pull-to-refresh and a refresh button. The installed app runs standalone, with no browser reload and no native pull-to-refresh.
+- Decision: Both call `router.refresh()`, which re-renders the page's server components with fresh data and keeps what is on screen (scroll, open panels, typed input) instead of reloading the whole app. Components that load their own data listen for one window event. Market prices are not fetched: that costs Yahoo calls and has its own button. The pull is written by hand on touch events rather than with a library: it is about 60 lines, and it ignores pulls that start below the top of the page or inside a dialog or sheet.
+- Consequences: A refresh is quick and loses nothing on screen. A new release reaches the open app only on its next full load. The browser's own pull-to-refresh is held off while pulling, so a browser tab does not refresh twice.
+- Evidence: `src/components/app/app-refresh.tsx`, `src/lib/utils/pull-to-refresh.ts`, `e2e/refresh.spec.ts`, `scripts/test-refresh.ts`
+
+### ADR-032. Push notifications by web push, each event once, never an amount
+
+- Status: Accepted
+- Decided: 2026-10-23
+- Context: The owner asked to be told of important events (FR-ONB-06) and chose seven kinds (Q11). RetireWise is a web app installed to the home screen, not a store app.
+- Decision: Standard web push: a service worker that only shows pushes, the `web-push` library, and a key pair in environment variables, so Apple, Google and Mozilla deliver with no store or developer account. Each person turns it on per device and chooses the kinds. Events are found where they already happen rather than by a new job, logged under a unique key before sending, and never retried. Messages name what happened and where to look, never an amount, because a lock screen is not private. A failed scheduled job goes to one operator named by email.
+- Consequences: On iPhone, notifications reach only the app added to the Home Screen, iOS 16.4 or later. Nothing is sent until the key pair is set (#83). A withdrawal is known only after the morning bank refresh. A job that never starts cannot report itself; with no outside monitor (#2), that remains unwatched.
+- Evidence: `src/lib/notifications/kinds.ts`, `src/lib/notifications/send.ts`, `src/lib/notifications/devices.ts`, `public/sw.js`, `scripts/test-notifications.ts`, `scripts/test-notification-delivery.ts`
+
 ## Change log
 
 - 2026-10-03 · Rewritten from the code: principles, system context, frontend, identity and households, server logic, nine key flows, environments, delivery, quality attributes, thirteen risks and twenty-six decision records. The inventory is generated, `pnpm arch:check` keeps the two in step, and the stale data-flow document is replaced by the key flows · Claude
@@ -959,3 +1006,5 @@ Choices that shaped the system, newest last. A record is never deleted; a later 
 - 2026-10-06 · ADR-028: the dashboard's daily change is the market's move since the previous close, worked out at the latest prices so Refresh Prices moves it (#79); the pricing risk restated for it · Claude
 - 2026-10-06 · ADR-029 supersedes ADR-028: each price carries the time it was struck and the previous close, and the daily change credits each move to its own session (#77, #78); the health check fails on a missing column and the release says to migrate; the pricing risk narrowed to the evening snapshot (#80) · Claude
 - 2026-10-09 · ADR-030: CI runs on pull requests and main only, with the browsers and Next's build cache cached, to cut GitHub Actions minutes · Claude
+- 2026-10-23 · ADR-031: refresh by button or pull re-reads the page's data; `src/components/app` added for the app-wide controls · Claude
+- 2026-10-23 · ADR-032: push notifications by web push, each event once, never an amount; a notification flow, the push services, `web-push`, three environment variables, `/api/notifications` and `src/lib/notifications` added · Claude

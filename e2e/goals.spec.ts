@@ -26,7 +26,11 @@ type Row = {
 };
 
 async function goalRows(page: import("@playwright/test").Page): Promise<Row[]> {
-  const panel = page.getByTestId("goals-panel");
+  // Visible only. While the dashboard streams in, React stages the finished
+  // section in a hidden <div id="S:…"> before moving it into place, so for
+  // an instant the panel exists twice; a strict locator over both failed
+  // about one run in nine (#81).
+  const panel = page.getByTestId("goals-panel").filter({ visible: true });
   await expect(panel, "the goals panel is not on the dashboard").toBeVisible();
 
   return panel.getByTestId("goal-row").evaluateAll((nodes) =>

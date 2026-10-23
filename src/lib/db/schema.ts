@@ -602,6 +602,61 @@ export const alerts = pgTable("alerts", {
   createdAt: timestamp("created_at").defaultNow().notNull(),
 });
 
+/**
+ * A person's device that has turned push notifications on.
+ *
+ * Keyed to the household like every other table, and also to the person
+ * (`account_id`): a subscription is one person on one device, and a partner
+ * never sees or changes another's. `endpoint` is the browser's push address
+ * (Apple's, Google's or Mozilla's service); with `p256dh` and `auth` it is
+ * what a message is encrypted to. None of the three leaves the server in an
+ * export.
+ */
+export const pushSubscriptions = pgTable(
+  "push_subscriptions",
+  {
+    id: uuid("id").defaultRandom().primaryKey(),
+    clerkId: text("clerk_id").notNull(),
+    accountId: text("account_id").notNull(),
+    endpoint: text("endpoint").notNull(),
+    p256dh: text("p256dh").notNull(),
+    auth: text("auth").notNull(),
+    /** Which kinds this device receives; see NOTIFICATION_KINDS. */
+    kinds: text("kinds").array().notNull(),
+    /** The browser's description of the device, to tell devices apart. */
+    device: text("device"),
+    lastSentAt: timestamp("last_sent_at"),
+    createdAt: timestamp("created_at").defaultNow().notNull(),
+    updatedAt: timestamp("updated_at").defaultNow().notNull(),
+  },
+  (table) => [
+    uniqueIndex("push_subscriptions_endpoint_idx").on(table.endpoint),
+    index("push_subscriptions_clerk_idx").on(table.clerkId),
+  ]
+);
+
+/**
+ * Every notification sent, once per event. The unique key is what makes a
+ * notification fire once however often the job that finds the event runs.
+ * Holds the kind and the event, not the message, so it records nothing a
+ * lock screen did not already show.
+ */
+export const notificationLog = pgTable(
+  "notification_log",
+  {
+    id: uuid("id").defaultRandom().primaryKey(),
+    clerkId: text("clerk_id").notNull(),
+    kind: text("kind").notNull(),
+    eventKey: text("event_key").notNull(),
+    /** Devices it was delivered to. */
+    delivered: integer("delivered").notNull().default(0),
+    sentAt: timestamp("sent_at").defaultNow().notNull(),
+  },
+  (table) => [
+    uniqueIndex("notification_log_event_idx").on(table.clerkId, table.kind, table.eventKey),
+  ]
+);
+
 export const goals = pgTable("goals", {
   id: uuid("id").defaultRandom().primaryKey(),
   clerkId: text("clerk_id").notNull(),

@@ -629,6 +629,27 @@ The thresholds are drift above 5%, a daily move above 2% and a holding above 25%
 - Features: F-28
 - Gap: GAP-45
 
+### FR-ONB-05. The app can be refreshed by pulling down or with a refresh button
+
+- Priority: Must
+- Status: Verified
+- Source: The owner, 23 Oct 2026
+- Features: F-47
+- Verified by: `e2e/refresh.spec.ts`, `scripts/test-refresh.ts`
+
+Installed on a home screen, the app runs without browser chrome, so it had no reload button and no native pull-to-refresh. The header has a refresh button on every signed-in page, and pulling down from the top of a page and letting go does the same. Both read the page's data again from the server and reload the alert bell. They do not fetch new market prices; Refresh Prices on the dashboard does that. A short pull, a pull that starts below the top of the page, and a pull inside a dialog or sheet do nothing.
+
+### FR-ONB-06. The household is told by push notification about important things that happen
+
+- Priority: Should
+- Status: Partial
+- Source: The owner, 23 Oct 2026; Q11
+- Features: F-52
+- Verified by: `scripts/test-notifications.ts`, `scripts/test-notification-delivery.ts`
+- Gap: GAP-49
+
+Seven kinds, chosen per device by each person who turns notifications on (Q11): a linked account needing reconnecting; a critical alert; a goal reached; someone joining the household; a withdrawal of $1,000 or more from a linked account; the yearly IRA, 401(k) and required-distribution deadlines; and, for the operator only, a scheduled job that failed. Each event notifies once, and no message carries an amount. On an iPhone, web push reaches only the app added to the Home Screen, on iOS 16.4 or later.
+
 ### FR-BIL-01. Every household gets the full product while billing is off, and a paid plan can be switched on by configuration
 
 - Priority: Could
@@ -1389,9 +1410,18 @@ Both pages are marked as drafts that no lawyer has reviewed.
 
 - Group: Platform
 - Status: Verified
-- Requirements: NFR-UX-01, NFR-UX-02
-- Code: `src/components/dashboard/sidebar-nav.tsx`, `src/components/dashboard/header.tsx`, `src/app/layout.tsx`, `src/app/manifest.ts`
-- Checks: `e2e/mobile-overlays.spec.ts`
+- Requirements: NFR-UX-01, NFR-UX-02, FR-ONB-05
+- Code: `src/components/dashboard/sidebar-nav.tsx`, `src/components/dashboard/header.tsx`, `src/app/layout.tsx`, `src/app/manifest.ts`, `src/components/app/app-refresh.tsx`, `src/lib/utils/pull-to-refresh.ts`
+- Checks: `e2e/mobile-overlays.spec.ts`, `e2e/refresh.spec.ts`, `scripts/test-refresh.ts`
+
+### F-52. Push notifications
+
+- Group: Dashboard and guidance
+- Status: Partial
+- Requirements: FR-ONB-06
+- Code: `src/lib/notifications/kinds.ts`, `src/lib/notifications/send.ts`, `src/lib/notifications/devices.ts`, `src/lib/notifications/deadline-job.ts`, `src/app/api/notifications/route.ts`, `src/app/api/notifications/test/route.ts`, `src/app/(dashboard)/settings/notifications-section.tsx`, `public/sw.js`
+- Checks: `scripts/test-notifications.ts`, `scripts/test-notification-delivery.ts`
+- Gap: GAP-49
 
 ### F-48. Release on command
 
@@ -1956,6 +1986,16 @@ The daily change measured today's prices against each position's price in the ev
 
 Found on 6 Oct while fixing #78. The snapshot runs at 22:00 UTC, before most mutual funds post, so it records each fund at the day before's price under today's date. The daily change no longer reads it, but the value chart, the account returns and the large-move alert do, so there a fund's move lands a day late.
 
+### GAP-49. Push notifications are off until their key pair is set
+
+- Affects: FR-ONB-06, F-52
+- Severity: Medium
+- Evidence: `src/lib/notifications/send.ts`
+- Backlog: #83
+- Status: Open
+
+Built and checked against a database with the push service replaced by a recorder, but nothing is sent until the key pair and the operator's email are in Vercel, and no real device has received one yet.
+
 ## Open questions
 
 ### Q1. What would show each objective is met?
@@ -2068,6 +2108,15 @@ Only the assistant compares withdrawal orders. Since 3 Oct it does so with the c
 
 **Answer** (owner, 3 Oct): "Leave the claim." The landing page keeps it, and the assistant's comparison of four draw orders (`src/lib/utils/withdrawal-strategies.ts`) stays as what backs it, outside the engine. Claude had recommended dropping the word "optimize", since the comparison ranks four fixed orders rather than searching for the best plan; recorded here so the choice is visible if the claim is ever questioned.
 
+### Q11. Which events should send a push notification, and to whom?
+
+- Status: Answered 2026-10-23
+- Decides: FR-ONB-06
+
+Proposed: each person who turns notifications on, per device, chooses from four kinds. (1) A linked account needs reconnecting, which today shows only on the Accounts page. (2) A critical alert from the weekday snapshot: a large daily move or drift past the critical threshold. (3) A goal reached. (4) For the owner only, a scheduled job that failed, which is the one outside signal left after the uptime monitor was dropped (#2). Each is sent at most once per event, and none carries an amount, since a lock screen is not private.
+
+**Answer** (owner, 23 Oct): the four as proposed, plus three Claude suggested: (5) someone joined the household or used an invite; (6) money left a linked account, at $1,000 or more; (7) the yearly deadlines: IRA contributions by mid-April, 401(k) deferrals by 31 December, and required minimum distributions by 31 December once someone is 73. Claude advised against a daily summary, every market move, changes in the plan's odds and stale balances, as noise that teaches people to ignore notifications.
+
 ## Change log
 
 - 2026-10-02 · First version, derived from the code at `c1b0b0a`, the user guide, help, legal pages, CI and the backlog. 25 gaps found and opened as backlog #28–#52. · Claude
@@ -2098,3 +2147,5 @@ Only the assistant compares withdrawal orders. Since 3 Oct it does so with the c
 - `docs/BACKLOG.md` and the [delivery review](https://claude.ai/artifact/Eo9g6bEnWFi9TBoSPwohPk)
 - The production database (read-only), 2 Oct 2026: migrations applied, linked-record identifiers
 - 2026-10-06 · GAP-46 and GAP-47 closed by #77 and #78: each price keeps the time it was struck and the previous session's close, freshness counts market days, and the daily change credits each move to its own day. FR-INV-07 restated to say so, verified by `scripts/test-performance.ts` and `scripts/test-freshness.ts`; F-17 now checked by `scripts/test-freshness.ts` and `scripts/test-cost-basis.ts`. The health check fails when the database lacks a column the code reads (NFR-OPS-02, F-45, checked by `scripts/test-account-data.ts`). Fixing #78 opened GAP-48 (#80): the evening snapshot still records funds a day behind. · Claude
+- 2026-10-23 · From the owner: FR-ONB-05 (refresh by pulling down or with a button), delivered as Verified by `e2e/refresh.spec.ts` and `scripts/test-refresh.ts` and added to F-47; FR-ONB-06 (push notifications) added as Planned, with Q11 for which events and who, and backlog #82 · Claude
+- 2026-10-23 · Q11 answered: seven kinds of push notification. FR-ONB-06 built as F-52, Partial, checked by `scripts/test-notifications.ts` and `scripts/test-notification-delivery.ts`; GAP-49 (#83) holds it until the key pair is set and a real device receives one · Claude

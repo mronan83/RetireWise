@@ -13,6 +13,8 @@ import {
   householdMembers,
   households,
 } from "./db/schema";
+import { messages } from "./notifications/kinds";
+import { notifySafely } from "./notifications/send";
 
 /**
  * Crockford base32: no I, L, O or U.
@@ -309,6 +311,14 @@ export async function redeemInvite(
   });
 
   await record(true);
+  // Anyone who joins can see the household's finances, so its members hear
+  // of it at once; an unexpected one is a reason to act.
+  await notifySafely({
+    clerkId: primaryClerkId,
+    kind: "household",
+    eventKey: invite.id,
+    message: messages.household(),
+  });
   // Keyed to the household that was joined, because that is whose data the
   // new member can now see.
   await recordAudit({

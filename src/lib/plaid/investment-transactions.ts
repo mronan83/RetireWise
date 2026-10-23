@@ -2,6 +2,8 @@ import { and, eq, inArray, isNull } from "drizzle-orm";
 import type { PlaidApi } from "plaid";
 import { getDb } from "@/lib/db";
 import { accounts, holdings, transactions } from "@/lib/db/schema";
+import { messages, withdrawalsToNotify } from "@/lib/notifications/kinds";
+import { notifySafely } from "@/lib/notifications/send";
 
 /**
  * Investment transactions, from the Items already linked.
@@ -417,8 +419,43 @@ export async function syncInvestmentTransactions(options: {
   if (rows.length > 0) {
     // onConflictDoNothing rather than a pre-check alone: two runs overlapping
     // would otherwise both pass the check and both insert.
-    await db.insert(transactions).values(rows).onConflictDoNothing();
+    const inserted = await db
+      .insert(transactions)
+      .values(rows)
+      .onConflictDoNothing()
+      .returning({
+        accountId: transactions.accountId,
+        plaidTransactionId: transactions.plaidTransactionId,
+        type: transactions.type,
+        amount: transactions.amount,
+        date: transactions.date,
+      });
     counts.inserted = rows.length;
+
+    // Money leaving an account, newly recorded and recent: one notification
+    // per withdrawal. Only rows this sync stored, so a re-run says nothing.
+    const out = withdrawalsToNotify(
+      inserted.map((r) => ({ ...r, amount: Number(r.amount) })),
+      new Date().toISOString().slice(0, 10)
+    );
+    if (out.length > 0) {
+      const names = new Map(
+        (
+          await db
+            .select({ id: accounts.id, name: accounts.name })
+            .from(accounts)
+            .where(inArray(accounts.id, [...new Set(out.map((r) => r.accountId))]))
+        ).map((a) => [a.id, a.name])
+      );
+      for (const r of out) {
+        await notifySafely({
+          clerkId,
+          kind: "withdrawals",
+          eventKey: r.plaidTransactionId ?? `${r.accountId}:${r.date}:${r.amount}`,
+          message: messages.withdrawal(names.get(r.accountId) ?? "an account"),
+        });
+      }
+    }
   }
 
   return counts;

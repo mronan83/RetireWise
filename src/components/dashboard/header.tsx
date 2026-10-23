@@ -8,6 +8,7 @@ import { ThemeToggle } from "@/components/theme-toggle";
 import { Sheet, SheetContent } from "@/components/ui/sheet";
 import { SidebarNav } from "./sidebar-nav";
 import { NotificationBell } from "./notification-bell";
+import { RefreshButton } from "@/components/app/app-refresh";
 
 export function DashboardHeader({
   isDemo = false,
@@ -38,6 +39,7 @@ export function DashboardHeader({
 
       <div className="flex-1" />
 
+      <RefreshButton />
       <ThemeToggle />
       {isDemo ? (
         <div className="flex items-center gap-1.5 rounded-full bg-amber-500/10 border border-amber-500/30 px-3 py-1">

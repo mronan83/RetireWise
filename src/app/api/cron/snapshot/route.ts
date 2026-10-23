@@ -3,12 +3,23 @@ import { getDb } from "@/lib/db";
 import { accounts, cronRuns } from "@/lib/db/schema";
 import { snapshotHouseholds } from "@/lib/utils/portfolio-snapshot";
 import { withSystemRole } from "@/lib/db/tenant";
+import { OPERATOR, notifySafely } from "@/lib/notifications/send";
+import { messages } from "@/lib/notifications/kinds";
 
 export async function GET(request: Request) {
-  return withSystemRole(
-    "snapshots every household",
-    () => handleGet(request)
-  );
+  return withSystemRole("snapshots every household", async () => {
+    try {
+      return await handleGet(request);
+    } catch (e) {
+      await notifySafely({
+        clerkId: OPERATOR,
+        kind: "jobs",
+        eventKey: `portfolio_snapshot:crash:${new Date().toISOString().slice(0, 10)}`,
+        message: messages.job("weekday snapshot"),
+      });
+      throw e;
+    }
+  });
 }
 
 async function handleGet(request: Request) {
@@ -46,6 +57,10 @@ async function handleGet(request: Request) {
       detail: { pricesUpdated: result.pricesUpdated, date: today, householdsFailed: result.failed },
     })
     .where(eq(cronRuns.id, run.id));
+
+  if (result.failed > 0) {
+    await notifySafely({ clerkId: OPERATOR, kind: "jobs", eventKey: `portfolio_snapshot:${today}`, message: messages.job("weekday snapshot") });
+  }
 
   return Response.json({
     success: result.failed === 0,
