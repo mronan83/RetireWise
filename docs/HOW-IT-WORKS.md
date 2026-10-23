@@ -618,7 +618,7 @@ positions      = each holding's shares and price, which the account returns read
 total change   = today's total − the total at the last snapshot from an earlier day
 ```
 
-The snapshot is the app's memory of past values: the portfolio's total, each account's value and each position's shares and price, then net worth, alerts and goals. Its total change is a balance change, so money paid in counts; the large-move alert and the reports read it (#71), the dashboard's daily change does not. It runs before most mutual funds post their price, so a fund's price in it is the day before's (#80). A second run on the same day replaces that day's records instead of adding to them, and each household is snapshotted on its own, so one household's error cannot stop the others.
+The snapshot is the app's memory of past values: the portfolio's total, each account's value and each position's shares and price, then net worth, alerts and goals. Its total change is a balance change, so money paid in counts; the large-move alert and the reports read it (#71), the dashboard's daily change does not. It runs before most mutual funds post their price, so a fund's price in it is the day before's (#80). A goal it closes and a critical alert it raises are sent as push notifications, each once. A second run on the same day replaces that day's records instead of adding to them, and each household is snapshotted on its own, so one household's error cannot stop the others.
 
 ### Alerts
 
@@ -632,7 +632,7 @@ The snapshot is the app's memory of past values: the portfolio's total, each acc
 | The portfolio's value moves in a day by | {{alert.move}} | {{alert.moveCritical}} |
 | One holding is this share of the portfolio | {{alert.concentration}} | {{alert.concentrationCritical}} |
 
-Alerts are worked out each night after prices are refreshed. The day's move is the change in the portfolio's value, deposits included, and concentration is measured per holding row rather than per fund. An alert stays until it is dismissed, even after its condition has passed (#74).
+Alerts are worked out each night after prices are refreshed. The day's move is the change in the portfolio's value, deposits included, and concentration is measured per holding row rather than per fund. An alert stays until it is dismissed, even after its condition has passed (#74). A critical one is also sent as a push notification to devices that chose critical alerts, once per kind per day, saying what happened but not the figure.
 
 ### How fresh a figure is
 
@@ -841,3 +841,4 @@ Every function exported from a calculation module, and what it does. `pnpm how:c
 - 2026-10-06 · The engine records spending, Social Security and the price level in each year's own dollars (#66); the what-if scenarios explained, each now applied through the engine's inputs (#69); the daily change explained, with its timing and the snapshot fixes (#49); #77 and #78 added to the known limits · Claude
 - 2026-10-06 · The daily change is now the market's move since the previous close, worked out at the latest prices, so Refresh Prices moves it (#79); the weekday snapshot has an entry of its own · Claude
 - 2026-10-06 · Each price carries the time it was struck, and a price's freshness counts market days (#77); the daily change credits each position's move to its own session, with funds a day behind on their own line (#78); "When a price was struck" added; #80 added to the known limits · Claude
+- 2026-10-23 · Alerts and the weekday snapshot: a critical alert and a goal reached are now also push notifications, each once (FR-ONB-06); no calculation changed · Claude
