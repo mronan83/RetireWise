@@ -26,23 +26,24 @@ test("the refresh button reloads the page's data", async ({ page }) => {
   await expect(button).toBeEnabled();
 });
 
-/** Drag a finger from y0 to y1 at the top of the page, then let go. */
+/**
+ * Drag a finger from y0 to y1 at the top of the page, then let go.
+ *
+ * Plain events carrying a `touches` list, not TouchEvent: Playwright's WebKit
+ * will not let a page construct Touch objects ("Illegal constructor"), and the
+ * handler reads only each touch's clientY.
+ */
 async function pull(page: Page, y0: number, y1: number) {
   await page.evaluate(
     ({ y0, y1 }) => {
       const target = document.querySelector("main") ?? document.body;
-      const touch = (y: number) =>
-        new Touch({ identifier: 1, target, clientX: 160, clientY: y, pageX: 160, pageY: y });
-      const fire = (type: string, y: number, ended = false) =>
-        target.dispatchEvent(
-          new TouchEvent(type, {
-            bubbles: true,
-            cancelable: true,
-            touches: ended ? [] : [touch(y)],
-            targetTouches: ended ? [] : [touch(y)],
-            changedTouches: [touch(y)],
-          })
-        );
+      const fire = (type: string, y: number, ended = false) => {
+        const e = new Event(type, { bubbles: true, cancelable: true });
+        const list = ended ? [] : [{ identifier: 1, clientX: 160, clientY: y }];
+        Object.defineProperty(e, "touches", { value: list });
+        Object.defineProperty(e, "changedTouches", { value: [{ identifier: 1, clientX: 160, clientY: y }] });
+        target.dispatchEvent(e);
+      };
       fire("touchstart", y0);
       for (let y = y0; y <= y1; y += 20) fire("touchmove", y);
       fire("touchend", y1, true);
